@@ -1,5 +1,6 @@
 'use client'
 import { useEffect, useRef, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { useSound } from '../lib/useSound'
 
 // Slashes take 500ms + 140ms stagger = 640ms total.
@@ -13,6 +14,15 @@ const DOUBLE_TAP_MS = 350
 
 export default function GateScreen({ onEnter, onCommit, onMusicStart, onSkip, onFastToHeist, swipeHintLabels }) {
   const { play } = useSound()
+  const router = useRouter()
+
+  // Warm up the route bundles for the destinations the user can reach from
+  // the gate, so taps don't sit on a cold lazy-load + hydration delay.
+  useEffect(() => {
+    router.prefetch('/fitness')
+    router.prefetch('/diet')
+    router.prefetch('/attune')
+  }, [router])
   const [phase, setPhase] = useState('pre')
   // pre → in → idle → out
   // `instant` flag: when set by snapToIdle, all entrance keyframes + transitions
@@ -34,23 +44,66 @@ export default function GateScreen({ onEnter, onCommit, onMusicStart, onSkip, on
   // schedule: phase='in' at +60ms, transform transition is 200ms delay +
   // 1400ms duration = lands at +1660ms. Bump a bit past that for safety.
   const [logoEntranceDone, setLogoEntranceDone] = useState(false)
+  // Gate the entrance cascade on ALL assets being ready: window.load (CSS,
+  // scripts, any DOM images), document.fonts.ready (web fonts), and the
+  // logo <img> firing load/error. Failsafe: 6s timeout flips this true so a
+  // stuck asset never traps the user.
+  const [imgLoaded, setImgLoaded] = useState(false)
+  const [pageLoaded, setPageLoaded] = useState(false)
+  const assetsLoaded = imgLoaded && pageLoaded
 
   useEffect(() => {
     setRollDir(Math.random() < 0.5 ? 'left' : 'right')
-    const t = setTimeout(() => setLogoEntranceDone(true), 1800)
+
+    let cancelled = false
+    const checks = []
+
+    if (typeof document !== 'undefined' && document.readyState !== 'complete') {
+      checks.push(new Promise((resolve) => {
+        window.addEventListener('load', resolve, { once: true })
+      }))
+    }
+    if (typeof document !== 'undefined' && document.fonts && document.fonts.ready) {
+      checks.push(document.fonts.ready)
+    }
+
+    Promise.all(checks).then(() => {
+      if (!cancelled) setPageLoaded(true)
+    })
+
+    const failsafe = setTimeout(() => {
+      if (cancelled) return
+      setImgLoaded(true)
+      setPageLoaded(true)
+    }, 6000)
+
+    return () => {
+      cancelled = true
+      clearTimeout(failsafe)
+    }
+  }, [])
+
+  // Bands / bloom / corners play immediately so the entrance IS the loading
+  // screen — the user always sees motion. The logo wrapper (see logoActive
+  // below) stays off-screen until assetsLoaded, then rolls in.
+  useEffect(() => {
+    const t = setTimeout(() => setPhase('in'), 60)
     return () => clearTimeout(t)
   }, [])
 
+  // Logo roll completion + idle handoff are scheduled relative to assetsLoaded
+  // so they line up with the actual roll-in (which only starts once assets are
+  // ready). On warm loads this fires near-immediately and matches original timing.
   useEffect(() => {
-    const t1 = setTimeout(() => setPhase('in'), 60)
-    // Entrance cascade ends at ~2150ms (sub-hint snap-in: 1500ms delay + 650ms
-    // duration). Trigger idle just after that for a clean handoff.
+    if (!assetsLoaded) return
+    // Logo roll-in: 200ms delay + 1400ms duration = lands at +1600ms after assetsLoaded.
+    const t1 = setTimeout(() => setLogoEntranceDone(true), 1800)
     const t2 = setTimeout(() => setPhase('idle'), 2200)
     return () => {
       clearTimeout(t1); clearTimeout(t2)
       if (exitTimerRef.current) clearTimeout(exitTimerRef.current)
     }
-  }, [])
+  }, [assetsLoaded])
 
   // Full-cascade commit (idle → gate-exit slashes → onEnter triggers calling
   // card + heist). Used by tap and swipe once the user is at PRESS START.
@@ -139,6 +192,8 @@ export default function GateScreen({ onEnter, onCommit, onMusicStart, onSkip, on
 
   const active = phase !== 'pre'
   const exiting = phase === 'out'
+  // Logo waits until assets load — bands/bloom/corners play during the wait.
+  const logoActive = active && assetsLoaded
   // Helpers: when `instant` is set, drop all entrance animation/transition so
   // the styled `active`-true target values apply immediately (no in-flight tween).
   const animOf  = (s) => instant ? 'none' : (active ? s : 'none')
@@ -291,15 +346,17 @@ export default function GateScreen({ onEnter, onCommit, onMusicStart, onSkip, on
             position: 'relative',
             width: 'clamp(128px, 24vw, 200px)',
             height: 'clamp(128px, 24vw, 200px)',
-            transform: active
+            transform: logoActive
               ? `translateX(0) rotate(${rollDir === 'left' ? 720 : -720}deg)`
               : `translateX(${rollDir === 'left' ? '-180vw' : '180vw'}) rotate(0deg)`,
-            transition: active ? transOf('transform 1400ms cubic-bezier(0.2, 0.8, 0.3, 1) 200ms') : 'none',
+            transition: logoActive ? transOf('transform 1400ms cubic-bezier(0.2, 0.8, 0.3, 1) 200ms') : 'none',
           }}
         >
           <img
             src="/logo.png"
             alt="GTL"
+            onLoad={() => setImgLoaded(true)}
+            onError={() => setImgLoaded(true)}
             style={{
               width: '100%',
               height: '100%',
@@ -396,7 +453,7 @@ export default function GateScreen({ onEnter, onCommit, onMusicStart, onSkip, on
             mixBlendMode: 'difference',
             animation: 'cursor-blink 1.2s steps(2, end) infinite',
           }}>
-            PRESS START
+            {assetsLoaded ? 'PRESS START' : 'LOADING'}
           </div>
 
           {/* Sub-hint — no entrance animation; visible from t=0 in red so the
