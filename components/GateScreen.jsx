@@ -146,6 +146,7 @@ export default function GateScreen({ onEnter, onCommit, onMusicStart, onSkip, on
   }
 
   const handleClick = () => {
+    if (!assetsLoaded) return
     if (phase === 'out') { skipFromOut(); return }
     const now = Date.now()
     const isDoubleTap = now - lastEntranceTapRef.current < DOUBLE_TAP_MS
@@ -166,6 +167,7 @@ export default function GateScreen({ onEnter, onCommit, onMusicStart, onSkip, on
     touchStartY.current = e.touches[0]?.clientY ?? null
   }
   const handleTouchEnd = (e) => {
+    if (!assetsLoaded) { touchStartY.current = null; return }
     if (touchStartY.current == null) return
     const endY = e.changedTouches[0]?.clientY ?? touchStartY.current
     const dy = endY - touchStartY.current
