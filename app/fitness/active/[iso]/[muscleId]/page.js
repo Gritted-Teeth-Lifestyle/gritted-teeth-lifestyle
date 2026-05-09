@@ -29,6 +29,8 @@ import {
   getHolidayMultiplier,
   getPrestigeMultiplier,
   getTierMultiplier,
+  getTierCount,
+  getRibbonCount,
 } from '../../../../../lib/exp'
 import { getExerciseById } from '../../../../../lib/exerciseLibrary'
 import BodyweightModal from '../../../../../components/onboarding/BodyweightModal'
@@ -1565,15 +1567,8 @@ function ExercisePanel({ muscleId, dayIso, originRect, onClose, cycleId }) {
       } catch (_) {}
       let dob = null
       try { dob = localStorage.getItem(pk('user-dob')) } catch (_) {}
-      let tierCount = 0, ribbonCount = 0
-      try {
-        const tc = parseInt(localStorage.getItem(pk('tier-count')) || '0', 10)
-        if (Number.isFinite(tc)) tierCount = tc
-        const rc = parseInt(localStorage.getItem(pk('ribbon-count')) || '0', 10)
-        if (Number.isFinite(rc)) ribbonCount = rc
-      } catch (_) {}
-      const tierMult     = getTierMultiplier(tierCount)
-      const prestigeMult = getPrestigeMultiplier(ribbonCount)
+      const tierMult     = getTierMultiplier(getTierCount())
+      const prestigeMult = getPrestigeMultiplier(getRibbonCount())
       const holidayMult  = getHolidayMultiplier(new Date(), dob)
       const snapshot = calculateSetXP(
         { reps: repsForSet || 0, weight: weightForSet || 0 },
