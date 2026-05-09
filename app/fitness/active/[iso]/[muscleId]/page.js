@@ -40,6 +40,7 @@ import {
 } from '../../../../../lib/exp'
 import { getExerciseById } from '../../../../../lib/exerciseLibrary'
 import BodyweightModal from '../../../../../components/onboarding/BodyweightModal'
+import SetXPCinematic from '../../../../../components/exp/SetXPCinematic'
 
 const MUSCLE_LABELS = {
   chest: 'CHEST', back: 'BACK', shoulders: 'SHOULDERS',
@@ -1546,6 +1547,10 @@ function ExercisePanel({ muscleId, dayIso, originRect, onClose, cycleId }) {
   // on confirm we replay the deferred save.
   const [pendingBWGate, setPendingBWGate] = useState(null)
 
+  // R18 cinematic state — set to {snapshot, tierName} when a set save
+  // produces a new XP snapshot. Cleared on the cinematic's onComplete.
+  const [activeCinematic, setActiveCinematic] = useState(null)
+
   // Returns true and queues the save when BW is required but unset.
   const needsBWGate = (name) => {
     let bw = null
@@ -1602,6 +1607,13 @@ function ExercisePanel({ muscleId, dayIso, originRect, onClose, cycleId }) {
       if (hasChange) addRegionStars(delta)
 
       upsertSetSnapshot(cycleId, dayIso, snapshot)
+
+      // R18 cinematic: present the snapshot stack to the user. tierName
+      // is captured here at save time so a later tier-cross via
+      // handleStamp doesn't relabel the line. Re-edits also re-trigger
+      // (the user re-saved, they should see the updated math).
+      const tierName = getTier(getTierCount())
+      setActiveCinematic({ snapshot, tierName })
     } catch (_) {}
   }
 
@@ -2000,6 +2012,13 @@ function ExercisePanel({ muscleId, dayIso, originRect, onClose, cycleId }) {
     </div>
     </div>
     {pendingBWGate && <BodyweightModal onSaved={handleBodyweightSaved} />}
+    {activeCinematic && (
+      <SetXPCinematic
+        snapshot={activeCinematic.snapshot}
+        tierName={activeCinematic.tierName}
+        onComplete={() => setActiveCinematic(null)}
+      />
+    )}
     </>
   )
 }
