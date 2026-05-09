@@ -12,8 +12,7 @@ const SWIPE_THRESHOLD = 50
 // separate intentional taps.
 const DOUBLE_TAP_MS = 350
 
-const LOADING_PHRASES = [
-  // Mantras
+const MANTRAS = [
   'THE BLADE IS YOU',
   'BECOME THE EDGE',
   'STRUGGLE',
@@ -23,21 +22,87 @@ const LOADING_PHRASES = [
   'HOLD NOTHING BACK',
   'AWAKEN YOUR PERSONA',
   'GO BEYOND THE LIMIT',
-  // Gym faux-system
+]
+
+const FAUX_SYSTEM_PHRASES = [
   'RACKING WEIGHTS...',
   'WIPING THE BENCH...',
   'UNRACKING THE BAR...',
 ]
 
-function TypingPhrase({ phrase }) {
-  const [shown, setShown] = useState(0)
+// Settled, hero presentation: each word fades in 200ms after the prior.
+// Spaces stay live in flow even while the word is invisible so the line
+// length doesn't visibly grow.
+function MantraReveal({ phrase }) {
+  const words = phrase.split(' ')
+  const [shownCount, setShownCount] = useState(0)
   useEffect(() => {
-    if (shown >= phrase.length) return
-    const t = setTimeout(() => setShown((s) => s + 1), 60)
+    if (shownCount >= words.length) return
+    const t = setTimeout(() => setShownCount((c) => c + 1), 200)
     return () => clearTimeout(t)
-  }, [shown, phrase])
+  }, [shownCount, words.length])
   return (
     <span>
+      {words.map((w, i) => (
+        <span key={i}>
+          {i > 0 && ' '}
+          <span
+            style={{
+              opacity: i < shownCount ? 1 : 0,
+              transition: 'opacity 200ms ease-out',
+            }}
+          >
+            {w}
+          </span>
+        </span>
+      ))}
+    </span>
+  )
+}
+
+// Cycles through the supplied (already-shuffled) phrases until unmount.
+// Per-phrase loop: type 60ms/char with blinking cursor → hold 500ms →
+// fade-out 200ms → 100ms gap → next phrase. Loops the order when it
+// reaches the end so the cycle keeps running on slow loads.
+function FauxSystemCycle({ phrases }) {
+  const [index, setIndex] = useState(0)
+  const [shown, setShown] = useState(0)
+  const [opacity, setOpacity] = useState(1)
+  const phrase = phrases[index]
+  useEffect(() => {
+    if (shown < phrase.length) {
+      const t = setTimeout(() => setShown((s) => s + 1), 60)
+      return () => clearTimeout(t)
+    }
+    // Typing finished — schedule the hold → fade → gap → advance chain.
+    let cancelled = false
+    let t1, t2, t3
+    t1 = setTimeout(() => {
+      if (cancelled) return
+      setOpacity(0)
+      t2 = setTimeout(() => {
+        if (cancelled) return
+        t3 = setTimeout(() => {
+          if (cancelled) return
+          setShown(0)
+          setOpacity(1)
+          setIndex((i) => (i + 1) % phrases.length)
+        }, 100)
+      }, 200)
+    }, 500)
+    return () => {
+      cancelled = true
+      clearTimeout(t1); clearTimeout(t2); clearTimeout(t3)
+    }
+  }, [shown, phrase, phrases.length])
+  return (
+    <span
+      style={{
+        opacity,
+        transition: 'opacity 200ms ease-out',
+        display: 'inline-block',
+      }}
+    >
       <style>{`
         @keyframes gtl-loading-cursor {
           0%, 49%   { opacity: 1; }
@@ -98,23 +163,27 @@ export default function GateScreen({ onEnter, onCommit, onMusicStart, onSkip, on
   const [imgLoaded, setImgLoaded] = useState(false)
   const [pageLoaded, setPageLoaded] = useState(false)
   const assetsLoaded = imgLoaded && pageLoaded
-  // Random phrase per mount. Lazy initializer so it doesn't reroll on every
-  // render; index.js picks once at mount time and is stable for the session.
-  const [pickedPhrase] = useState(() => LOADING_PHRASES[Math.floor(Math.random() * LOADING_PHRASES.length)])
-  // Minimum-display floor: phrase always visible ≥1200ms from mount, even on
-  // warm cache reloads where assetsLoaded fires near-instantly.
+  // Lazy initializers so neither reroll on rerender. Mantra is one random
+  // pick. Faux-system cycles through all 3 in a randomized order.
+  const [pickedMantra] = useState(() => MANTRAS[Math.floor(Math.random() * MANTRAS.length)])
+  const [shuffledSystem] = useState(() => [...FAUX_SYSTEM_PHRASES].sort(() => Math.random() - 0.5))
+  // Minimum-display floor: loading visuals always shown ≥1500ms from mount,
+  // even on warm cache reloads where assetsLoaded fires near-instantly.
+  // Bumped from 1200ms to give time for at least one full faux-system cycle
+  // plus the mantra reveal.
   const [minTimeElapsed, setMinTimeElapsed] = useState(false)
   useEffect(() => {
-    const t = setTimeout(() => setMinTimeElapsed(true), 1200)
+    const t = setTimeout(() => setMinTimeElapsed(true), 1500)
     return () => clearTimeout(t)
   }, [])
   const loadingComplete = assetsLoaded && minTimeElapsed
-  // After loadingComplete fires, hold for 250ms (phrase fade-out duration)
-  // before fading PRESS START in. Sequential, not cross-faded.
-  const [pressStartVisible, setPressStartVisible] = useState(false)
+  // After loadingComplete fires, hold for 250ms (loading-content fade-out
+  // duration) before fading the static brand label + PRESS START in.
+  // Both slots cross-fade in parallel using this single gate.
+  const [staticLabelsVisible, setStaticLabelsVisible] = useState(false)
   useEffect(() => {
     if (!loadingComplete) return
-    const t = setTimeout(() => setPressStartVisible(true), 250)
+    const t = setTimeout(() => setStaticLabelsVisible(true), 250)
     return () => clearTimeout(t)
   }, [loadingComplete])
 
@@ -490,21 +559,48 @@ export default function GateScreen({ onEnter, onCommit, onMusicStart, onSkip, on
 
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.7rem' }}>
 
-          {/* Label — no entrance animation; visible from t=0 in red so the
-              difference-blend live-flips as bands sweep behind it. zIndex
-              forces this to paint LAST among inner-stack siblings (like
-              sub-hint naturally does), giving the blend the same backdrop
-              chain that produces visible live flip. */}
+          {/* Brand-label slot — during loading hosts the chosen mantra
+              (word-by-word reveal). On loadingComplete the mantra fades
+              out, then the static GRITTED TEETH LIFESTYLE label fades in.
+              Both children stack in the same grid cell so the swap is
+              layout-stable. zIndex preserves the blend backdrop chain. */}
           <div style={{
-            fontFamily: '"FOT-Matisse Pro EB", "JetBrains Mono", monospace',
-            fontSize: '1rem', letterSpacing: '0.16em',
-            fontWeight: 900,
-            textTransform: 'uppercase', color: '#d4181f',
-            mixBlendMode: 'difference',
-            position: 'relative',
-            zIndex: 10,
+            display: 'grid', placeItems: 'center',
+            position: 'relative', zIndex: 10,
           }}>
-            GRITTED TEETH LIFESTYLE
+            <div style={{
+              gridArea: '1 / 1',
+              opacity: loadingComplete ? 0 : 1,
+              transition: 'opacity 250ms ease-out',
+              pointerEvents: 'none',
+            }}>
+              <div style={{
+                fontFamily: '"FOT-Matisse Pro EB", "JetBrains Mono", monospace',
+                fontSize: '1rem', letterSpacing: '0.16em',
+                fontWeight: 900,
+                textTransform: 'uppercase', color: '#d4181f',
+                mixBlendMode: 'difference',
+                whiteSpace: 'nowrap',
+              }}>
+                <MantraReveal phrase={pickedMantra} />
+              </div>
+            </div>
+            <div style={{
+              gridArea: '1 / 1',
+              opacity: staticLabelsVisible ? 1 : 0,
+              transition: 'opacity 250ms ease-in',
+              pointerEvents: 'none',
+            }}>
+              <div style={{
+                fontFamily: '"FOT-Matisse Pro EB", "JetBrains Mono", monospace',
+                fontSize: '1rem', letterSpacing: '0.16em',
+                fontWeight: 900,
+                textTransform: 'uppercase', color: '#d4181f',
+                mixBlendMode: 'difference',
+              }}>
+                GRITTED TEETH LIFESTYLE
+              </div>
+            </div>
           </div>
 
           {/* Big GTL headline — hidden during loading, fades in once
@@ -532,10 +628,10 @@ export default function GateScreen({ onEnter, onCommit, onMusicStart, onSkip, on
             opacity: loadingComplete ? 1 : 0,
           }} />
 
-          {/* Phrase / PRESS START stack — both occupy the same grid cell so
-              they swap without layout shift. Phrase fades out 250ms on
-              loadingComplete; PRESS START fades in 250ms after that
-              (sequential, not cross-faded — see pressStartVisible effect). */}
+          {/* PRESS-START slot — during loading hosts the cycling
+              faux-system phrases. On loadingComplete the cycle fades out,
+              then PRESS START fades in. Same grid-stack pattern as the
+              brand-label slot above; both swaps run in parallel. */}
           <div style={{ display: 'grid', placeItems: 'center' }}>
             <div style={{
               gridArea: '1 / 1',
@@ -551,12 +647,12 @@ export default function GateScreen({ onEnter, onCommit, onMusicStart, onSkip, on
                 mixBlendMode: 'difference',
                 whiteSpace: 'nowrap',
               }}>
-                <TypingPhrase phrase={pickedPhrase} />
+                <FauxSystemCycle phrases={shuffledSystem} />
               </div>
             </div>
             <div style={{
               gridArea: '1 / 1',
-              opacity: pressStartVisible ? 1 : 0,
+              opacity: staticLabelsVisible ? 1 : 0,
               transition: 'opacity 250ms ease-in',
               pointerEvents: 'none',
             }}>
