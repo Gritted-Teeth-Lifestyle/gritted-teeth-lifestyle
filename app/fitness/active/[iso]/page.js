@@ -21,6 +21,7 @@ import PickerSheet from '../../../../components/attune/PickerSheet'
 import HeistTransition from '../../../../components/HeistTransition'
 import { chipsForDay, addChip } from '../../../../lib/attunement'
 import { consumePrefire, setInAnimation, disarmChain, subscribeStaged } from '../../../../lib/predictiveTap'
+import { repMult } from '../../../../lib/exp'
 
 const MUSCLE_LABELS = {
   chest: 'CHEST', back: 'BACK', shoulders: 'SHOULDERS',
@@ -2823,12 +2824,6 @@ function getLevelInfo(totalXP) {
     xpUsed += threshold
     level++
   }
-}
-
-function repMult(r) {
-  if (r >= 5 && r <= 15) return 1.0
-  if (r < 5)  return Math.exp(-Math.pow(r - 5,  2) / 8)
-  return              Math.exp(-Math.pow(r - 15, 2) / 32)
 }
 
 function computeTotalXP() {

@@ -17,6 +17,7 @@ import RetreatButton from '../../../components/RetreatButton'
 import HeistTransition from '../../../components/HeistTransition'
 import PickerSheet from '../../../components/attune/PickerSheet'
 import { chipsForDay, addChip } from '../../../lib/attunement'
+import { repMult } from '../../../lib/exp'
 import { consumePrefire, setInAnimation, disarmChain, subscribeStaged } from '../../../lib/predictiveTap'
 // Day-hop and BEGIN HERE muscle-hop now navigate to /fitness/active/[iso]
 // (Stage 1 of App Router refactor) so HeistTransition fires naturally and
@@ -2662,12 +2663,6 @@ function getLevelInfo(totalXP) {
     xpUsed += threshold
     level++
   }
-}
-
-function repMult(r) {
-  if (r >= 5 && r <= 15) return 1.0
-  if (r < 5)  return Math.exp(-Math.pow(r - 5,  2) / 8)
-  return              Math.exp(-Math.pow(r - 15, 2) / 32)
 }
 
 function computeTotalXP() {

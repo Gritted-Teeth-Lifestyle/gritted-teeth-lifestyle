@@ -2635,12 +2635,6 @@ function getLevelInfo(totalXP) {
   }
 }
 
-function repMult(r) {
-  if (r >= 5 && r <= 15) return 1.0
-  if (r < 5)  return Math.exp(-Math.pow(r - 5,  2) / 8)
-  return              Math.exp(-Math.pow(r - 15, 2) / 32)
-}
-
 function computeTotalXP() {
   try {
     const raw = localStorage.getItem(pk('cycles'))

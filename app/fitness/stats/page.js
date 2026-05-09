@@ -12,19 +12,7 @@ import { useProfileGuard } from '../../../lib/useProfileGuard'
 import { pk } from '../../../lib/storage'
 import { useSound } from '../../../lib/useSound'
 import RetreatButton from '../../../components/RetreatButton'
-
-// 5 body regions — each star point represents one
-const BODY_REGIONS = [
-  { id: 'core',  label: 'CORE',  muscles: ['abs'] },
-  { id: 'arms',  label: 'ARMS',  muscles: ['biceps', 'triceps', 'forearms'] },
-  { id: 'legs',  label: 'LEGS',  muscles: ['quads', 'hamstrings', 'glutes', 'calves'] },
-  { id: 'front', label: 'FRONT', muscles: ['chest', 'shoulders'] },
-  { id: 'back',  label: 'BACK',  muscles: ['back'] },
-]
-
-// Build a lookup: muscleId → regionIndex
-const MUSCLE_TO_REGION = {}
-BODY_REGIONS.forEach((r, i) => r.muscles.forEach(m => { MUSCLE_TO_REGION[m] = i }))
+import { repMult, BODY_REGIONS, MUSCLE_TO_REGION } from '../../../lib/exp'
 
 function getLevelInfo(totalXP) {
   let level = 0
@@ -37,12 +25,6 @@ function getLevelInfo(totalXP) {
     xpUsed += threshold
     level++
   }
-}
-
-function repMult(r) {
-  if (r >= 5 && r <= 15) return 1.0
-  if (r < 5) return Math.exp(-Math.pow(r - 5, 2) / 8)
-  return Math.exp(-Math.pow(r - 15, 2) / 32)
 }
 
 const MUSCLE_LABELS = {
