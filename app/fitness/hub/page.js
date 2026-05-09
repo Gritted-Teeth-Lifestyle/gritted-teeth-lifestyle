@@ -580,6 +580,15 @@ export default function FitnessPage() {
               onClick={handleSelect}
             />
           </div>
+          <div className="mt-4">
+            <GhostOption
+              number="05"
+              label="WARRIOR PROFILE"
+              caption="Identity. Tier, ribbons, prestige."
+              href="/fitness/profile"
+              onClick={handleSelect}
+            />
+          </div>
         </div>
 
         {/* Decorative footer slash */}

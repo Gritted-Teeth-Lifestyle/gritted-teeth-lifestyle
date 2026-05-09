@@ -96,4 +96,16 @@ Spec items: "tier progress bar, X/Y SESSIONS TO {NEXT_TIER} text, cumulative 100
 
 ## Resolution
 
-[Jordan to fill in]
+Jordan (2026-05-09): "yes minimal" → ship minimal-viable defaults that mirror existing repo vocabulary verbatim. Iterate on polish later in separate commits. None of items 1-5 are prerequisites for other features.
+
+**Item 1 (TierTag):** mirror RegionBadge — gold parallelogram (#e4b022, clipPath polygon) with italic Anton tier name; mono red multiplier label below (`×1.18`) matching the RegionBadge tier label treatment. No per-tier kanji or color.
+
+**Item 2 (RibbonRow):** 🌀 emoji per earned ribbon, gold tint via filter. Entire row hidden at count 0.
+
+**Item 3 (R7 TierUpFlourish):** mirror the existing level-up sub-cascade at `app/fitness/active/page.js:3486-3640` verbatim, swapping the "LEVEL N" label for `{TIER_NAME}`. No per-tier kanji or color treatment.
+
+**Item 4 (AscendPrompt copy):** headline `PRESTIGE READY`, body `Reset to RELAXED. Earn one ribbon. +0.10× forever.`, buttons `ASCEND` / `HOLD`. Profile = blocking modal; hub = small chip linking to profile.
+
+**Item 5 (Stats progress bar):** horizontal flat bar mirroring the active-page XP bar, fills L→R. Label `X / Y SESSIONS TO {NEXT_TIER}` below the bar in mono red. Ribbon history strip = same RibbonRow component at larger size.
+
+Resume Wave 2 commits 3 + 4.

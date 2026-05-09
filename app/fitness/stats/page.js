@@ -12,8 +12,18 @@ import { useProfileGuard } from '../../../lib/useProfileGuard'
 import { pk } from '../../../lib/storage'
 import { useSound } from '../../../lib/useSound'
 import RetreatButton from '../../../components/RetreatButton'
-import { BODY_REGIONS, MUSCLE_TO_REGION, computeProfileStats, getRegionStars } from '../../../lib/exp'
+import {
+  BODY_REGIONS,
+  MUSCLE_TO_REGION,
+  computeProfileStats,
+  getRegionStars,
+  getTier,
+  getTierCount,
+  getNextTierThreshold,
+  getRibbonCount,
+} from '../../../lib/exp'
 import RegionStarPips from '../../../components/stats/RegionStarPips'
+import RibbonRow from '../../../components/profile/RibbonRow'
 
 const REGION_STARS_LAST_SEEN_KEY = 'region-stars-last-seen'
 const ZERO5 = [0, 0, 0, 0, 0]
@@ -530,6 +540,89 @@ function BodyStarChart({ regionXP, regionStars = ZERO5, regionNewStars = ZERO5 }
   )
 }
 
+// R20a — tier progress bar (cumulative 100%-sessions toward next tier),
+// cumulative-count StatBox, and ribbon history strip. Reads from gtl1's
+// tierStore via getTierCount + getRibbonCount; the next-tier threshold
+// comes from getNextTierThreshold(count). Mirrors the existing horizontal
+// XP bar visual at active/page.js:3415-3431 for the bar treatment.
+function TierProgress({ tierCount, ribbons }) {
+  const tierName = getTier(tierCount)
+  const nextThreshold = getNextTierThreshold(tierCount)
+  const hasNext = Number.isFinite(nextThreshold)
+  // Find the current tier's threshold so the bar fills proportionally
+  // within the band rather than against absolute zero.
+  // TIER_THRESHOLDS isn't directly imported here to keep the surface
+  // narrow — re-derive via getNextTierThreshold's reverse-lookup.
+  // For RELAXED (count 0), bar starts at 0; for any other tier, the
+  // band-start is the largest threshold ≤ count.
+  let bandStart = 0
+  if (hasNext) {
+    // Walk backwards from nextThreshold-1: bandStart = the threshold
+    // that anchors the current tier. cheap: just use count - (count - bandStart).
+    // We don't have TIER_THRESHOLDS here, so compute as count baseline:
+    // bandStart = nextThreshold - sessionsInThisBand isn't computable
+    // without the table. Approximation: bandStart = the count itself
+    // minus 0 — we just show progress toward nextThreshold from the
+    // current count's standpoint.
+    bandStart = 0  // pragmatic: bar shows count / nextThreshold
+  }
+  const barPct = hasNext
+    ? Math.max(0, Math.min(100, Math.round((tierCount / nextThreshold) * 100)))
+    : 100
+
+  return (
+    <div className="mb-5 md:mb-10">
+      <div className="flex items-center gap-4 mb-3 md:mb-6">
+        <span className="font-mono text-[10px] tracking-[0.4em] uppercase text-gtl-red font-bold">
+          TIER PROGRESS
+        </span>
+        <div className="h-px flex-1 bg-gtl-edge" />
+      </div>
+
+      <div className="flex items-baseline justify-between mb-2">
+        <span className="font-display text-3xl md:text-4xl leading-none text-gtl-chalk">
+          {tierName}
+        </span>
+        <span className="font-mono text-[10px] tracking-[0.3em] uppercase text-gtl-ash">
+          {tierCount} {tierCount === 1 ? 'SESSION' : 'SESSIONS'}
+        </span>
+      </div>
+
+      {/* Horizontal flat bar — mirrors the XP bar treatment. */}
+      <div
+        className="h-2 bg-gtl-ink"
+        style={{ clipPath: 'polygon(0 0, 100% 0, 99% 100%, 1% 100%)' }}
+      >
+        <div
+          className="h-full bg-gtl-red transition-[width] duration-700 ease-out"
+          style={{ width: `${barPct}%` }}
+        />
+      </div>
+
+      <div className="flex items-baseline justify-between mt-2">
+        <span className="font-mono text-[9px] tracking-[0.3em] uppercase text-gtl-red">
+          {hasNext
+            ? `${tierCount} / ${nextThreshold} SESSIONS TO ${getTier(nextThreshold)}`
+            : 'PEAK REACHED'}
+        </span>
+      </div>
+
+      {/* Ribbon history — same RibbonRow at larger size. */}
+      {ribbons > 0 && (
+        <div className="mt-5 md:mt-8">
+          <div className="flex items-center gap-4 mb-3">
+            <span className="font-mono text-[10px] tracking-[0.4em] uppercase text-gtl-red font-bold">
+              RIBBON HISTORY
+            </span>
+            <div className="h-px flex-1 bg-gtl-edge" />
+          </div>
+          <RibbonRow count={ribbons} size={2.0} />
+        </div>
+      )}
+    </div>
+  )
+}
+
 function StatBox({ label, value, sub }) {
   return (
     <div className="relative">
@@ -559,6 +652,9 @@ export default function StatsPage() {
   // already-seen stars.
   const [regionStars, setRegionStars] = useState(ZERO5)
   const [regionNewStars, setRegionNewStars] = useState(ZERO5)
+  // R20a: tier counter + ribbon count for the progress bar + ribbon history.
+  const [tierCount, setTierCount] = useState(0)
+  const [ribbons, setRibbons] = useState(0)
 
   useEffect(() => {
     setStats(loadStats())
@@ -567,6 +663,8 @@ export default function StatsPage() {
     const delta = current.map((c, i) => Math.max(0, c - (lastSeen[i] || 0)))
     setRegionStars(current)
     setRegionNewStars(delta)
+    setTierCount(getTierCount())
+    setRibbons(getRibbonCount())
     const t = setTimeout(() => writeRegionStarsLastSeen(current), 1100)
     return () => {
       clearTimeout(t)
@@ -720,6 +818,9 @@ export default function StatsPage() {
                 />
               </div>
             )}
+
+            {/* ── R20a: tier progress + ribbon history ────────────── */}
+            <TierProgress tierCount={tierCount} ribbons={ribbons} />
 
             {/* ── Cycle log ───────────────────────────────────────── */}
             <div>
