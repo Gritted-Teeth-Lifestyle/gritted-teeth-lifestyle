@@ -12,7 +12,25 @@ import { useProfileGuard } from '../../../lib/useProfileGuard'
 import { pk } from '../../../lib/storage'
 import { useSound } from '../../../lib/useSound'
 import RetreatButton from '../../../components/RetreatButton'
-import { BODY_REGIONS, MUSCLE_TO_REGION, computeProfileStats } from '../../../lib/exp'
+import { BODY_REGIONS, MUSCLE_TO_REGION, computeProfileStats, getRegionStars } from '../../../lib/exp'
+import RegionStarPips from '../../../components/stats/RegionStarPips'
+
+const REGION_STARS_LAST_SEEN_KEY = 'region-stars-last-seen'
+const ZERO5 = [0, 0, 0, 0, 0]
+function readRegionStarsLastSeen() {
+  if (typeof window === 'undefined') return [...ZERO5]
+  try {
+    const raw = localStorage.getItem(pk(REGION_STARS_LAST_SEEN_KEY))
+    if (!raw) return [...ZERO5]
+    const parsed = JSON.parse(raw)
+    if (!Array.isArray(parsed) || parsed.length !== 5) return [...ZERO5]
+    return parsed.map((n) => (Number.isFinite(n) && n >= 0) ? n : 0)
+  } catch (_) { return [...ZERO5] }
+}
+function writeRegionStarsLastSeen(stars) {
+  if (typeof window === 'undefined') return
+  try { localStorage.setItem(pk(REGION_STARS_LAST_SEEN_KEY), JSON.stringify(stars)) } catch (_) {}
+}
 
 function getLevelInfo(totalXP) {
   let level = 0
@@ -338,7 +356,7 @@ function badgeCSS(i) {
   }
 }
 
-function RegionBadge({ region, xp, isTop }) {
+function RegionBadge({ region, xp, isTop, starCount = 0, newStarCount = 0 }) {
   const level = getRegionLevel(xp)
   const tier = REGION_TIER_LABELS[level - 1] ?? 'VICTIM'
   return (
@@ -356,6 +374,11 @@ function RegionBadge({ region, xp, isTop }) {
           {tier}
         </span>
       </div>
+      {starCount > 0 && (
+        <div className="block">
+          <RegionStarPips count={starCount} newCount={newStarCount} />
+        </div>
+      )}
     </div>
   )
 }
@@ -456,7 +479,7 @@ function TransmutationCircle() {
   )
 }
 
-function BodyStarChart({ regionXP }) {
+function BodyStarChart({ regionXP, regionStars = ZERO5, regionNewStars = ZERO5 }) {
   const starPath  = buildStarPath(regionXP)
   const ghostPath = buildGhostPath()
 
@@ -493,7 +516,13 @@ function BodyStarChart({ regionXP }) {
           className="absolute"
           style={{ ...badgeCSS(i), zIndex: 10 }}
         >
-          <RegionBadge region={region} xp={regionXP[i]} isTop={i === 0} />
+          <RegionBadge
+            region={region}
+            xp={regionXP[i]}
+            isTop={i === 0}
+            starCount={regionStars[i] || 0}
+            newStarCount={regionNewStars[i] || 0}
+          />
         </div>
       ))}
     </div>
@@ -523,9 +552,26 @@ export default function StatsPage() {
   const { play } = useSound()
   const [stats, setStats] = useState(null)
   const [logOpen, setLogOpen] = useState(false)
+  // Region stars (R19): read current totals + last-seen snapshot at mount
+  // so the chart can pop-in any new stars earned since last visit. After
+  // a short window (longer than the staggered animation envelope) we
+  // commit current → last-seen so subsequent visits don't re-animate
+  // already-seen stars.
+  const [regionStars, setRegionStars] = useState(ZERO5)
+  const [regionNewStars, setRegionNewStars] = useState(ZERO5)
 
   useEffect(() => {
     setStats(loadStats())
+    const current = getRegionStars()
+    const lastSeen = readRegionStarsLastSeen()
+    const delta = current.map((c, i) => Math.max(0, c - (lastSeen[i] || 0)))
+    setRegionStars(current)
+    setRegionNewStars(delta)
+    const t = setTimeout(() => writeRegionStarsLastSeen(current), 1100)
+    return () => {
+      clearTimeout(t)
+      writeRegionStarsLastSeen(current)
+    }
   }, [])
 
   if (!stats) return null
@@ -667,7 +713,11 @@ export default function StatsPage() {
                   <div className="h-px flex-1 bg-gtl-edge" />
                 </div>
 
-                <BodyStarChart regionXP={stats.regionXP} />
+                <BodyStarChart
+                  regionXP={stats.regionXP}
+                  regionStars={regionStars}
+                  regionNewStars={regionNewStars}
+                />
               </div>
             )}
 
