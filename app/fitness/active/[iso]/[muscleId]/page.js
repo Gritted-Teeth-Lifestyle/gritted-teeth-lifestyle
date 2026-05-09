@@ -26,11 +26,13 @@ import {
   calculateSetXP,
   upsertSetSnapshot,
   computeProfileTotalXP,
+  readSetLogForDay,
   getHolidayMultiplier,
   getPrestigeMultiplier,
   getTierMultiplier,
   getTierCount,
   getRibbonCount,
+  addRegionStars,
 } from '../../../../../lib/exp'
 import { getExerciseById } from '../../../../../lib/exerciseLibrary'
 import BodyweightModal from '../../../../../components/onboarding/BodyweightModal'
@@ -1579,6 +1581,22 @@ function ExercisePanel({ muscleId, dayIso, originRect, onClose, cycleId }) {
       // Annotate so we can dedup re-edits.
       snapshot.exerciseName = name
       snapshot.setIndex     = setIndex
+
+      // R12/R12b/R13 region stars: idempotent delta. Re-edits of a set
+      // shouldn't double-credit stars. Read prior snapshot for the same
+      // (exerciseName, setIndex), subtract its regionStars, add the new
+      // ones. Net: only the change since last save lands in the store.
+      const prior = readSetLogForDay(cycleId, dayIso).find(e =>
+        e?.type === 'set' &&
+        e?.exerciseName === name &&
+        e?.setIndex === setIndex,
+      )
+      const priorStars = Array.isArray(prior?.regionStars) ? prior.regionStars : [0,0,0,0,0]
+      const newStars   = Array.isArray(snapshot.regionStars) ? snapshot.regionStars : [0,0,0,0,0]
+      const delta = newStars.map((v, i) => v - (priorStars[i] || 0))
+      const hasChange = delta.some(d => d !== 0)
+      if (hasChange) addRegionStars(delta)
+
       upsertSetSnapshot(cycleId, dayIso, snapshot)
     } catch (_) {}
   }
