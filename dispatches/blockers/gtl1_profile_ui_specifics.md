@@ -67,21 +67,19 @@ Jordan: "ok" → accept all worker recommendations.
 
 **4d. DOB:** **DEFER**. No DOB input in Wave 1. gtl2's `holidays.js` handles `userDOB === null/undefined` by skipping the birthday check (already in their dispatch). Revisit when Jordan asks.
 
-**4e. Copy** (GTL voice — caps, brutal-poetic, brand-anchored):
+**4e. Copy** — Jordan revised: NO flavor text. Plain input prompt only.
 
 **Onboarding BodyweightStep** (inline in profile creation flow):
-- Headline: `DECLARE YOUR WEIGHT`
-- Sub-line: `STRENGTH IS RELATIVE TO YOUR FRAME`
+- Label / headline: `ENTER BODY WEIGHT`
 - Input placeholder: `LBS`
-- Button: `FORGE ON`
+- Button: `CONFIRM`
+- No sub-line, no flavor.
 
 **BW Modal gate** (blocks first BW-coefficient set save until BW captured):
-- Headline: `STATE YOUR FRAME`
-- Body line: `THE FORGE WEIGHS THE LIFT. THE LIFT WEIGHS THE LIFTER.`
+- Label / headline: `ENTER BODY WEIGHT`
 - Input placeholder: `LBS`
 - Submit button: `CONFIRM`
 - Modal is non-dismissible without entering a valid value (60-500 lb integer).
-
-If Jordan dislikes any copy on review, ship it as-is — easy single-line edit in a follow-up.
+- No body line, no flavor.
 
 Resume Wave 1 commit 2 (profile schema).
