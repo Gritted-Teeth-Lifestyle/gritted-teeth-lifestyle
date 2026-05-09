@@ -127,8 +127,18 @@ export default function GateScreen({ onEnter, onCommit, onMusicStart, onSkip, on
   const assetsLoaded = imgLoaded && pageLoaded
   // Lazy initializers so neither reroll on rerender. Mantra is one random
   // pick. Faux-system cycles through all 3 in a randomized order.
-  const [pickedMantra] = useState(() => MANTRAS[Math.floor(Math.random() * MANTRAS.length)])
-  const [shuffledSystem] = useState(() => [...FAUX_SYSTEM_PHRASES].sort(() => Math.random() - 0.5))
+  // Random pick must happen post-mount, not in a useState initializer:
+  // Math.random() returns different values on SSR vs client, which causes
+  // a React hydration mismatch ("Text content did not match"). null on SSR;
+  // populated client-side, the brand-label + press-start slots render the
+  // post-loadingComplete static labels until then (which is fine — the
+  // grid-stack already handles both children visibility-gated).
+  const [pickedMantra, setPickedMantra] = useState(null)
+  const [shuffledSystem, setShuffledSystem] = useState(null)
+  useEffect(() => {
+    setPickedMantra(MANTRAS[Math.floor(Math.random() * MANTRAS.length)])
+    setShuffledSystem([...FAUX_SYSTEM_PHRASES].sort(() => Math.random() - 0.5))
+  }, [])
   // Minimum-display floor: loading visuals always shown ≥1500ms from mount,
   // even on warm cache reloads where assetsLoaded fires near-instantly.
   // Bumped from 1200ms to give time for at least one full faux-system cycle
@@ -614,7 +624,7 @@ export default function GateScreen({ onEnter, onCommit, onMusicStart, onSkip, on
                 mixBlendMode: 'difference',
                 whiteSpace: 'nowrap',
               }}>
-                <FauxSystemCycle phrases={shuffledSystem} />
+                {shuffledSystem && <FauxSystemCycle phrases={shuffledSystem} />}
               </div>
             </div>
             <div style={{
