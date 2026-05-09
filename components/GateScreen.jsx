@@ -558,24 +558,7 @@ export default function GateScreen({ onEnter, onCommit, onMusicStart, onSkip, on
                 transform: 'skewX(-8deg)',
                 maxWidth: '85vw',
                 textAlign: 'center',
-                animation: pickedMantra ? 'gtl-mantra-glow 1400ms ease-out 600ms both, gtl-mantra-glow-pulse 2800ms ease-in-out 2000ms infinite' : 'none',
               }}>
-                <style>{`
-                  @keyframes gtl-mantra-glow {
-                    0%   { filter: drop-shadow(0 0 0 rgba(212, 24, 31, 0)); }
-                    100% { filter:
-                             drop-shadow(0 0 16px rgba(212, 24, 31, 0.55))
-                             drop-shadow(0 0 40px rgba(212, 24, 31, 0.25)); }
-                  }
-                  @keyframes gtl-mantra-glow-pulse {
-                    0%, 100% { filter:
-                                 drop-shadow(0 0 14px rgba(212, 24, 31, 0.50))
-                                 drop-shadow(0 0 36px rgba(212, 24, 31, 0.22)); }
-                    50%      { filter:
-                                 drop-shadow(0 0 22px rgba(212, 24, 31, 0.70))
-                                 drop-shadow(0 0 52px rgba(212, 24, 31, 0.35)); }
-                  }
-                `}</style>
                 {pickedMantra}
               </div>
             </div>
