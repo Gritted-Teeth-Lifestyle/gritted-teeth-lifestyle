@@ -548,18 +548,36 @@ export default function GateScreen({ onEnter, onCommit, onMusicStart, onSkip, on
               pointerEvents: 'none',
             }}>
               <div style={{
-                fontFamily: 'Anton, Impact, sans-serif',
-                fontSize: 'clamp(2.5rem, 9vw, 5rem)',
-                lineHeight: 1.05,
-                letterSpacing: '-0.01em',
-                color: '#f1eee5',
-                textShadow: '3px 3px 0 #d4181f, 6px 6px 0 #070708',
-                textTransform: 'uppercase',
-                transform: 'skewX(-8deg)',
-                maxWidth: '85vw',
-                textAlign: 'center',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                gap: '0.6rem',
               }}>
-                {pickedMantra}
+                <div style={{
+                  fontFamily: 'Anton, Impact, sans-serif',
+                  fontSize: 'clamp(2.5rem, 9vw, 5rem)',
+                  lineHeight: 1.05,
+                  letterSpacing: '-0.01em',
+                  color: '#f1eee5',
+                  textShadow: '3px 3px 0 #d4181f, 6px 6px 0 #070708',
+                  textTransform: 'uppercase',
+                  transform: 'skewX(-8deg)',
+                  maxWidth: '85vw',
+                  textAlign: 'center',
+                }}>
+                  {pickedMantra}
+                </div>
+                {/* Mantra slash underline — same vocabulary as the gate
+                    slash divider (red, skewX -12deg, 5px). Draws in 300ms
+                    after the mantra appears via the width transition delay. */}
+                <div style={{
+                  height: 5,
+                  background: '#d4181f',
+                  transform: 'skewX(-12deg)',
+                  mixBlendMode: 'difference',
+                  width: pickedMantra ? 'clamp(6rem, 18vw, 12rem)' : 0,
+                  transition: 'width 900ms cubic-bezier(0.2, 1, 0.3, 1) 300ms',
+                }} />
               </div>
             </div>
             <div style={{
