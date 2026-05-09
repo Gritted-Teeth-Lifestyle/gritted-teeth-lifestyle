@@ -661,29 +661,94 @@ else:                                                [R12]
 
 ## Worker Dispatch Map
 
-This plan is structured for a 3-worker parallel implementation. Three waves with the dependency graph honored:
+Ownership is split by **R-rule** rather than Unit number. This keeps each worker in a coherent lane: gtl1 owns the algo + persistence; gtl2 owns side concerns (wger + holidays); gtl3 owns ALL UI components. R7 `<TierUpFlourish>` and R9 `<AscendPrompt>` are UI components that fall in gtl1's R-rule range numerically, but they're moved to gtl3 because they consume gtl1's tier-store data without containing algo logic — keeping all UI in one worker's lane.
 
-```
-Wave 1 (parallel)        Wave 2 (parallel)         Wave 3 (parallel)
-─────────────────        ─────────────────         ─────────────────
-Unit 1 (gtl1)            Unit 3 (gtl1)             Unit 5 (gtl1)
-   profile + onboarding     setLog + computeXP        end-of-day reckoning
-                            rewrite
+### Per-worker ownership
 
-Unit 2 (gtl2)            Unit 4 (gtl2)             Unit 6 (gtl2)
-   lib/exp/* runtime        tier + ribbon store +      SetXPCinematic
-   + getExerciseById        AscendPrompt
+**gtl1 — R1-R14 algo, persistence, save-flow wiring (minus R7 + R9 UI components)**
 
-(gtl3 idle → spec        (gtl3) — Spec / scaffold   Unit 7 (gtl3)
-review)                  Wave 3 specs                 region star track
-                                                   Unit 8 (gtl3)
-                                                      profile page +
-                                                      tier-up flourish
-```
+Owns the math runtime, the persistence layer, the tier/ribbon store, the region star resolver, and all save-flow + handleStamp wiring. Writes data; gtl3 reads it.
 
-Wave-2 dispatch is gated on Wave-1 completion (Unit 3 needs Unit 2's setXP). Wave-3 dispatch is gated on Wave-2 completion (Unit 5 + Unit 6 need Unit 3 + Unit 4).
+| Source | Files / Responsibility |
+|---|---|
+| R1a inputs | `pk('user-bodyweight')`, `pk('user-sex')`, `pk('user-dob')`. Settings WARRIOR DATA form rows. Onboarding BW step. BW modal gate at first BW-coefficient set. |
+| R1, R1a math | `lib/exp/ipfGL.js`, `lib/exp/setXP.js` (orchestrator), import-rewire of 4 duplicate `repMult` defs |
+| R2, R3 | `lib/exp/setLog.js`, extend `saveReps` / `saveWeight` to append snapshots, rewrite `computeTotalXP` (3 sites) + stats `loadStats` to sum from setLog |
+| R5, R5a, R5b, R5c, R6 | `lib/exp/tier.js` (curves), `lib/exp/tierStore.js` (counter persistence) |
+| R8, R8a | `lib/exp/dailyReckoning.js`, extend `handleStamp` to compute completion%, tick tier on 100%, append consistency credit |
+| R9 (data only) | `lib/exp/prestige.js`, ribbon persistence in `lib/exp/tierStore.js`, write `pk('prestige-unlocked')` flag when count crosses 120 |
+| R10, R10a | `lib/exp/regions.js` — dual-semantics MUSCLE_TO_REGION + 60/40 region weights |
+| R11, R12, R12b, R12c, R13, R14 | Region star resolver in `lib/exp/regions.js` (or new `lib/exp/stars.js`), `lib/exp/regionStarStore.js`, write to `pk('region-stars')` from save handler |
+| R7 (data trigger only) | Detect tier crossings inside `handleStamp` after `tickTier`; write `pk('tier-cross-pending')` flag with the new tier name. **Component itself = gtl3.** |
+| utility | `getExerciseById` helper in `lib/exerciseLibrary.js` |
 
-After each wave lands, King pulls dev, reviews the wave's commits, and dispatches Wave N+1.
+**gtl2 — R15, R16**
+
+| Source | Files / Responsibility |
+|---|---|
+| R15 | One attribution line in `app/settings/page.js` CREDITS block (`:499-515`): `EXERCISE DATA — WGER (CC-BY-SA 4.0)` |
+| R16 | `lib/exp/holidays.js` — `getHolidayMultiplier(date, userDOB)` returning 1.5/1.0/0.5/0 per R16 list. US federal-holiday math + birthday detection. |
+
+**gtl3 — R17-R20a + R7 `<TierUpFlourish>` + R9 `<AscendPrompt>` (all UI components)**
+
+Owns every component, every animation, every new route. Reads from gtl1's stores; never writes algo state.
+
+| Source | Files / Responsibility |
+|---|---|
+| R7 | `components/exp/TierUpFlourish.jsx`. Polls `pk('tier-cross-pending')`; on detection, mounts the flourish, then clears the flag. |
+| R9 (UI only) | `components/exp/AscendPrompt.jsx`. Mounts when `pk('prestige-unlocked')` is true, on profile page and active routes. Two CTAs: ASCEND (calls gtl1's `awardRibbon()`) or HOLD. |
+| R17 | Verification pass — confirm no constant multiplier display creeps into the active-page nav anywhere. |
+| R18, R18a | `components/exp/SetXPCinematic.jsx`. Sequential 1.2-1.5s reveal of snapshot stack. HEAVY LIFT line conditional. Terminal xp-fly to bar. iOS PWA: `setInAnimation`, mountTimeRef grace, fixed positioning, zIndex 9995. |
+| R19 | `components/stats/RegionStarPips.jsx` — overlay inside `BodyStarChart` reading `pk('region-stars')`, animating delta-since-last-stats-mount. |
+| R20 | New route `app/fitness/profile/page.js`. Hub link addition. `components/profile/TierTag.jsx`, `components/profile/RibbonRow.jsx`. |
+| R20a | Stats page extension: progress bar to next tier, cumulative 100%-session count, ribbon history block. |
+
+### Wave structure
+
+| Wave | gtl1 | gtl2 | gtl3 |
+|---|---|---|---|
+| 1 | All R1-R14 work (data side). Internally batched into sub-commits: math runtime → setLog/computeXP rewrite → tier store → region resolver → reckoning + tier-cross flag. | R15 + R16 (holidays + attribution). Single dispatch. | **Standby.** Cannot start until gtl1's runtime + tier store + setLog + region star store + tier-cross flag all land. |
+| 2 | (done) | (done) | All R17-R20a + R7 flourish + R9 AscendPrompt UI. Internally batched: cinematic → region star pips → profile route + identity tag + ribbon row → stats page extension → tier-up flourish + AscendPrompt. |
+
+Wave 2 dispatches only after King pulls dev, confirms gtl1's expected stores/flags exist (`lib/exp/setLog.js`, `pk('tier-count')`, `pk('ribbon-count')`, `pk('prestige-unlocked')`, `pk('tier-cross-pending')`, `pk('region-stars')`), and all of gtl1's commits land cleanly.
+
+### No-Discretion Protocol (applies to all three workers)
+
+When you hit any judgment call — UI styling, animation timing curve, copy text, file or storage-key naming, validation rules, threshold values not specified in the brainstorm, structural decisions about new components, OR any rule interpretation that's not literally in the locked spec — **STOP. Do not guess. Do not proceed with a "reasonable default."**
+
+Instead:
+
+1. Write the question to `dispatches/blockers/<worker>_<short_topic>.md` with this shape:
+   ```
+   # Blocker: <one-line topic>
+
+   **Worker:** gtl1 / gtl2 / gtl3
+   **Affects:** R-rule(s) and/or unit
+   **Question:** [the specific question]
+   **Candidate answers:** [2-3 concrete options with brief tradeoff notes]
+   **Recommendation:** [your best guess + why]
+   **What's blocked:** [what you cannot proceed with until answered]
+   ```
+2. Commit the blocker file: `git commit -m "Blocker: <topic> (<worker>)"`
+3. Push to `origin/dev`.
+4. **Pause execution.** Do not proceed past the question.
+
+King polls `dispatches/blockers/`, surfaces the question to Jordan, commits the answer back to the same blocker file (under a `## Resolution` section), and re-dispatches the worker. Workers resume from where they paused.
+
+Things that count as "discretion" requiring a blocker:
+- Picking a localStorage key name not specified
+- Choosing animation duration / easing curve
+- Choosing which form-input variant (number vs text vs picker) for a new field
+- Deciding what copy goes on a button or modal headline
+- Picking a color, kanji, or visual treatment
+- Deciding whether to include or omit a feature edge case the spec didn't cover
+- Choosing test scenario boundaries
+- Deciding component structure (single component vs split)
+
+Things that DON'T require a blocker:
+- Following an existing repo pattern verbatim (same file structure, same prop shape, same styling vocabulary as a sibling component already in the codebase)
+- Implementing math the spec specifies precisely (e.g., the IPF GL formula)
+- Reading a value from a store the spec specifies the key for
 
 ## Sources & References
 
