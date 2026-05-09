@@ -25,6 +25,8 @@ import {
 } from '../../../lib/exp'
 import TierTag from '../../../components/profile/TierTag'
 import RibbonRow from '../../../components/profile/RibbonRow'
+import AscendPrompt from '../../../components/exp/AscendPrompt'
+import TierUpFlourish from '../../../components/exp/TierUpFlourish'
 
 export default function ProfilePage() {
   useProfileGuard()
@@ -122,9 +124,10 @@ export default function ProfilePage() {
         </section>
       </div>
 
-      {/* AscendPrompt mounts here when prestige is unlocked — wired in
-          commit 4 of the wave 2 dispatch. `prestigeReady` is read so
-          downstream surfaces can react when the flag flips. */}
+      {prestigeReady && (
+        <AscendPrompt surface="profile" onResolved={refreshFromStore} />
+      )}
+      <TierUpFlourish />
     </main>
   )
 }

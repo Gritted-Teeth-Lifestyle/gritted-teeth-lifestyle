@@ -27,6 +27,7 @@ import {
   getTier,
 } from '../../../lib/exp'
 import { consumePrefire, setInAnimation, disarmChain, subscribeStaged } from '../../../lib/predictiveTap'
+import TierUpFlourish from '../../../components/exp/TierUpFlourish'
 // Day-hop and BEGIN HERE muscle-hop now navigate to /fitness/active/[iso]
 // (Stage 1 of App Router refactor) so HeistTransition fires naturally and
 // plays transition-slash — matching the sound profile of the chain's first
@@ -3623,6 +3624,7 @@ export default function ActiveCyclePage() {
           and the visually-centered card at y=466 is the "active" one (see
           scroll-driven --rolodex-t logic in the rolodex section above). */}
 
+      <TierUpFlourish />
     </main>
   )
 }

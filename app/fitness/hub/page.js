@@ -23,6 +23,9 @@ import { pk } from '../../../lib/storage'
 import HeistTransition from '../../../components/HeistTransition'
 import RetreatButton from '../../../components/RetreatButton'
 import { consumePrefire, setInAnimation } from '../../../lib/predictiveTap'
+import { isPrestigeUnlocked } from '../../../lib/exp'
+import AscendPrompt from '../../../components/exp/AscendPrompt'
+import TierUpFlourish from '../../../components/exp/TierUpFlourish'
 
 function CycleOption({
   number,
@@ -358,6 +361,10 @@ export default function FitnessPage() {
   // through onClick.
   const mountTimeRef = useRef(0)
   useEffect(() => { mountTimeRef.current = performance.now() }, [])
+  // R9 hub-side AscendPrompt — small chip linking to profile when prestige
+  // is unlocked. Less aggressive than the profile modal per dispatch.
+  const [prestigeReady, setPrestigeReady] = useState(false)
+  useEffect(() => { setPrestigeReady(isPrestigeUnlocked()) }, [])
   // Stable ref to current href so the pointerdown listener doesn't have to
   // re-bind on every transitionConfig update.
   const hrefRef = useRef('')
@@ -589,6 +596,11 @@ export default function FitnessPage() {
               onClick={handleSelect}
             />
           </div>
+          {prestigeReady && (
+            <div className="mt-4 flex justify-center">
+              <AscendPrompt surface="hub" />
+            </div>
+          )}
         </div>
 
         {/* Decorative footer slash */}
@@ -641,6 +653,7 @@ export default function FitnessPage() {
         title={transitionConfig.title}
         onComplete={handleTransitionComplete}
       />
+      <TierUpFlourish />
     </main>
   )
 }

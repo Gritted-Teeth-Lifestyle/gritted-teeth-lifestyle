@@ -29,6 +29,7 @@ import {
   getTierCount,
   getTier,
 } from '../../../../lib/exp'
+import TierUpFlourish from '../../../../components/exp/TierUpFlourish'
 
 const MUSCLE_LABELS = {
   chest: 'CHEST', back: 'BACK', shoulders: 'SHOULDERS',
@@ -2980,6 +2981,7 @@ export default function ActiveDayPage() {
           if (fireMuscleHopRef.current) router.push('/fitness/active/' + iso + '/' + fireMuscleHopRef.current)
         }}
       />
+      <TierUpFlourish />
     </>
   )
 }

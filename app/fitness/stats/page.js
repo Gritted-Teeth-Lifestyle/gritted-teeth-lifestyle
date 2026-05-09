@@ -24,6 +24,7 @@ import {
 } from '../../../lib/exp'
 import RegionStarPips from '../../../components/stats/RegionStarPips'
 import RibbonRow from '../../../components/profile/RibbonRow'
+import TierUpFlourish from '../../../components/exp/TierUpFlourish'
 
 const REGION_STARS_LAST_SEEN_KEY = 'region-stars-last-seen'
 const ZERO5 = [0, 0, 0, 0, 0]
@@ -896,6 +897,7 @@ export default function StatsPage() {
         </div>
       </section>
       </div>
+      <TierUpFlourish />
     </main>
     </>
   )
