@@ -33,48 +33,21 @@ const FAUX_SYSTEM_PHRASES = [
 // Settled, hero presentation: each word fades in 200ms after the prior.
 // Spaces stay live in flow even while the word is invisible so the line
 // length doesn't visibly grow.
-function MantraReveal({ phrase }) {
-  const words = phrase.split(' ')
-  const [shownCount, setShownCount] = useState(0)
-  useEffect(() => {
-    if (shownCount >= words.length) return
-    const t = setTimeout(() => setShownCount((c) => c + 1), 200)
-    return () => clearTimeout(t)
-  }, [shownCount, words.length])
-  return (
-    <span>
-      {words.map((w, i) => (
-        <span key={i}>
-          {i > 0 && ' '}
-          <span
-            style={{
-              opacity: i < shownCount ? 1 : 0,
-              transition: 'opacity 200ms ease-out',
-            }}
-          >
-            {w}
-          </span>
-        </span>
-      ))}
-    </span>
-  )
-}
-
 // Cycles through the supplied (already-shuffled) phrases until unmount.
-// Per-phrase loop: type 60ms/char with blinking cursor → hold 500ms →
-// fade-out 200ms → 100ms gap → next phrase. Loops the order when it
-// reaches the end so the cycle keeps running on slow loads.
+// Per-phrase loop: render full phrase + animated trailing dots → hold ~1500ms
+// → fade-out 200ms → 100ms gap → next phrase. Three dots cycle in/out
+// continuously while the phrase is held; phrase trailing dots in the bank
+// are stripped and replaced by the live animated dots.
 function FauxSystemCycle({ phrases }) {
   const [index, setIndex] = useState(0)
-  const [shown, setShown] = useState(0)
   const [opacity, setOpacity] = useState(1)
+  const [dotPhase, setDotPhase] = useState(0)  // 0..3
   const phrase = phrases[index]
   useEffect(() => {
-    if (shown < phrase.length) {
-      const t = setTimeout(() => setShown((s) => s + 1), 60)
-      return () => clearTimeout(t)
-    }
-    // Typing finished — schedule the hold → fade → gap → advance chain.
+    const t = setInterval(() => setDotPhase((d) => (d + 1) % 4), 400)
+    return () => clearInterval(t)
+  }, [])
+  useEffect(() => {
     let cancelled = false
     let t1, t2, t3
     t1 = setTimeout(() => {
@@ -84,17 +57,17 @@ function FauxSystemCycle({ phrases }) {
         if (cancelled) return
         t3 = setTimeout(() => {
           if (cancelled) return
-          setShown(0)
           setOpacity(1)
           setIndex((i) => (i + 1) % phrases.length)
         }, 100)
       }, 200)
-    }, 500)
+    }, 1500)
     return () => {
       cancelled = true
       clearTimeout(t1); clearTimeout(t2); clearTimeout(t3)
     }
-  }, [shown, phrase, phrases.length])
+  }, [index, phrases.length])
+  const stripped = phrase.replace(/\.+$/, '')
   return (
     <span
       style={{
@@ -103,22 +76,11 @@ function FauxSystemCycle({ phrases }) {
         display: 'inline-block',
       }}
     >
-      <style>{`
-        @keyframes gtl-loading-cursor {
-          0%, 49%   { opacity: 1; }
-          50%, 100% { opacity: 0; }
-        }
-      `}</style>
-      {phrase.slice(0, shown)}
-      <span
-        aria-hidden="true"
-        style={{
-          display: 'inline-block',
-          marginLeft: '0.08em',
-          animation: 'gtl-loading-cursor 1200ms steps(2, end) infinite',
-        }}
-      >
-        _
+      {stripped}
+      <span aria-hidden="true" style={{ display: 'inline-block', marginLeft: '0.04em' }}>
+        <span style={{ opacity: dotPhase >= 1 ? 1 : 0 }}>.</span>
+        <span style={{ opacity: dotPhase >= 2 ? 1 : 0 }}>.</span>
+        <span style={{ opacity: dotPhase >= 3 ? 1 : 0 }}>.</span>
       </span>
     </span>
   )
@@ -560,10 +522,11 @@ export default function GateScreen({ onEnter, onCommit, onMusicStart, onSkip, on
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.7rem' }}>
 
           {/* Brand-label slot — during loading hosts the chosen mantra
-              (word-by-word reveal). On loadingComplete the mantra fades
-              out, then the static GRITTED TEETH LIFESTYLE label fades in.
-              Both children stack in the same grid cell so the swap is
-              layout-stable. zIndex preserves the blend backdrop chain. */}
+              (big diagonal white Anton, GTL-headline-style, no animation).
+              On loadingComplete the mantra fades out, then the static
+              GRITTED TEETH LIFESTYLE label fades in. Both children stack
+              in the same grid cell so the swap is layout-stable. zIndex
+              preserves the blend backdrop chain. */}
           <div style={{
             display: 'grid', placeItems: 'center',
             position: 'relative', zIndex: 10,
@@ -575,14 +538,18 @@ export default function GateScreen({ onEnter, onCommit, onMusicStart, onSkip, on
               pointerEvents: 'none',
             }}>
               <div style={{
-                fontFamily: '"FOT-Matisse Pro EB", "JetBrains Mono", monospace',
-                fontSize: '1rem', letterSpacing: '0.16em',
-                fontWeight: 900,
-                textTransform: 'uppercase', color: '#d4181f',
-                mixBlendMode: 'difference',
-                whiteSpace: 'nowrap',
+                fontFamily: 'Anton, Impact, sans-serif',
+                fontSize: 'clamp(2.5rem, 9vw, 5rem)',
+                lineHeight: 1.05,
+                letterSpacing: '-0.01em',
+                color: '#f1eee5',
+                textShadow: '3px 3px 0 #d4181f, 6px 6px 0 #070708',
+                textTransform: 'uppercase',
+                transform: 'skewX(-8deg)',
+                maxWidth: '85vw',
+                textAlign: 'center',
               }}>
-                <MantraReveal phrase={pickedMantra} />
+                {pickedMantra}
               </div>
             </div>
             <div style={{
