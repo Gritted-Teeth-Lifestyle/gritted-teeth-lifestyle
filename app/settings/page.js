@@ -509,7 +509,8 @@ export default function SettingsPage() {
                 BUILT BY JORDAN HILLMAN<br />
                 WITH ALEXANDER THUKU<br />
                 INSPIRED BY PERSONA 5 + GURREN LAGANN<br />
-                FORGED WITH GRITTED TEETH
+                FORGED WITH GRITTED TEETH<br />
+                EXERCISE DATA — WGER (CC-BY-SA 4.0)
               </p>
             </div>
           </div>
