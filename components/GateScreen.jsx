@@ -12,6 +12,53 @@ const SWIPE_THRESHOLD = 50
 // separate intentional taps.
 const DOUBLE_TAP_MS = 350
 
+const LOADING_PHRASES = [
+  // Mantras
+  'THE BLADE IS YOU',
+  'BECOME THE EDGE',
+  'STRUGGLE',
+  'CARRY THE WEIGHT',
+  'PIERCE THE HEAVENS',
+  'STAND UP AND WALK',
+  'HOLD NOTHING BACK',
+  'AWAKEN YOUR PERSONA',
+  'GO BEYOND THE LIMIT',
+  // Gym faux-system
+  'RACKING WEIGHTS...',
+  'WIPING THE BENCH...',
+  'UNRACKING THE BAR...',
+]
+
+function TypingPhrase({ phrase }) {
+  const [shown, setShown] = useState(0)
+  useEffect(() => {
+    if (shown >= phrase.length) return
+    const t = setTimeout(() => setShown((s) => s + 1), 60)
+    return () => clearTimeout(t)
+  }, [shown, phrase])
+  return (
+    <span>
+      <style>{`
+        @keyframes gtl-loading-cursor {
+          0%, 49%   { opacity: 1; }
+          50%, 100% { opacity: 0; }
+        }
+      `}</style>
+      {phrase.slice(0, shown)}
+      <span
+        aria-hidden="true"
+        style={{
+          display: 'inline-block',
+          marginLeft: '0.08em',
+          animation: 'gtl-loading-cursor 1200ms steps(2, end) infinite',
+        }}
+      >
+        _
+      </span>
+    </span>
+  )
+}
+
 export default function GateScreen({ onEnter, onCommit, onMusicStart, onSkip, onFastToHeist, swipeHintLabels }) {
   const { play } = useSound()
   const router = useRouter()
@@ -51,6 +98,25 @@ export default function GateScreen({ onEnter, onCommit, onMusicStart, onSkip, on
   const [imgLoaded, setImgLoaded] = useState(false)
   const [pageLoaded, setPageLoaded] = useState(false)
   const assetsLoaded = imgLoaded && pageLoaded
+  // Random phrase per mount. Lazy initializer so it doesn't reroll on every
+  // render; index.js picks once at mount time and is stable for the session.
+  const [pickedPhrase] = useState(() => LOADING_PHRASES[Math.floor(Math.random() * LOADING_PHRASES.length)])
+  // Minimum-display floor: phrase always visible ≥1200ms from mount, even on
+  // warm cache reloads where assetsLoaded fires near-instantly.
+  const [minTimeElapsed, setMinTimeElapsed] = useState(false)
+  useEffect(() => {
+    const t = setTimeout(() => setMinTimeElapsed(true), 1200)
+    return () => clearTimeout(t)
+  }, [])
+  const loadingComplete = assetsLoaded && minTimeElapsed
+  // After loadingComplete fires, hold for 250ms (phrase fade-out duration)
+  // before fading PRESS START in. Sequential, not cross-faded.
+  const [pressStartVisible, setPressStartVisible] = useState(false)
+  useEffect(() => {
+    if (!loadingComplete) return
+    const t = setTimeout(() => setPressStartVisible(true), 250)
+    return () => clearTimeout(t)
+  }, [loadingComplete])
 
   useEffect(() => {
     setRollDir(Math.random() < 0.5 ? 'left' : 'right')
@@ -283,7 +349,9 @@ export default function GateScreen({ onEnter, onCommit, onMusicStart, onSkip, on
       <div className="absolute bottom-0 right-0 bg-gtl-red pointer-events-none"
         style={{ width: 5, height: active ? 168 : 0, transition: transOf('height 1000ms cubic-bezier(0.2,1,0.3,1) 800ms') }} />
 
-      {/* ── Swipe hints — plain red, no blend mode, no underlay. */}
+      {/* ── Swipe hints — plain red, no blend mode, no underlay.
+          Outer wrapper handles the loadingComplete opacity gate so the inner
+          pulse animation keeps cycling underneath without being clobbered. */}
       {swipeHintLabels && (
         <>
           <div
@@ -292,20 +360,27 @@ export default function GateScreen({ onEnter, onCommit, onMusicStart, onSkip, on
               top: 'calc(env(safe-area-inset-top, 0px) + 24px)',
               left: '50%',
               transform: 'translateX(-50%)',
-              fontFamily: '"FOT-Matisse Pro EB", "JetBrains Mono", monospace',
-              fontSize: '1.2rem',
-              fontWeight: 900,
-              letterSpacing: '0.08em',
-              textTransform: 'uppercase',
-              color: '#d4181f',
-              mixBlendMode: 'difference',
               pointerEvents: 'none',
-              userSelect: 'none',
-              whiteSpace: 'nowrap',
-              animation: 'swipe-hint-pulse 2400ms ease-in-out infinite',
+              opacity: loadingComplete ? 1 : 0,
+              transition: 'opacity 400ms ease-out',
             }}
           >
-            ▲ {swipeHintLabels.top}
+            <div
+              style={{
+                fontFamily: '"FOT-Matisse Pro EB", "JetBrains Mono", monospace',
+                fontSize: '1.2rem',
+                fontWeight: 900,
+                letterSpacing: '0.08em',
+                textTransform: 'uppercase',
+                color: '#d4181f',
+                mixBlendMode: 'difference',
+                userSelect: 'none',
+                whiteSpace: 'nowrap',
+                animation: 'swipe-hint-pulse 2400ms ease-in-out infinite',
+              }}
+            >
+              ▲ {swipeHintLabels.top}
+            </div>
           </div>
           <div
             style={{
@@ -313,20 +388,27 @@ export default function GateScreen({ onEnter, onCommit, onMusicStart, onSkip, on
               bottom: 'calc(env(safe-area-inset-bottom, 0px) + 8px)',
               left: '50%',
               transform: 'translateX(-50%)',
-              fontFamily: '"FOT-Matisse Pro EB", "JetBrains Mono", monospace',
-              fontSize: '1.2rem',
-              fontWeight: 900,
-              letterSpacing: '0.08em',
-              textTransform: 'uppercase',
-              color: '#d4181f',
-              mixBlendMode: 'difference',
               pointerEvents: 'none',
-              userSelect: 'none',
-              whiteSpace: 'nowrap',
-              animation: 'swipe-hint-pulse 2400ms ease-in-out infinite',
+              opacity: loadingComplete ? 1 : 0,
+              transition: 'opacity 400ms ease-out',
             }}
           >
-            ▼ {swipeHintLabels.bottom}
+            <div
+              style={{
+                fontFamily: '"FOT-Matisse Pro EB", "JetBrains Mono", monospace',
+                fontSize: '1.2rem',
+                fontWeight: 900,
+                letterSpacing: '0.08em',
+                textTransform: 'uppercase',
+                color: '#d4181f',
+                mixBlendMode: 'difference',
+                userSelect: 'none',
+                whiteSpace: 'nowrap',
+                animation: 'swipe-hint-pulse 2400ms ease-in-out infinite',
+              }}
+            >
+              ▼ {swipeHintLabels.bottom}
+            </div>
           </div>
           <style>{`
             @keyframes swipe-hint-pulse {
@@ -425,37 +507,70 @@ export default function GateScreen({ onEnter, onCommit, onMusicStart, onSkip, on
             GRITTED TEETH LIFESTYLE
           </div>
 
-          {/* Big GTL headline */}
+          {/* Big GTL headline — hidden during loading, fades in once
+              loadingComplete fires alongside the slash + sub-hint. */}
           <div style={{
             fontFamily: 'Anton, Impact, sans-serif',
             fontSize: 'clamp(5rem, 14vw, 10rem)',
             lineHeight: 1, letterSpacing: '-0.02em',
             color: '#f1eee5',
             textShadow: '3px 3px 0 #d4181f, 6px 6px 0 #070708',
+            opacity: loadingComplete ? 1 : 0,
+            transition: 'opacity 400ms ease-out',
           }}>
             GTL
           </div>
 
-          {/* Slash divider — obeys the same negative-photo rule as the labels */}
+          {/* Slash divider — obeys the same negative-photo rule as the labels.
+              Width transition stays gated on `active`; opacity stacks on top so
+              the divider stays invisible during the loading phase. */}
           <div style={{
             height: 5, background: '#d4181f', transform: 'skewX(-12deg)',
             mixBlendMode: 'difference',
             width: active ? 'clamp(8rem, 20vw, 14rem)' : 0,
-            transition: transOf('width 1000ms cubic-bezier(0.2, 1, 0.3, 1) 1200ms'),
+            transition: transOf('width 1000ms cubic-bezier(0.2, 1, 0.3, 1) 1200ms, opacity 400ms ease-out'),
+            opacity: loadingComplete ? 1 : 0,
           }} />
 
-          {/* PRESS START — snaps in, then blinks. When `instant` is set
-              (entrance tap-skip), drop the snap-in but keep the blink running
-              from t=0 so PRESS START is visible-and-pulsing immediately. */}
-          <div style={{
-            fontFamily: '"FOT-Matisse Pro EB", Anton, Impact, sans-serif',
-            fontSize: 'clamp(1.3rem, 3.8vw, 2.2rem)',
-            fontWeight: 900,
-            letterSpacing: '0.10em', color: '#d4181f',
-            mixBlendMode: 'difference',
-            animation: 'cursor-blink 1.2s steps(2, end) infinite',
-          }}>
-            {assetsLoaded ? 'PRESS START' : 'LOADING'}
+          {/* Phrase / PRESS START stack — both occupy the same grid cell so
+              they swap without layout shift. Phrase fades out 250ms on
+              loadingComplete; PRESS START fades in 250ms after that
+              (sequential, not cross-faded — see pressStartVisible effect). */}
+          <div style={{ display: 'grid', placeItems: 'center' }}>
+            <div style={{
+              gridArea: '1 / 1',
+              opacity: loadingComplete ? 0 : 1,
+              transition: 'opacity 250ms ease-out',
+              pointerEvents: 'none',
+            }}>
+              <div style={{
+                fontFamily: '"FOT-Matisse Pro EB", Anton, Impact, sans-serif',
+                fontSize: 'clamp(1.3rem, 3.8vw, 2.2rem)',
+                fontWeight: 900,
+                letterSpacing: '0.10em', color: '#d4181f',
+                mixBlendMode: 'difference',
+                whiteSpace: 'nowrap',
+              }}>
+                <TypingPhrase phrase={pickedPhrase} />
+              </div>
+            </div>
+            <div style={{
+              gridArea: '1 / 1',
+              opacity: pressStartVisible ? 1 : 0,
+              transition: 'opacity 250ms ease-in',
+              pointerEvents: 'none',
+            }}>
+              <div style={{
+                fontFamily: '"FOT-Matisse Pro EB", Anton, Impact, sans-serif',
+                fontSize: 'clamp(1.3rem, 3.8vw, 2.2rem)',
+                fontWeight: 900,
+                letterSpacing: '0.10em', color: '#d4181f',
+                mixBlendMode: 'difference',
+                animation: 'cursor-blink 1.2s steps(2, end) infinite',
+              }}>
+                PRESS START
+              </div>
+            </div>
           </div>
 
           {/* Sub-hint — no entrance animation; visible from t=0 in red so the
@@ -466,6 +581,8 @@ export default function GateScreen({ onEnter, onCommit, onMusicStart, onSkip, on
             fontWeight: 900,
             textTransform: 'uppercase', color: '#d4181f',
             mixBlendMode: 'difference',
+            opacity: loadingComplete ? 1 : 0,
+            transition: 'opacity 400ms ease-out',
           }}>
             // CLICK OR TOUCH TO ENTER //
           </div>
