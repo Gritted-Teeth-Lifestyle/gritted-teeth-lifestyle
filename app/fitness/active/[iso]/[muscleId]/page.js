@@ -22,6 +22,9 @@ import PickerSheet from '../../../../../components/attune/PickerSheet'
 import HeistTransition from '../../../../../components/HeistTransition'
 import { chipsForDay, addChip } from '../../../../../lib/attunement'
 import { consumePrefire, setInAnimation, disarmChain, subscribeStaged } from '../../../../../lib/predictiveTap'
+import { repMult } from '../../../../../lib/exp'
+import { getExerciseById } from '../../../../../lib/exerciseLibrary'
+import BodyweightModal from '../../../../../components/onboarding/BodyweightModal'
 
 const MUSCLE_LABELS = {
   chest: 'CHEST', back: 'BACK', shoulders: 'SHOULDERS',
@@ -1522,7 +1525,26 @@ function ExercisePanel({ muscleId, dayIso, originRect, onClose, cycleId }) {
     } catch (_) {}
   }, [storageKey, weightKey, setCountKey, muscleId])
 
+  // R1a BW gate: when the user attempts to save a set on a bw_coefficient
+  // exercise but pk('user-bodyweight') is unset, defer the save and mount
+  // BodyweightModal. Modal is non-dismissible without a valid value;
+  // on confirm we replay the deferred save.
+  const [pendingBWGate, setPendingBWGate] = useState(null)
+
+  // Returns true and queues the save when BW is required but unset.
+  const needsBWGate = (name) => {
+    let bw = null
+    try { bw = localStorage.getItem(pk('user-bodyweight')) } catch (_) {}
+    if (bw != null && bw !== '') return false
+    const ex = getExerciseById(name)
+    return !!(ex && ex.equipment === 'bodyweight')
+  }
+
   const saveReps = (name, value, setIndex) => {
+    if (needsBWGate(name)) {
+      setPendingBWGate({ kind: 'reps', name, value, setIndex })
+      return
+    }
     setReps((prev) => {
       const arr = Array.isArray(prev[name]) ? [...prev[name]] : [0, 0]
       arr[setIndex] = value
@@ -1536,6 +1558,10 @@ function ExercisePanel({ muscleId, dayIso, originRect, onClose, cycleId }) {
   }
 
   const saveWeight = (name, value, setIndex) => {
+    if (needsBWGate(name)) {
+      setPendingBWGate({ kind: 'weight', name, value, setIndex })
+      return
+    }
     setWeights((prev) => {
       const arr = Array.isArray(prev[name]) ? [...prev[name]] : [0, 0]
       arr[setIndex] = value
@@ -1546,6 +1572,18 @@ function ExercisePanel({ muscleId, dayIso, originRect, onClose, cycleId }) {
       } catch (_) {}
       return next
     })
+  }
+
+  // BW captured → replay the deferred save with BW now set.
+  const handleBodyweightSaved = () => {
+    const pending = pendingBWGate
+    setPendingBWGate(null)
+    if (!pending) return
+    if (pending.kind === 'reps') {
+      saveReps(pending.name, pending.value, pending.setIndex)
+    } else {
+      saveWeight(pending.name, pending.value, pending.setIndex)
+    }
   }
 
   const openExercise = (name, rect, setIndex) => {
@@ -1883,6 +1921,7 @@ function ExercisePanel({ muscleId, dayIso, originRect, onClose, cycleId }) {
       </div>
     </div>
     </div>
+    {pendingBWGate && <BodyweightModal onSaved={handleBodyweightSaved} />}
     </>
   )
 }

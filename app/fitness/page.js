@@ -7,6 +7,8 @@ import HeistTransition from '../../components/HeistTransition'
 import RetreatButton from '../../components/RetreatButton'
 import { LogoStencil, LogoTarget } from '../../components/LogoHalf'
 import { armChain, setInAnimation } from '../../lib/predictiveTap'
+import { pk } from '../../lib/storage'
+import BodyweightStep from '../../components/onboarding/BodyweightStep'
 
 function ProfileChip({ name, onSelect, onSwipeSelect }) {
   const { play } = useSound()
@@ -222,6 +224,8 @@ export default function ProfilePage() {
   const [input, setInput] = useState('')
   const [ready, setReady] = useState(false)
   const [transitioning, setTransitioning] = useState(false)
+  // Onboarding BW step — captured for new warriors before routing to hub.
+  const [pendingNewName, setPendingNewName] = useState(null)
   const inputRef = useRef(null)
   // Latches once skipAll fires so HeistTransition.onComplete won't double-route.
   const skippedRef = useRef(false)
@@ -308,14 +312,33 @@ export default function ProfilePage() {
     e.preventDefault()
     const name = input.trim()
     if (!name) return
+    let createdNew = false
     try {
       const existing = JSON.parse(localStorage.getItem('gtl-profiles') || '[]')
       if (!existing.includes(name)) {
         const updated = [name, ...existing]
         localStorage.setItem('gtl-profiles', JSON.stringify(updated))
         setProfiles(updated)
+        createdNew = true
       }
     } catch (_) {}
+    play('card-confirm')
+    if (createdNew) {
+      // Set active profile early so pk('user-bodyweight') writes to the
+      // correct profile scope. Then mount the BW capture step before
+      // routing — R1a requires bodyweight before any BW-coefficient set.
+      try { localStorage.setItem('gtl-active-profile', name) } catch (_) {}
+      setPendingNewName(name)
+      return
+    }
+    selectProfile(name)
+  }
+
+  const handleBodyweightConfirm = (bw) => {
+    if (!pendingNewName) return
+    try { localStorage.setItem(pk('user-bodyweight'), String(bw)) } catch (_) {}
+    const name = pendingNewName
+    setPendingNewName(null)
     play('card-confirm')
     selectProfile(name)
   }
@@ -500,6 +523,18 @@ export default function ProfilePage() {
       title="LET'S SEE"
       onComplete={handleTransitionComplete}
     />
+
+    {pendingNewName && (
+      <div
+        className="fixed inset-0 z-[10000] flex items-center justify-center px-6"
+        style={{ background: 'rgba(8,8,12,0.78)', backdropFilter: 'blur(4px)' }}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Enter body weight"
+      >
+        <BodyweightStep onConfirm={handleBodyweightConfirm} />
+      </div>
+    )}
     </>
   )
 }

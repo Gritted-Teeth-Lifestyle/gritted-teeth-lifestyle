@@ -4,6 +4,9 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import RetreatButton from '../../components/RetreatButton'
 import { useSound } from '../../lib/useSound'
+import { pk } from '../../lib/storage'
+import NumberRow from '../../components/settings/NumberRow'
+import SexToggle from '../../components/settings/SexToggle'
 import {
   BGM_TRACKS,
   BGM_VOLUME_KEY,
@@ -136,6 +139,8 @@ export default function SettingsPage() {
   const [hapticsOn, setHapticsOn] = useState(true)
   const [bgmTrackTitle, setBgmTrackTitle] = useState(null)
   const [bgmVolume, setBgmVolume] = useState(1)
+  const [userBW, setUserBW]       = useState(null)   // R1a: lb integer, profile-scoped
+  const [userSex, setUserSex]     = useState('m')    // R1a: 'm' | 'f', default 'm'
 
   useEffect(() => {
     setActiveProfile(typeof window !== 'undefined' ? (localStorage.getItem('gtl-active-profile') || null) : null)
@@ -143,6 +148,16 @@ export default function SettingsPage() {
     setBgMusicOn(readFlag(KEY_BG_MUSIC_ON, true))
     setHapticsOn(readFlag(KEY_HAPTICS_ON, true))
     setBgmVolume(readNumber(BGM_VOLUME_KEY, 1))
+    // WARRIOR DATA — pk()-scoped per active profile.
+    try {
+      const rawBW = localStorage.getItem(pk('user-bodyweight'))
+      const n = rawBW != null ? parseInt(rawBW, 10) : null
+      setUserBW(Number.isFinite(n) ? n : null)
+    } catch (_) {}
+    try {
+      const rawSex = localStorage.getItem(pk('user-sex'))
+      setUserSex(rawSex === 'f' ? 'f' : 'm')
+    } catch (_) {}
     // Title only — used by the "BGM TRACK → /settings/music" entry to show
     // a hint of what's currently selected.
     const live = getCurrentBgmTrack()
@@ -232,6 +247,26 @@ export default function SettingsPage() {
       if (next) playBgmFromTop(a)
     }
     play(next ? 'option-select' : 'menu-close')
+  }
+
+  // R1a: bodyweight (60-500 lb integer). null clears the key.
+  const handleBodyweight = (n) => {
+    if (n == null) {
+      setUserBW(null)
+      try { localStorage.removeItem(pk('user-bodyweight')) } catch (_) {}
+      return
+    }
+    if (!Number.isFinite(n)) return
+    const clamped = Math.max(60, Math.min(500, Math.round(n)))
+    setUserBW(clamped)
+    try { localStorage.setItem(pk('user-bodyweight'), String(clamped)) } catch (_) {}
+  }
+
+  const handleSex = (next) => {
+    const v = next === 'f' ? 'f' : 'm'
+    setUserSex(v)
+    try { localStorage.setItem(pk('user-sex'), v) } catch (_) {}
+    play('option-select')
   }
 
   const handleHaptics = (next) => {
@@ -450,6 +485,30 @@ export default function SettingsPage() {
             </div>
             {ready && <Toggle label="VIBRATION" value={hapticsOn} onChange={handleHaptics} />}
           </div>
+
+          {/* WARRIOR DATA — R1a IPF GL inputs: bodyweight + sex. Profile-scoped via pk(). */}
+          {ready && activeProfile && (
+            <div className="mb-8">
+              <div className="flex items-center gap-4 mb-3">
+                <div className="h-px w-8 bg-gtl-edge" />
+                <span className="font-matisse text-[9px] tracking-[0.4em] uppercase text-gtl-smoke">WARRIOR DATA</span>
+                <div className="h-px flex-1 bg-gtl-edge" />
+              </div>
+              <div className="flex flex-col gap-3">
+                <NumberRow
+                  label="BODY WEIGHT"
+                  value={userBW}
+                  unit="LBS"
+                  onChange={handleBodyweight}
+                  min={60}
+                  max={500}
+                  step={1}
+                  placeholder="LBS"
+                />
+                <SexToggle value={userSex} onChange={handleSex} />
+              </div>
+            </div>
+          )}
 
           {/* DEFAULTS — preferences-only reset. Doesn't touch profile data. */}
           <div className="mb-8">
