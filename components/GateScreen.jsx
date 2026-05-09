@@ -41,13 +41,15 @@ const FAUX_SYSTEM_PHRASES = [
 function FauxSystemCycle({ phrases }) {
   const [index, setIndex] = useState(0)
   const [opacity, setOpacity] = useState(1)
-  const [dotPhase, setDotPhase] = useState(0)  // 0..3
+  const [dotPhase, setDotPhase] = useState(1)  // 1..3 (always at least one dot)
   const phrase = phrases[index]
   useEffect(() => {
-    const t = setInterval(() => setDotPhase((d) => (d + 1) % 4), 400)
+    const t = setInterval(() => setDotPhase((d) => (d % 3) + 1), 400)
     return () => clearInterval(t)
   }, [])
   useEffect(() => {
+    // Hold each phrase for 2 full ellipsis cycles (2 × 3 × 400ms = 2400ms)
+    // before fading to the next, so the user sees the "..." cycle through twice.
     let cancelled = false
     let t1, t2, t3
     t1 = setTimeout(() => {
@@ -61,7 +63,7 @@ function FauxSystemCycle({ phrases }) {
           setIndex((i) => (i + 1) % phrases.length)
         }, 100)
       }, 200)
-    }, 1500)
+    }, 2400)
     return () => {
       cancelled = true
       clearTimeout(t1); clearTimeout(t2); clearTimeout(t3)
@@ -355,14 +357,30 @@ export default function GateScreen({ onEnter, onCommit, onMusicStart, onSkip, on
           Each band uses top/bottom anchors instead of explicit height so it
           naturally over-spans the parent in both directions, regardless of
           iOS safe-area or dvh oddities. */}
+      {/* Cascade entrance keyframes — driven by CSS, NOT React state, so
+          the bands + corner accents start sliding in the moment HTML parses
+          (during the SSR-to-hydration gap, which on dev mode can be hundreds
+          of ms). Otherwise the page is pure black until React hydrates. */}
+      <style>{`
+        @keyframes gtl-band-1-in {
+          from { transform: skewX(-12deg) translateX(-120%); }
+          to   { transform: skewX(-12deg) translateX(0); }
+        }
+        @keyframes gtl-band-3-in {
+          from { transform: skewX(-12deg) translateX(120%); }
+          to   { transform: skewX(-12deg) translateX(0); }
+        }
+        @keyframes gtl-corner-h-in { from { width: 0; }  to { width: 168px; } }
+        @keyframes gtl-corner-v-in { from { height: 0; } to { height: 168px; } }
+      `}</style>
       {/* Band 1 — bright red, widest */}
       <div
         className="absolute pointer-events-none"
         style={{
           top: '-25%', bottom: '-25%', left: '-5%', width: '52%',
           background: 'rgba(212,24,31,0.75)',
-          transform: active ? 'skewX(-12deg) translateX(0)' : 'skewX(-12deg) translateX(-120%)',
-          transition: transOf('transform 1100ms cubic-bezier(0.15, 0, 0.1, 1) 150ms'),
+          transform: 'skewX(-12deg) translateX(0)',
+          animation: 'gtl-band-1-in 1100ms cubic-bezier(0.15, 0, 0.1, 1) 150ms both',
         }}
       />
       {/* Band 2 removed — it overlapped Band 1 inside ~10–47% of the viewport,
@@ -375,20 +393,20 @@ export default function GateScreen({ onEnter, onCommit, onMusicStart, onSkip, on
         style={{
           top: '-25%', bottom: '-25%', right: '-8%', width: '20%',
           background: 'rgba(212,24,31,0.55)',
-          transform: active ? 'skewX(-12deg) translateX(0)' : 'skewX(-12deg) translateX(120%)',
-          transition: transOf('transform 1100ms cubic-bezier(0.15, 0, 0.1, 1) 225ms'),
+          transform: 'skewX(-12deg) translateX(0)',
+          animation: 'gtl-band-3-in 1100ms cubic-bezier(0.15, 0, 0.1, 1) 225ms both',
         }}
       />
 
-      {/* ── Corner accent lines ── */}
+      {/* ── Corner accent lines ── CSS-driven entrance, same reason as bands. */}
       <div className="absolute top-0 left-0 bg-gtl-red pointer-events-none"
-        style={{ height: 5, width: active ? 168 : 0, transition: transOf('width 1000ms cubic-bezier(0.2,1,0.3,1) 700ms') }} />
+        style={{ height: 5, width: 168, animation: 'gtl-corner-h-in 1000ms cubic-bezier(0.2,1,0.3,1) 700ms both' }} />
       <div className="absolute top-0 left-0 bg-gtl-red pointer-events-none"
-        style={{ width: 5, height: active ? 168 : 0, transition: transOf('height 1000ms cubic-bezier(0.2,1,0.3,1) 800ms') }} />
+        style={{ width: 5, height: 168, animation: 'gtl-corner-v-in 1000ms cubic-bezier(0.2,1,0.3,1) 800ms both' }} />
       <div className="absolute bottom-0 right-0 bg-gtl-red pointer-events-none"
-        style={{ height: 5, width: active ? 168 : 0, transition: transOf('width 1000ms cubic-bezier(0.2,1,0.3,1) 700ms') }} />
+        style={{ height: 5, width: 168, animation: 'gtl-corner-h-in 1000ms cubic-bezier(0.2,1,0.3,1) 700ms both' }} />
       <div className="absolute bottom-0 right-0 bg-gtl-red pointer-events-none"
-        style={{ width: 5, height: active ? 168 : 0, transition: transOf('height 1000ms cubic-bezier(0.2,1,0.3,1) 800ms') }} />
+        style={{ width: 5, height: 168, animation: 'gtl-corner-v-in 1000ms cubic-bezier(0.2,1,0.3,1) 800ms both' }} />
 
       {/* ── Swipe hints — plain red, no blend mode, no underlay.
           Outer wrapper handles the loadingComplete opacity gate so the inner
