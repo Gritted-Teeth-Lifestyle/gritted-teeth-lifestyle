@@ -57,4 +57,31 @@ Tone: GTL voice is brutal-poetic, all caps, brand-anchored ("FORGED WITH GRITTED
 
 ## Resolution
 
-_(awaiting King)_
+Jordan: "ok" → accept all worker recommendations.
+
+**4a. BW validation:** integer, **60-500 lb**, **lb-only** (no kg toggle), no decimals.
+
+**4b. NumberRow:** new shared `components/settings/NumberRow.jsx` matching existing clip-path/typography vocabulary. Props `{label, value, unit, onChange, min, max, step}`.
+
+**4c. SexToggle:** new shared `components/settings/SexToggle.jsx` — two-button pill toggle (M / F), selected one highlighted, default M. Don't reuse `Toggle` (semantically odd to encode sex as boolean).
+
+**4d. DOB:** **DEFER**. No DOB input in Wave 1. gtl2's `holidays.js` handles `userDOB === null/undefined` by skipping the birthday check (already in their dispatch). Revisit when Jordan asks.
+
+**4e. Copy** (GTL voice — caps, brutal-poetic, brand-anchored):
+
+**Onboarding BodyweightStep** (inline in profile creation flow):
+- Headline: `DECLARE YOUR WEIGHT`
+- Sub-line: `STRENGTH IS RELATIVE TO YOUR FRAME`
+- Input placeholder: `LBS`
+- Button: `FORGE ON`
+
+**BW Modal gate** (blocks first BW-coefficient set save until BW captured):
+- Headline: `STATE YOUR FRAME`
+- Body line: `THE FORGE WEIGHS THE LIFT. THE LIFT WEIGHS THE LIFTER.`
+- Input placeholder: `LBS`
+- Submit button: `CONFIRM`
+- Modal is non-dismissible without entering a valid value (60-500 lb integer).
+
+If Jordan dislikes any copy on review, ship it as-is — easy single-line edit in a follow-up.
+
+Resume Wave 1 commit 2 (profile schema).

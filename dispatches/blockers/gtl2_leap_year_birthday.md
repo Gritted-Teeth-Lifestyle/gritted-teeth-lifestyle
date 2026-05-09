@@ -17,4 +17,11 @@
 
 ## Resolution
 
-_(awaiting King)_
+Jordan: "ok" → **Option 1: roll back to Feb 28** in non-leap years.
+
+- Feb 29 birthday → ×1.5 fires on Feb 29 in leap years; on Feb 28 in non-leap years.
+- Feb 28 in a leap year stays a normal day (no birthday bonus — the bonus fires on Feb 29 itself).
+- Preserves "12 days/yr per user" promise from R16.
+- Standard civil-law convention.
+
+Resume `getHolidayMultiplier` leap-year branch + corresponding test case.

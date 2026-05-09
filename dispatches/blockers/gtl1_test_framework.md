@@ -17,4 +17,11 @@
 
 ## Resolution
 
-_(awaiting King)_
+**Use Vitest** (King decision; Jordan deferred the technical-tool choice). Per worker's recommendation:
+
+- Add `vitest` to `devDependencies` only.
+- Add `"test": "vitest run"` and `"test:watch": "vitest"` scripts to `package.json`.
+- Create a tiny `vitest.config.js` (or `vitest.config.mjs`) — minimal config; ESM-native is fine.
+- Test files at `__tests__/exp/*.test.js` per the plan.
+
+Resume Wave 1 commit 1 (foundation math modules) with tests.
