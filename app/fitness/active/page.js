@@ -17,7 +17,7 @@ import RetreatButton from '../../../components/RetreatButton'
 import HeistTransition from '../../../components/HeistTransition'
 import PickerSheet from '../../../components/attune/PickerSheet'
 import { chipsForDay, addChip } from '../../../lib/attunement'
-import { repMult } from '../../../lib/exp'
+import { computeProfileTotalXP, dayXPWithFallback } from '../../../lib/exp'
 import { consumePrefire, setInAnimation, disarmChain, subscribeStaged } from '../../../lib/predictiveTap'
 // Day-hop and BEGIN HERE muscle-hop now navigate to /fitness/active/[iso]
 // (Stage 1 of App Router refactor) so HeistTransition fires naturally and
@@ -2665,39 +2665,10 @@ function getLevelInfo(totalXP) {
   }
 }
 
+// Sums setLog snapshots when populated per day; falls back to legacy
+// raw-reps recompute for days without snapshots.
 function computeTotalXP() {
-  try {
-    const raw = localStorage.getItem(pk('cycles'))
-    if (!raw) return { xp: 0, totalDays: 0 }
-    const allCycles = JSON.parse(raw)
-    let xp = 0
-    let totalDays = 0
-    for (const cycle of allCycles) {
-      if (!cycle.days || !cycle.dailyPlan) continue
-      totalDays += cycle.days.length
-      for (const iso of cycle.days) {
-        if (localStorage.getItem(pk(`done-${cycle.id}-${iso}`)) !== 'true') continue
-        for (const muscleId of (cycle.dailyPlan[iso] || [])) {
-          const rRaw = localStorage.getItem(pk(`ex-${cycle.id}-${iso}-${muscleId}`))
-          const wRaw = localStorage.getItem(pk(`wt-${cycle.id}-${iso}-${muscleId}`))
-          const rData = rRaw ? JSON.parse(rRaw) : {}
-          const wData = wRaw ? JSON.parse(wRaw) : {}
-          for (const name of Object.keys(rData)) {
-            const rArr = Array.isArray(rData[name]) ? rData[name] : [rData[name]]
-            const wArr = Array.isArray(wData[name]) ? wData[name] : [wData[name] || 0]
-            for (let i = 0; i < rArr.length; i++) {
-              const reps = rArr[i] || 0
-              const weight = wArr[i] || 0
-              if (reps === 0) continue
-              const mult = repMult(reps)
-              xp += weight > 0 ? weight * mult * reps : reps * mult
-            }
-          }
-        }
-      }
-    }
-    return { xp, totalDays }
-  } catch (_) { return { xp: 0, totalDays: 0 } }
+  return computeProfileTotalXP()
 }
 
 export default function ActiveCyclePage() {
@@ -3030,27 +3001,7 @@ export default function ActiveCyclePage() {
         if (localStorage.getItem(pk(`done-${cycleId}-${iso}`)) !== 'true') continue
         const el = document.querySelector(`[data-day-iso="${iso}"]`)
         const rect = el?.getBoundingClientRect()
-        const dailyMuscles = dailyPlan[iso] || []
-        let dayVolume = 0
-        for (const muscleId of dailyMuscles) {
-          const rRaw = localStorage.getItem(pk(`ex-${cycleId}-${iso}-${muscleId}`))
-          const wRaw = localStorage.getItem(pk(`wt-${cycleId}-${iso}-${muscleId}`))
-          const rData = rRaw ? JSON.parse(rRaw) : {}
-          const wData = wRaw ? JSON.parse(wRaw) : {}
-          for (const name of Object.keys(rData)) {
-            const rArr = Array.isArray(rData[name]) ? rData[name] : [rData[name]]
-            const wArr = Array.isArray(wData[name]) ? wData[name] : [wData[name] || 0]
-            for (let i = 0; i < rArr.length; i++) {
-              const reps   = rArr[i] || 0
-              const weight = wArr[i] || 0
-              if (reps === 0) continue
-              const mult = repMult(reps)
-              dayVolume += weight > 0
-                ? weight * mult * reps
-                : reps * mult
-            }
-          }
-        }
+        const dayVolume = dayXPWithFallback({ id: cycleId, dailyPlan }, iso)
         if (dayVolume > 0 && rect) {
           particles.push({ x: rect.left + rect.width / 2, y: rect.top + rect.height / 2, value: dayVolume })
           total += dayVolume

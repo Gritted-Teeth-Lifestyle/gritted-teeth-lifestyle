@@ -21,7 +21,7 @@ import PickerSheet from '../../../../components/attune/PickerSheet'
 import HeistTransition from '../../../../components/HeistTransition'
 import { chipsForDay, addChip } from '../../../../lib/attunement'
 import { consumePrefire, setInAnimation, disarmChain, subscribeStaged } from '../../../../lib/predictiveTap'
-import { repMult } from '../../../../lib/exp'
+import { computeProfileTotalXP } from '../../../../lib/exp'
 
 const MUSCLE_LABELS = {
   chest: 'CHEST', back: 'BACK', shoulders: 'SHOULDERS',
@@ -2826,39 +2826,10 @@ function getLevelInfo(totalXP) {
   }
 }
 
+// Sums setLog snapshots when populated per day; falls back to legacy
+// raw-reps recompute for days without snapshots.
 function computeTotalXP() {
-  try {
-    const raw = localStorage.getItem(pk('cycles'))
-    if (!raw) return { xp: 0, totalDays: 0 }
-    const allCycles = JSON.parse(raw)
-    let xp = 0
-    let totalDays = 0
-    for (const cycle of allCycles) {
-      if (!cycle.days || !cycle.dailyPlan) continue
-      totalDays += cycle.days.length
-      for (const iso of cycle.days) {
-        if (localStorage.getItem(pk(`done-${cycle.id}-${iso}`)) !== 'true') continue
-        for (const muscleId of (cycle.dailyPlan[iso] || [])) {
-          const rRaw = localStorage.getItem(pk(`ex-${cycle.id}-${iso}-${muscleId}`))
-          const wRaw = localStorage.getItem(pk(`wt-${cycle.id}-${iso}-${muscleId}`))
-          const rData = rRaw ? JSON.parse(rRaw) : {}
-          const wData = wRaw ? JSON.parse(wRaw) : {}
-          for (const name of Object.keys(rData)) {
-            const rArr = Array.isArray(rData[name]) ? rData[name] : [rData[name]]
-            const wArr = Array.isArray(wData[name]) ? wData[name] : [wData[name] || 0]
-            for (let i = 0; i < rArr.length; i++) {
-              const reps = rArr[i] || 0
-              const weight = wArr[i] || 0
-              if (reps === 0) continue
-              const mult = repMult(reps)
-              xp += weight > 0 ? weight * mult * reps : reps * mult
-            }
-          }
-        }
-      }
-    }
-    return { xp, totalDays }
-  } catch (_) { return { xp: 0, totalDays: 0 } }
+  return computeProfileTotalXP()
 }
 
 export default function ActiveDayPage() {

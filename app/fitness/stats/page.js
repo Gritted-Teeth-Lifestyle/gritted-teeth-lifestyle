@@ -12,7 +12,7 @@ import { useProfileGuard } from '../../../lib/useProfileGuard'
 import { pk } from '../../../lib/storage'
 import { useSound } from '../../../lib/useSound'
 import RetreatButton from '../../../components/RetreatButton'
-import { repMult, BODY_REGIONS, MUSCLE_TO_REGION } from '../../../lib/exp'
+import { BODY_REGIONS, MUSCLE_TO_REGION, computeProfileStats } from '../../../lib/exp'
 
 function getLevelInfo(totalXP) {
   let level = 0
@@ -238,81 +238,12 @@ function CombatLogPanel({ onClose }) {
   )
 }
 
+// Sums setLog snapshots when populated per day; falls back to legacy
+// raw-reps recompute for days without snapshots. Region XP: snapshot
+// path uses snapshot.regionWeights; legacy fallback uses 1:1
+// MUSCLE_TO_REGION (R10a dual-semantics map from lib/exp/regions).
 function loadStats() {
-  try {
-    const raw = localStorage.getItem(pk('cycles'))
-    const allCycles = raw ? JSON.parse(raw) : []
-
-    let totalXP = 0
-    let daysScheduled = 0
-    let daysCompleted = 0
-    const regionXP = [0, 0, 0, 0, 0]  // one per BODY_REGIONS entry
-    const cycleStats = []
-
-    for (const cycle of allCycles) {
-      if (!cycle.days || !cycle.dailyPlan) continue
-      daysScheduled += cycle.days.length
-
-      let cycleDone = 0
-      let cycleXP = 0
-
-      for (const iso of cycle.days) {
-        const done = localStorage.getItem(pk(`done-${cycle.id}-${iso}`)) === 'true'
-        if (!done) continue
-        daysCompleted++
-        cycleDone++
-
-        for (const muscleId of (cycle.dailyPlan[iso] || [])) {
-          const rRaw = localStorage.getItem(pk(`ex-${cycle.id}-${iso}-${muscleId}`))
-          const wRaw = localStorage.getItem(pk(`wt-${cycle.id}-${iso}-${muscleId}`))
-          const rData = rRaw ? JSON.parse(rRaw) : {}
-          const wData = wRaw ? JSON.parse(wRaw) : {}
-          for (const name of Object.keys(rData)) {
-            const rArr = Array.isArray(rData[name]) ? rData[name] : [rData[name]]
-            const wArr = Array.isArray(wData[name]) ? wData[name] : [wData[name] || 0]
-            for (let i = 0; i < rArr.length; i++) {
-              const reps = rArr[i] || 0
-              const weight = wArr[i] || 0
-              if (reps === 0) continue
-              const mult = repMult(reps)
-              const earned = weight > 0 ? weight * mult * reps : reps * mult
-              const ri = MUSCLE_TO_REGION[muscleId]
-              if (ri !== undefined) regionXP[ri] += earned
-              cycleXP += earned
-              totalXP += earned
-            }
-          }
-        }
-      }
-
-      cycleStats.push({
-        id:        cycle.id,
-        name:      cycle.name,
-        scheduled: cycle.days.length,
-        completed: cycleDone,
-        xp:        cycleXP,
-        createdAt: cycle.createdAt || null,
-      })
-    }
-
-    return {
-      totalXP,
-      cycles: allCycles.length,
-      daysScheduled,
-      daysCompleted,
-      regionXP,
-      cycleLog: cycleStats,
-    }
-  } catch (_) {
-    return {
-      totalXP: 0,
-      cycles: 0,
-      daysScheduled: 0,
-      daysCompleted: 0,
-      regionXP: [0, 0, 0, 0, 0],
-      cycleLog: [],
-    }
-  }
+  return computeProfileStats(MUSCLE_TO_REGION)
 }
 
 // SVG canvas
