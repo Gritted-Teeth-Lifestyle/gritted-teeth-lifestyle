@@ -21,7 +21,14 @@ import PickerSheet from '../../../../components/attune/PickerSheet'
 import HeistTransition from '../../../../components/HeistTransition'
 import { chipsForDay, addChip } from '../../../../lib/attunement'
 import { consumePrefire, setInAnimation, disarmChain, subscribeStaged } from '../../../../lib/predictiveTap'
-import { computeProfileTotalXP } from '../../../../lib/exp'
+import {
+  computeProfileTotalXP,
+  computeDailyReckoning,
+  replaceConsistencyCredit,
+  tickTier,
+  getTierCount,
+  getTier,
+} from '../../../../lib/exp'
 
 const MUSCLE_LABELS = {
   chest: 'CHEST', back: 'BACK', shoulders: 'SHOULDERS',
@@ -2069,6 +2076,32 @@ function DayFocus({ iso, muscles, isLastDay, originRect, onClose, cycleId, onMus
     if (stamped) return
     play('option-select')
     try { localStorage.setItem(pk(`done-${cycleId}-${iso}`), 'true') } catch (_) {}
+    // R8 / R8a: end-of-day reckoning. Append (or replace, idempotent) the
+    // consistency-credit setLog entry, and tick the tier counter on 100%.
+    // R7 trigger: detect tier crossing and write pk('tier-cross-pending')
+    // for gtl3's TierUpFlourish to pick up.
+    try {
+      const reckoning = computeDailyReckoning(cycleId, iso, { [iso]: muscles })
+      replaceConsistencyCredit(cycleId, iso, {
+        type: 'consistency-credit',
+        ts: Date.now(),
+        value: reckoning.consistency_credit,
+        completion_pct: reckoning.completion_pct,
+        sets_planned: reckoning.sets_planned,
+        sets_logged: reckoning.sets_logged,
+      })
+      if (reckoning.shouldTick) {
+        const before = getTier(getTierCount())
+        tickTier()
+        const after = getTier(getTierCount())
+        if (after !== before) {
+          try {
+            localStorage.setItem(pk('tier-cross-pending'), after)
+            localStorage.setItem(pk('last-seen-tier'), after)
+          } catch (_) {}
+        }
+      }
+    } catch (_) {}
     setStamped(true)
     setJustStamped(true)
     stampCloseTimerRef.current = setTimeout(() => handleClose(), 900)

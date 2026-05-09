@@ -17,7 +17,15 @@ import RetreatButton from '../../../components/RetreatButton'
 import HeistTransition from '../../../components/HeistTransition'
 import PickerSheet from '../../../components/attune/PickerSheet'
 import { chipsForDay, addChip } from '../../../lib/attunement'
-import { computeProfileTotalXP, dayXPWithFallback } from '../../../lib/exp'
+import {
+  computeProfileTotalXP,
+  dayXPWithFallback,
+  computeDailyReckoning,
+  replaceConsistencyCredit,
+  tickTier,
+  getTierCount,
+  getTier,
+} from '../../../lib/exp'
 import { consumePrefire, setInAnimation, disarmChain, subscribeStaged } from '../../../lib/predictiveTap'
 // Day-hop and BEGIN HERE muscle-hop now navigate to /fitness/active/[iso]
 // (Stage 1 of App Router refactor) so HeistTransition fires naturally and
@@ -1993,6 +2001,30 @@ function DayFocus({ iso, muscles, isLastDay, originRect, onClose, cycleId }) {
     if (stamped) return
     play('option-select')
     try { localStorage.setItem(pk(`done-${cycleId}-${iso}`), 'true') } catch (_) {}
+    // R8 / R8a + R7 trigger — same wiring as the canonical handleStamp at
+    // /fitness/active/[iso]/page.js. See that file for full annotation.
+    try {
+      const reckoning = computeDailyReckoning(cycleId, iso, { [iso]: muscles })
+      replaceConsistencyCredit(cycleId, iso, {
+        type: 'consistency-credit',
+        ts: Date.now(),
+        value: reckoning.consistency_credit,
+        completion_pct: reckoning.completion_pct,
+        sets_planned: reckoning.sets_planned,
+        sets_logged: reckoning.sets_logged,
+      })
+      if (reckoning.shouldTick) {
+        const before = getTier(getTierCount())
+        tickTier()
+        const after = getTier(getTierCount())
+        if (after !== before) {
+          try {
+            localStorage.setItem(pk('tier-cross-pending'), after)
+            localStorage.setItem(pk('last-seen-tier'), after)
+          } catch (_) {}
+        }
+      }
+    } catch (_) {}
     setStamped(true)
     setJustStamped(true)
     stampCloseTimerRef.current = setTimeout(() => handleClose(), 900)
