@@ -92,6 +92,19 @@ export default function GateScreen({ onEnter, onCommit, onMusicStart, onSkip, on
   const { play } = useSound()
   const router = useRouter()
 
+  // skipLoading: subsequent mounts in the same session (e.g., user navigating
+  // back to / from a sub-route via RetreatButton or browser back) bypass the
+  // loading screen — assets/prefetch are warm, the user has already seen
+  // the ritual, just show PRESS START. Flag persists per tab/PWA session.
+  // Declared first because every loading-state initializer below reads it.
+  const [skipLoading] = useState(() => {
+    if (typeof window === 'undefined') return false
+    try { return sessionStorage.getItem('gtl-gate-loaded') === '1' } catch { return false }
+  })
+  useEffect(() => {
+    try { sessionStorage.setItem('gtl-gate-loaded', '1') } catch {}
+  }, [])
+
   // Warm up the route bundles for every destination the user can hit from
   // the gate (or from the first screen after it), so post-gate taps don't
   // sit on a cold lazy-load + hydration delay. The loading gate itself
@@ -173,20 +186,9 @@ export default function GateScreen({ onEnter, onCommit, onMusicStart, onSkip, on
   // scripts, any DOM images), document.fonts.ready (web fonts), and the
   // logo <img> firing load/error. Failsafe: 6s timeout flips this true so a
   // stuck asset never traps the user.
-  // skipLoading: subsequent mounts in the same session (e.g., user navigating
-  // back to / from a sub-route via RetreatButton or browser back) bypass the
-  // loading screen — assets/prefetch are warm, the user has already seen
-  // the ritual, just show PRESS START. Flag persists per tab/PWA session.
-  const [skipLoading] = useState(() => {
-    if (typeof window === 'undefined') return false
-    try { return sessionStorage.getItem('gtl-gate-loaded') === '1' } catch { return false }
-  })
   const [imgLoaded, setImgLoaded] = useState(skipLoading)
   const [pageLoaded, setPageLoaded] = useState(skipLoading)
   const assetsLoaded = imgLoaded && pageLoaded
-  useEffect(() => {
-    try { sessionStorage.setItem('gtl-gate-loaded', '1') } catch {}
-  }, [])
   // Lazy initializers so neither reroll on rerender. Mantra is one random
   // pick. Faux-system cycles through all 3 in a randomized order.
   // Random pick must happen post-mount, not in a useState initializer:
