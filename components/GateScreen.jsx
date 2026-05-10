@@ -92,12 +92,29 @@ export default function GateScreen({ onEnter, onCommit, onMusicStart, onSkip, on
   const { play } = useSound()
   const router = useRouter()
 
-  // Warm up the route bundles for the destinations the user can reach from
-  // the gate, so taps don't sit on a cold lazy-load + hydration delay.
+  // Warm up the route bundles for every destination the user can hit from
+  // the gate (or from the first screen after it), so post-gate taps don't
+  // sit on a cold lazy-load + hydration delay. The loading gate itself
+  // waits for these to resolve (see prefetchSettled below) — the loading
+  // screen IS the warm-up window for the whole entry path.
+  const PREFETCH_ROUTES = ['/fitness', '/diet', '/attune', '/fitness/hub', '/fitness/load', '/fitness/active']
+  const [prefetchSettled, setPrefetchSettled] = useState(false)
   useEffect(() => {
-    router.prefetch('/fitness')
-    router.prefetch('/diet')
-    router.prefetch('/attune')
+    let cancelled = false
+    const promises = PREFETCH_ROUTES.map((href) => Promise.resolve(router.prefetch(href)))
+    Promise.allSettled(promises).then(() => {
+      // Small buffer for Next.js's background module-graph processing
+      // after the prefetch RPCs resolve.
+      setTimeout(() => { if (!cancelled) setPrefetchSettled(true) }, 800)
+    })
+    // Failsafe: never trap the user if a prefetch hangs.
+    const failsafe = setTimeout(() => {
+      if (!cancelled) setPrefetchSettled(true)
+    }, 4000)
+    return () => {
+      cancelled = true
+      clearTimeout(failsafe)
+    }
   }, [router])
   const [phase, setPhase] = useState('pre')
   // pre → in → idle → out
@@ -150,7 +167,9 @@ export default function GateScreen({ onEnter, onCommit, onMusicStart, onSkip, on
     const t = setTimeout(() => setMinTimeElapsed(true), 1500)
     return () => clearTimeout(t)
   }, [])
-  const loadingComplete = assetsLoaded && minTimeElapsed
+  // loadingComplete now also gates on every prefetched route having settled,
+  // so PRESS START is only revealed once the post-gate destinations are warm.
+  const loadingComplete = assetsLoaded && minTimeElapsed && prefetchSettled
   // After loadingComplete fires, hold for 250ms (loading-content fade-out
   // duration) before fading the static brand label + PRESS START in.
   // Both slots cross-fade in parallel using this single gate.
