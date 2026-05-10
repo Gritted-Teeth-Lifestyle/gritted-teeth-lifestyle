@@ -99,9 +99,16 @@ export default function GateScreen({ onEnter, onCommit, onMusicStart, onSkip, on
   // screen IS the warm-up window for the whole entry path.
   const PREFETCH_ROUTES = ['/fitness', '/diet', '/attune', '/fitness/hub', '/fitness/load', '/fitness/active']
   const [prefetchSettled, setPrefetchSettled] = useState(false)
+  // Track per-route prefetch completion so the loading bar can fill
+  // granularly as each route's compile lands (vs all-at-once).
+  const [completedRoutes, setCompletedRoutes] = useState(0)
   useEffect(() => {
     let cancelled = false
-    const promises = PREFETCH_ROUTES.map((href) => Promise.resolve(router.prefetch(href)))
+    const promises = PREFETCH_ROUTES.map((href) =>
+      Promise.resolve(router.prefetch(href)).then(() => {
+        if (!cancelled) setCompletedRoutes((c) => c + 1)
+      })
+    )
     Promise.allSettled(promises).then(() => {
       // Small buffer for Next.js's background module-graph processing
       // after the prefetch RPCs resolve.
@@ -109,7 +116,10 @@ export default function GateScreen({ onEnter, onCommit, onMusicStart, onSkip, on
     })
     // Failsafe: never trap the user if a prefetch hangs.
     const failsafe = setTimeout(() => {
-      if (!cancelled) setPrefetchSettled(true)
+      if (!cancelled) {
+        setPrefetchSettled(true)
+        setCompletedRoutes(PREFETCH_ROUTES.length)
+      }
     }, 4000)
     return () => {
       cancelled = true
@@ -701,6 +711,38 @@ export default function GateScreen({ onEnter, onCommit, onMusicStart, onSkip, on
               </div>
             </div>
           </div>
+
+          {/* Loading progress bar — granular real progress: each prefetched
+              route + imgLoaded + pageLoaded contributes one milestone (8 total).
+              Skewed -12deg to match the slash divider vocabulary. Hidden once
+              loadingComplete fires. */}
+          {(() => {
+            const total = PREFETCH_ROUTES.length + 2  // 6 routes + img + page
+            const done = completedRoutes + (imgLoaded ? 1 : 0) + (pageLoaded ? 1 : 0)
+            const pct = Math.min(100, Math.round((done / total) * 100))
+            return (
+              <div style={{
+                width: 'clamp(8rem, 32vw, 16rem)',
+                height: 5,
+                background: 'rgba(212, 24, 31, 0.12)',
+                border: '1px solid rgba(212, 24, 31, 0.45)',
+                transform: 'skewX(-12deg)',
+                position: 'relative',
+                overflow: 'hidden',
+                opacity: loadingComplete ? 0 : 1,
+                transition: 'opacity 250ms ease-out',
+                pointerEvents: 'none',
+              }}>
+                <div style={{
+                  position: 'absolute',
+                  top: 0, bottom: 0, left: 0,
+                  width: `${pct}%`,
+                  background: '#d4181f',
+                  transition: 'width 280ms cubic-bezier(0.2, 1, 0.3, 1)',
+                }} />
+              </div>
+            )
+          })()}
 
           {/* Sub-hint — no entrance animation; visible from t=0 in red so the
               difference-blend live-flips as bands sweep behind it. */}
