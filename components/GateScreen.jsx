@@ -570,6 +570,7 @@ export default function GateScreen({ onEnter, onCommit, onMusicStart, onSkip, on
                 flexDirection: 'column',
                 alignItems: 'center',
                 gap: '0.6rem',
+                transform: 'rotate(-27deg)',
               }}>
                 <div style={{
                   fontFamily: 'Anton, Impact, sans-serif',
@@ -579,14 +580,14 @@ export default function GateScreen({ onEnter, onCommit, onMusicStart, onSkip, on
                   color: '#f1eee5',
                   textShadow: '3px 3px 0 #d4181f, 6px 6px 0 #070708',
                   textTransform: 'uppercase',
-                  transform: 'rotate(-37deg)',
                   maxWidth: '85vw',
                   textAlign: 'center',
                 }}>
                   {pickedMantra}
                 </div>
                 {/* Mantra slash underline — same vocabulary as the gate
-                    slash divider (red, skewX -12deg, 5px). Draws in 300ms
+                    slash divider (red, skewX -12deg, 5px). Rotates with the
+                    mantra via the parent's rotate(-27deg). Draws in 300ms
                     after the mantra appears via the width transition delay. */}
                 <div style={{
                   height: 5,
