@@ -117,11 +117,12 @@ export default function GateScreen({ onEnter, onCommit, onMusicStart, onSkip, on
     }
   }, [router])
 
-  // Time-based progress bar with the classic "stuck at 80-99%" feel:
-  // asymptotic curve climbs fast to ~80% then crawls toward 99% and HOLDS
-  // there. Bar only snaps to 100% when loadingComplete actually fires
-  // (separate effect below). pct = 100 * (1 - exp(-elapsed/tau)), capped
-  // at 99. tau = 400ms produces ~80% at 600ms, ~95% at 1.2s, ~99% at 2s+.
+  // Time-based progress bar with an asymptotic shape: fast climb early,
+  // slowing as it approaches 100. Real time, no artificial cap — the bar
+  // naturally reaches 100% via Math.round of `100 * (1 - exp(-t/tau))`
+  // around t ≈ 2.1s with tau=400. loadingComplete may also snap it to 100
+  // if it fires before the curve gets there (see the loadingComplete
+  // effect below). Either path leads to a true 100, no stuck-at-99 dwell.
   const [timePct, setTimePct] = useState(0)
   useEffect(() => {
     const start = Date.now()
@@ -129,9 +130,9 @@ export default function GateScreen({ onEnter, onCommit, onMusicStart, onSkip, on
     const t = setInterval(() => {
       const elapsed = Date.now() - start
       const raw = 100 * (1 - Math.exp(-elapsed / tau))
-      const pct = Math.min(99, Math.round(raw))
+      const pct = Math.min(100, Math.round(raw))
       setTimePct(pct)
-      if (pct >= 99) clearInterval(t)
+      if (pct >= 100) clearInterval(t)
     }, 60)
     return () => clearInterval(t)
   }, [])
