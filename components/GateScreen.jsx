@@ -714,32 +714,52 @@ export default function GateScreen({ onEnter, onCommit, onMusicStart, onSkip, on
 
           {/* Loading progress bar — granular real progress: each prefetched
               route + imgLoaded + pageLoaded contributes one milestone (8 total).
-              Skewed -12deg to match the slash divider vocabulary. Hidden once
-              loadingComplete fires. */}
+              Skewed -12deg to match the slash divider vocabulary. Percentage
+              label sits to the right of the bar. Hidden once loadingComplete
+              fires. */}
           {(() => {
             const total = PREFETCH_ROUTES.length + 2  // 6 routes + img + page
             const done = completedRoutes + (imgLoaded ? 1 : 0) + (pageLoaded ? 1 : 0)
             const pct = Math.min(100, Math.round((done / total) * 100))
             return (
               <div style={{
-                width: 'clamp(8rem, 32vw, 16rem)',
-                height: 5,
-                background: 'rgba(212, 24, 31, 0.12)',
-                border: '1px solid rgba(212, 24, 31, 0.45)',
-                transform: 'skewX(-12deg)',
-                position: 'relative',
-                overflow: 'hidden',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.7rem',
                 opacity: loadingComplete ? 0 : 1,
                 transition: 'opacity 250ms ease-out',
                 pointerEvents: 'none',
               }}>
                 <div style={{
-                  position: 'absolute',
-                  top: 0, bottom: 0, left: 0,
-                  width: `${pct}%`,
-                  background: '#d4181f',
-                  transition: 'width 280ms cubic-bezier(0.2, 1, 0.3, 1)',
-                }} />
+                  width: 'clamp(8rem, 32vw, 16rem)',
+                  height: 5,
+                  background: 'rgba(212, 24, 31, 0.12)',
+                  border: '1px solid rgba(212, 24, 31, 0.45)',
+                  transform: 'skewX(-12deg)',
+                  position: 'relative',
+                  overflow: 'hidden',
+                }}>
+                  <div style={{
+                    position: 'absolute',
+                    top: 0, bottom: 0, left: 0,
+                    width: `${pct}%`,
+                    background: '#d4181f',
+                    transition: 'width 280ms cubic-bezier(0.2, 1, 0.3, 1)',
+                  }} />
+                </div>
+                <div style={{
+                  fontFamily: '"FOT-Matisse Pro EB", "JetBrains Mono", monospace',
+                  fontSize: '0.85rem',
+                  fontWeight: 900,
+                  letterSpacing: '0.08em',
+                  color: '#d4181f',
+                  mixBlendMode: 'difference',
+                  fontVariantNumeric: 'tabular-nums',
+                  minWidth: '2.8em',
+                  textAlign: 'right',
+                }}>
+                  {pct}%
+                </div>
               </div>
             )
           })()}
