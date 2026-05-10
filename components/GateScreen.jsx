@@ -579,7 +579,7 @@ export default function GateScreen({ onEnter, onCommit, onMusicStart, onSkip, on
                   color: '#f1eee5',
                   textShadow: '3px 3px 0 #d4181f, 6px 6px 0 #070708',
                   textTransform: 'uppercase',
-                  transform: 'skewX(-8deg)',
+                  transform: 'rotate(-37deg)',
                   maxWidth: '85vw',
                   textAlign: 'center',
                 }}>
