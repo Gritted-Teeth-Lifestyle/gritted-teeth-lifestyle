@@ -127,7 +127,7 @@ export default function GateScreen({ onEnter, onCommit, onMusicStart, onSkip, on
   //     paused. 70 -> 100 in ~400ms. No stuck-at-99 — the second segment
   //     hits a true 100 at a real, predictable rate.
   const BAR_TAU = 400
-  const BAR_PAUSE_PCT = 70
+  const BAR_PAUSE_PCT = 69
   const BAR_RATE = (100 - BAR_PAUSE_PCT) / BAR_TAU  // pct per ms
   const [timePct, setTimePct] = useState(0)
   // Phase 1 — rising to BAR_PAUSE_PCT.
