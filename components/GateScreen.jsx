@@ -98,7 +98,7 @@ export default function GateScreen({ onEnter, onCommit, onMusicStart, onSkip, on
   // waits for these to resolve (see prefetchSettled below) — the loading
   // screen IS the warm-up window for the whole entry path.
   const PREFETCH_ROUTES = ['/fitness', '/diet', '/attune', '/fitness/hub', '/fitness/load', '/fitness/active']
-  const [prefetchSettled, setPrefetchSettled] = useState(false)
+  const [prefetchSettled, setPrefetchSettled] = useState(skipLoading)
   useEffect(() => {
     let cancelled = false
     const promises = PREFETCH_ROUTES.map((href) => Promise.resolve(router.prefetch(href)))
@@ -133,9 +133,10 @@ export default function GateScreen({ onEnter, onCommit, onMusicStart, onSkip, on
   const BAR_TAU = 3000
   const BAR_PAUSE_PCT = 69
   const BAR_PHASE2_MS = 700
-  const [timePct, setTimePct] = useState(0)
+  const [timePct, setTimePct] = useState(skipLoading ? 100 : 0)
   // Phase 1 — rising to BAR_PAUSE_PCT.
   useEffect(() => {
+    if (skipLoading) return
     const start = Date.now()
     const t = setInterval(() => {
       const elapsed = Date.now() - start
@@ -145,6 +146,7 @@ export default function GateScreen({ onEnter, onCommit, onMusicStart, onSkip, on
       if (pct >= BAR_PAUSE_PCT) clearInterval(t)
     }, 60)
     return () => clearInterval(t)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
   const [phase, setPhase] = useState('pre')
   // pre → in → idle → out
@@ -171,9 +173,20 @@ export default function GateScreen({ onEnter, onCommit, onMusicStart, onSkip, on
   // scripts, any DOM images), document.fonts.ready (web fonts), and the
   // logo <img> firing load/error. Failsafe: 6s timeout flips this true so a
   // stuck asset never traps the user.
-  const [imgLoaded, setImgLoaded] = useState(false)
-  const [pageLoaded, setPageLoaded] = useState(false)
+  // skipLoading: subsequent mounts in the same session (e.g., user navigating
+  // back to / from a sub-route via RetreatButton or browser back) bypass the
+  // loading screen — assets/prefetch are warm, the user has already seen
+  // the ritual, just show PRESS START. Flag persists per tab/PWA session.
+  const [skipLoading] = useState(() => {
+    if (typeof window === 'undefined') return false
+    try { return sessionStorage.getItem('gtl-gate-loaded') === '1' } catch { return false }
+  })
+  const [imgLoaded, setImgLoaded] = useState(skipLoading)
+  const [pageLoaded, setPageLoaded] = useState(skipLoading)
   const assetsLoaded = imgLoaded && pageLoaded
+  useEffect(() => {
+    try { sessionStorage.setItem('gtl-gate-loaded', '1') } catch {}
+  }, [])
   // Lazy initializers so neither reroll on rerender. Mantra is one random
   // pick. Faux-system cycles through all 3 in a randomized order.
   // Random pick must happen post-mount, not in a useState initializer:
@@ -192,10 +205,12 @@ export default function GateScreen({ onEnter, onCommit, onMusicStart, onSkip, on
   // even on warm cache reloads where assetsLoaded fires near-instantly.
   // Bumped from 1200ms to give time for at least one full faux-system cycle
   // plus the mantra reveal.
-  const [minTimeElapsed, setMinTimeElapsed] = useState(false)
+  const [minTimeElapsed, setMinTimeElapsed] = useState(skipLoading)
   useEffect(() => {
+    if (skipLoading) return
     const t = setTimeout(() => setMinTimeElapsed(true), 1500)
     return () => clearTimeout(t)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
   // loadingComplete now also gates on every prefetched route having settled,
   // so PRESS START is only revealed once the post-gate destinations are warm.
@@ -222,20 +237,28 @@ export default function GateScreen({ onEnter, onCommit, onMusicStart, onSkip, on
   // crossfadeReady: real cross-fade trigger — fires 10ms after the bar
   // reaches 100%. All opacity gates that USED to read loadingComplete now
   // read this so the loading screen never fades out mid-bar.
-  const [crossfadeReady, setCrossfadeReady] = useState(false)
+  // On skipLoading return-visits this starts true so mantra/faux/bar stay
+  // invisible and the static labels render directly.
+  const [crossfadeReady, setCrossfadeReady] = useState(skipLoading)
   useEffect(() => {
+    if (skipLoading) return
     if (timePct < 100) return
     const t = setTimeout(() => setCrossfadeReady(true), 10)
     return () => clearTimeout(t)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [timePct])
 
   // After crossfadeReady, hold 250ms (loading-content fade-out duration)
-  // before fading the static brand label + PRESS START in.
-  const [staticLabelsVisible, setStaticLabelsVisible] = useState(false)
+  // before fading the static brand label + PRESS START in. On skipLoading
+  // this also starts true so the static labels render with opacity 1 from
+  // the get-go.
+  const [staticLabelsVisible, setStaticLabelsVisible] = useState(skipLoading)
   useEffect(() => {
     if (!crossfadeReady) return
+    if (skipLoading) return
     const t = setTimeout(() => setStaticLabelsVisible(true), 250)
     return () => clearTimeout(t)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [crossfadeReady])
 
   useEffect(() => {
