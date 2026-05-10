@@ -117,19 +117,21 @@ export default function GateScreen({ onEnter, onCommit, onMusicStart, onSkip, on
     }
   }, [router])
 
-  // Time-based progress bar: fills smoothly from 0 to 100% over BAR_DURATION_MS.
-  // Once it hits 100% it holds there until loadingComplete fades the bar out.
-  // Decoupled from actual milestones so the user sees a continuous gauge
-  // instead of a step-jump per asset/route resolving.
-  const BAR_DURATION_MS = 2000
+  // Time-based progress bar with the classic "stuck at 80-99%" feel:
+  // asymptotic curve climbs fast to ~80% then crawls toward 99% and HOLDS
+  // there. Bar only snaps to 100% when loadingComplete actually fires
+  // (separate effect below). pct = 100 * (1 - exp(-elapsed/tau)), capped
+  // at 99. tau = 400ms produces ~80% at 600ms, ~95% at 1.2s, ~99% at 2s+.
   const [timePct, setTimePct] = useState(0)
   useEffect(() => {
     const start = Date.now()
+    const tau = 400
     const t = setInterval(() => {
       const elapsed = Date.now() - start
-      const pct = Math.min(100, Math.round((elapsed / BAR_DURATION_MS) * 100))
+      const raw = 100 * (1 - Math.exp(-elapsed / tau))
+      const pct = Math.min(99, Math.round(raw))
       setTimePct(pct)
-      if (pct >= 100) clearInterval(t)
+      if (pct >= 99) clearInterval(t)
     }, 60)
     return () => clearInterval(t)
   }, [])
@@ -193,6 +195,10 @@ export default function GateScreen({ onEnter, onCommit, onMusicStart, onSkip, on
   const [staticLabelsVisible, setStaticLabelsVisible] = useState(false)
   useEffect(() => {
     if (!loadingComplete) return
+    // Bar snaps from its asymptotic 99% hold to a true 100% the moment the
+    // gates actually settle — matches the "stuck at 99% then suddenly done"
+    // pattern of real loading screens.
+    setTimePct(100)
     const t = setTimeout(() => setStaticLabelsVisible(true), 250)
     return () => clearTimeout(t)
   }, [loadingComplete])
