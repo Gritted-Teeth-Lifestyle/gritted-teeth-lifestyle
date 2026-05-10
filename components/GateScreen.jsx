@@ -117,16 +117,18 @@ export default function GateScreen({ onEnter, onCommit, onMusicStart, onSkip, on
     }
   }, [router])
 
-  // Two-phase loading bar:
-  //   Phase 1 (rising) — asymptotic climb capped at 70%. Same shape as
-  //     before (tau=400ms): fast early, slowing as it approaches the cap.
-  //     Bar holds at 70% once the curve crosses it (around t≈480ms).
-  //   Phase 2 (finishing) — fires the moment loadingComplete settles.
-  //     Linear ramp at the rate-at-70% (= 30 / tau = 0.075 pct/ms = 75 pct/s)
-  //     so the bar continues at exactly the speed it was moving when it
-  //     paused. 70 -> 100 in ~400ms. No stuck-at-99 — the second segment
-  //     hits a true 100 at a real, predictable rate.
-  const BAR_TAU = 400
+  // Two-phase loading bar — slow throughout:
+  //   Phase 1 (rising) — asymptotic climb capped at BAR_PAUSE_PCT, slow
+  //     (tau=1500ms). Bar reaches 69% around t≈1.75s. Slower climb means
+  //     the user usually doesn't dwell at 69% for long — by the time the
+  //     curve gets there, loadingComplete has often already fired.
+  //   Phase 2 (finishing) — fires when loadingComplete settles. Linear
+  //     ramp at the same 31/1500 ≈ 0.0207 pct/ms (~20.7 pct/sec) rate the
+  //     curve was approaching at 69%. 69 -> 100 in ~1500ms.
+  // Cross-fade out is gated on the BAR reaching 100% (+ 10ms hold), not
+  // on loadingComplete directly — so the user always sees a true 100%
+  // before the loading screen yields to PRESS START.
+  const BAR_TAU = 1500
   const BAR_PAUSE_PCT = 69
   const BAR_RATE = (100 - BAR_PAUSE_PCT) / BAR_TAU  // pct per ms
   const [timePct, setTimePct] = useState(0)
@@ -196,19 +198,8 @@ export default function GateScreen({ onEnter, onCommit, onMusicStart, onSkip, on
   // loadingComplete now also gates on every prefetched route having settled,
   // so PRESS START is only revealed once the post-gate destinations are warm.
   const loadingComplete = assetsLoaded && minTimeElapsed && prefetchSettled
-  // After loadingComplete fires, hold for 250ms (loading-content fade-out
-  // duration) before fading the static brand label + PRESS START in.
-  // Both slots cross-fade in parallel using this single gate.
-  const [staticLabelsVisible, setStaticLabelsVisible] = useState(false)
-  useEffect(() => {
-    if (!loadingComplete) return
-    const t = setTimeout(() => setStaticLabelsVisible(true), 250)
-    return () => clearTimeout(t)
-  }, [loadingComplete])
-
-  // Phase 2 — bar finishes from current pct to 100 at the same rate it was
-  // climbing when it paused at BAR_PAUSE_PCT (linear, 75 pct/sec). 70 -> 100
-  // in ~400ms.
+  // Phase 2 — bar finishes from current pct to 100 at the same slow rate
+  // it was climbing when it paused (linear, ~20.7 pct/sec).
   useEffect(() => {
     if (!loadingComplete) return
     const start = Date.now()
@@ -223,6 +214,25 @@ export default function GateScreen({ onEnter, onCommit, onMusicStart, onSkip, on
     return () => clearInterval(t)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loadingComplete])
+
+  // crossfadeReady: real cross-fade trigger — fires 10ms after the bar
+  // reaches 100%. All opacity gates that USED to read loadingComplete now
+  // read this so the loading screen never fades out mid-bar.
+  const [crossfadeReady, setCrossfadeReady] = useState(false)
+  useEffect(() => {
+    if (timePct < 100) return
+    const t = setTimeout(() => setCrossfadeReady(true), 10)
+    return () => clearTimeout(t)
+  }, [timePct])
+
+  // After crossfadeReady, hold 250ms (loading-content fade-out duration)
+  // before fading the static brand label + PRESS START in.
+  const [staticLabelsVisible, setStaticLabelsVisible] = useState(false)
+  useEffect(() => {
+    if (!crossfadeReady) return
+    const t = setTimeout(() => setStaticLabelsVisible(true), 250)
+    return () => clearTimeout(t)
+  }, [crossfadeReady])
 
   useEffect(() => {
     setRollDir(Math.random() < 0.5 ? 'left' : 'right')
@@ -483,7 +493,7 @@ export default function GateScreen({ onEnter, onCommit, onMusicStart, onSkip, on
               left: '50%',
               transform: 'translateX(-50%)',
               pointerEvents: 'none',
-              opacity: loadingComplete ? 1 : 0,
+              opacity: crossfadeReady ? 1 : 0,
               transition: 'opacity 400ms ease-out',
             }}
           >
@@ -511,7 +521,7 @@ export default function GateScreen({ onEnter, onCommit, onMusicStart, onSkip, on
               left: '50%',
               transform: 'translateX(-50%)',
               pointerEvents: 'none',
-              opacity: loadingComplete ? 1 : 0,
+              opacity: crossfadeReady ? 1 : 0,
               transition: 'opacity 400ms ease-out',
             }}
           >
@@ -624,7 +634,7 @@ export default function GateScreen({ onEnter, onCommit, onMusicStart, onSkip, on
           }}>
             <div style={{
               gridArea: '1 / 1',
-              opacity: loadingComplete ? 0 : 1,
+              opacity: crossfadeReady ? 0 : 1,
               transition: 'opacity 250ms ease-out',
               pointerEvents: 'none',
             }}>
@@ -688,7 +698,7 @@ export default function GateScreen({ onEnter, onCommit, onMusicStart, onSkip, on
             lineHeight: 1, letterSpacing: '-0.02em',
             color: '#f1eee5',
             textShadow: '3px 3px 0 #d4181f, 6px 6px 0 #070708',
-            opacity: loadingComplete ? 1 : 0,
+            opacity: crossfadeReady ? 1 : 0,
             transition: 'opacity 400ms ease-out',
           }}>
             GTL
@@ -702,7 +712,7 @@ export default function GateScreen({ onEnter, onCommit, onMusicStart, onSkip, on
             mixBlendMode: 'difference',
             width: active ? 'clamp(8rem, 20vw, 14rem)' : 0,
             transition: transOf('width 1000ms cubic-bezier(0.2, 1, 0.3, 1) 1200ms, opacity 400ms ease-out'),
-            opacity: loadingComplete ? 1 : 0,
+            opacity: crossfadeReady ? 1 : 0,
           }} />
 
           {/* PRESS-START slot — during loading hosts the cycling
@@ -712,7 +722,7 @@ export default function GateScreen({ onEnter, onCommit, onMusicStart, onSkip, on
           <div style={{ display: 'grid', placeItems: 'center' }}>
             <div style={{
               gridArea: '1 / 1',
-              opacity: loadingComplete ? 0 : 1,
+              opacity: crossfadeReady ? 0 : 1,
               transition: 'opacity 250ms ease-out',
               pointerEvents: 'none',
             }}>
@@ -753,10 +763,8 @@ export default function GateScreen({ onEnter, onCommit, onMusicStart, onSkip, on
             display: 'flex',
             alignItems: 'center',
             gap: '0.7rem',
-            // Bar fades out slower than the rest (500ms vs 250ms) so phase 2
-            // has time to climb 70 -> 100 before the bar is fully gone.
-            opacity: loadingComplete ? 0 : 1,
-            transition: 'opacity 500ms ease-out',
+            opacity: crossfadeReady ? 0 : 1,
+            transition: 'opacity 250ms ease-out',
             pointerEvents: 'none',
           }}>
             <div style={{
@@ -799,7 +807,7 @@ export default function GateScreen({ onEnter, onCommit, onMusicStart, onSkip, on
             fontWeight: 900,
             textTransform: 'uppercase', color: '#d4181f',
             mixBlendMode: 'difference',
-            opacity: loadingComplete ? 1 : 0,
+            opacity: crossfadeReady ? 1 : 0,
             transition: 'opacity 400ms ease-out',
           }}>
             // CLICK OR TOUCH TO ENTER //
