@@ -117,22 +117,28 @@ export default function GateScreen({ onEnter, onCommit, onMusicStart, onSkip, on
     }
   }, [router])
 
-  // Time-based progress bar with an asymptotic shape: fast climb early,
-  // slowing as it approaches 100. Real time, no artificial cap — the bar
-  // naturally reaches 100% via Math.round of `100 * (1 - exp(-t/tau))`
-  // around t ≈ 2.1s with tau=400. loadingComplete may also snap it to 100
-  // if it fires before the curve gets there (see the loadingComplete
-  // effect below). Either path leads to a true 100, no stuck-at-99 dwell.
+  // Two-phase loading bar:
+  //   Phase 1 (rising) — asymptotic climb capped at 70%. Same shape as
+  //     before (tau=400ms): fast early, slowing as it approaches the cap.
+  //     Bar holds at 70% once the curve crosses it (around t≈480ms).
+  //   Phase 2 (finishing) — fires the moment loadingComplete settles.
+  //     Linear ramp at the rate-at-70% (= 30 / tau = 0.075 pct/ms = 75 pct/s)
+  //     so the bar continues at exactly the speed it was moving when it
+  //     paused. 70 -> 100 in ~400ms. No stuck-at-99 — the second segment
+  //     hits a true 100 at a real, predictable rate.
+  const BAR_TAU = 400
+  const BAR_PAUSE_PCT = 70
+  const BAR_RATE = (100 - BAR_PAUSE_PCT) / BAR_TAU  // pct per ms
   const [timePct, setTimePct] = useState(0)
+  // Phase 1 — rising to BAR_PAUSE_PCT.
   useEffect(() => {
     const start = Date.now()
-    const tau = 400
     const t = setInterval(() => {
       const elapsed = Date.now() - start
-      const raw = 100 * (1 - Math.exp(-elapsed / tau))
-      const pct = Math.min(100, Math.round(raw))
-      setTimePct(pct)
-      if (pct >= 100) clearInterval(t)
+      const raw = 100 * (1 - Math.exp(-elapsed / BAR_TAU))
+      const pct = Math.min(BAR_PAUSE_PCT, Math.round(raw))
+      setTimePct((prev) => (prev >= BAR_PAUSE_PCT ? prev : pct))
+      if (pct >= BAR_PAUSE_PCT) clearInterval(t)
     }, 60)
     return () => clearInterval(t)
   }, [])
@@ -196,12 +202,26 @@ export default function GateScreen({ onEnter, onCommit, onMusicStart, onSkip, on
   const [staticLabelsVisible, setStaticLabelsVisible] = useState(false)
   useEffect(() => {
     if (!loadingComplete) return
-    // Bar snaps from its asymptotic 99% hold to a true 100% the moment the
-    // gates actually settle — matches the "stuck at 99% then suddenly done"
-    // pattern of real loading screens.
-    setTimePct(100)
     const t = setTimeout(() => setStaticLabelsVisible(true), 250)
     return () => clearTimeout(t)
+  }, [loadingComplete])
+
+  // Phase 2 — bar finishes from current pct to 100 at the same rate it was
+  // climbing when it paused at BAR_PAUSE_PCT (linear, 75 pct/sec). 70 -> 100
+  // in ~400ms.
+  useEffect(() => {
+    if (!loadingComplete) return
+    const start = Date.now()
+    const startPct = timePct
+    const t = setInterval(() => {
+      const elapsed = Date.now() - start
+      const raw = startPct + BAR_RATE * elapsed
+      const pct = Math.min(100, Math.round(raw))
+      setTimePct(pct)
+      if (pct >= 100) clearInterval(t)
+    }, 30)
+    return () => clearInterval(t)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loadingComplete])
 
   useEffect(() => {
@@ -733,8 +753,10 @@ export default function GateScreen({ onEnter, onCommit, onMusicStart, onSkip, on
             display: 'flex',
             alignItems: 'center',
             gap: '0.7rem',
+            // Bar fades out slower than the rest (500ms vs 250ms) so phase 2
+            // has time to climb 70 -> 100 before the bar is fully gone.
             opacity: loadingComplete ? 0 : 1,
-            transition: 'opacity 250ms ease-out',
+            transition: 'opacity 500ms ease-out',
             pointerEvents: 'none',
           }}>
             <div style={{
@@ -751,7 +773,7 @@ export default function GateScreen({ onEnter, onCommit, onMusicStart, onSkip, on
                 top: 0, bottom: 0, left: 0,
                 width: `${timePct}%`,
                 background: '#d4181f',
-                transition: 'width 80ms linear',
+                transition: 'width 60ms linear',
               }} />
             </div>
             <div style={{
