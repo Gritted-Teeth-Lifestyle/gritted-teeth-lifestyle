@@ -117,20 +117,22 @@ export default function GateScreen({ onEnter, onCommit, onMusicStart, onSkip, on
     }
   }, [router])
 
-  // Two-phase loading bar — slow throughout:
-  //   Phase 1 (rising) — asymptotic climb capped at BAR_PAUSE_PCT, slow
-  //     (tau=1500ms). Bar reaches 69% around t≈1.75s. Slower climb means
-  //     the user usually doesn't dwell at 69% for long — by the time the
-  //     curve gets there, loadingComplete has often already fired.
+  // Two-phase loading bar:
+  //   Phase 1 (rising) — asymptotic climb capped at BAR_PAUSE_PCT. Slow
+  //     enough (tau=3000ms) that the curve doesn't reach 69% until
+  //     ~3.5s. On a typical warm-cache load (loadingComplete around
+  //     1.5-2s) the bar is around 40-50% when phase 2 takes over —
+  //     the user almost never dwells at 69%.
   //   Phase 2 (finishing) — fires when loadingComplete settles. Linear
-  //     ramp at the same 31/1500 ≈ 0.0207 pct/ms (~20.7 pct/sec) rate the
-  //     curve was approaching at 69%. 69 -> 100 in ~1500ms.
+  //     ramp from current pct to 100 over BAR_PHASE2_MS regardless of
+  //     where it picks up, so the finish stays snappy even though
+  //     phase 1 is slow.
   // Cross-fade out is gated on the BAR reaching 100% (+ 10ms hold), not
   // on loadingComplete directly — so the user always sees a true 100%
   // before the loading screen yields to PRESS START.
-  const BAR_TAU = 1500
+  const BAR_TAU = 3000
   const BAR_PAUSE_PCT = 69
-  const BAR_RATE = (100 - BAR_PAUSE_PCT) / BAR_TAU  // pct per ms
+  const BAR_PHASE2_MS = 700
   const [timePct, setTimePct] = useState(0)
   // Phase 1 — rising to BAR_PAUSE_PCT.
   useEffect(() => {
@@ -198,15 +200,17 @@ export default function GateScreen({ onEnter, onCommit, onMusicStart, onSkip, on
   // loadingComplete now also gates on every prefetched route having settled,
   // so PRESS START is only revealed once the post-gate destinations are warm.
   const loadingComplete = assetsLoaded && minTimeElapsed && prefetchSettled
-  // Phase 2 — bar finishes from current pct to 100 at the same slow rate
-  // it was climbing when it paused (linear, ~20.7 pct/sec).
+  // Phase 2 — bar finishes from current pct to 100 over BAR_PHASE2_MS.
+  // Linear ramp; rate scales with how far there is to go so the finish
+  // always lands in ~700ms regardless of where phase 1 paused.
   useEffect(() => {
     if (!loadingComplete) return
     const start = Date.now()
     const startPct = timePct
+    const ratePerMs = (100 - startPct) / BAR_PHASE2_MS
     const t = setInterval(() => {
       const elapsed = Date.now() - start
-      const raw = startPct + BAR_RATE * elapsed
+      const raw = startPct + ratePerMs * elapsed
       const pct = Math.min(100, Math.round(raw))
       setTimePct(pct)
       if (pct >= 100) clearInterval(t)
