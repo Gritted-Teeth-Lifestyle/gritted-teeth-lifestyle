@@ -51,9 +51,11 @@ function muscleGroupLabel(muscles) {
   const arms  = containsAll(muscles, ARMS_MIN)
 
   if (upper && lower) {
+    // FULL BODY absorbs EVERY muscle on the day — abs, calves, arms,
+    // forearms all hide under the single 全 title. No remainder.
     return {
       titles: [{ kanji: '全', label: 'FULL BODY' }],
-      covered: [...UPPER_COVERS, ...LOWER_COVERS],
+      covered: [...muscles],
     }
   }
   const titles = []
