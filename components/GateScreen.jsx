@@ -120,6 +120,13 @@ export default function GateScreen({ onEnter, onCommit, onMusicStart, onSkip, on
     setTimePct(100)
     setCrossfadeReady(true)
     setStaticLabelsVisible(true)
+    // Also fast-forward the entrance cascade so bands/corners/logo land
+    // at their settled positions immediately. instant=true makes transOf
+    // return 'none', killing transitions; phase 'idle' is the settled
+    // state; logoEntranceDone wakes the post-roll sparkles.
+    setPhase('idle')
+    setInstant(true)
+    setLogoEntranceDone(true)
   }, [])
 
   // Warm up the route bundles for every destination the user can hit from
@@ -499,7 +506,7 @@ export default function GateScreen({ onEnter, onCommit, onMusicStart, onSkip, on
           top: '-25%', bottom: '-25%', left: '-5%', width: '52%',
           background: 'rgba(212,24,31,0.75)',
           transform: 'skewX(-12deg) translateX(0)',
-          animation: 'gtl-band-1-in 1100ms cubic-bezier(0.15, 0, 0.1, 1) 150ms both',
+          animation: skipLoading ? 'none' : 'gtl-band-1-in 1100ms cubic-bezier(0.15, 0, 0.1, 1) 150ms both',
         }}
       />
       {/* Band 2 removed — it overlapped Band 1 inside ~10–47% of the viewport,
@@ -513,19 +520,19 @@ export default function GateScreen({ onEnter, onCommit, onMusicStart, onSkip, on
           top: '-25%', bottom: '-25%', right: '-8%', width: '20%',
           background: 'rgba(212,24,31,0.55)',
           transform: 'skewX(-12deg) translateX(0)',
-          animation: 'gtl-band-3-in 1100ms cubic-bezier(0.15, 0, 0.1, 1) 225ms both',
+          animation: skipLoading ? 'none' : 'gtl-band-3-in 1100ms cubic-bezier(0.15, 0, 0.1, 1) 225ms both',
         }}
       />
 
       {/* ── Corner accent lines ── CSS-driven entrance, same reason as bands. */}
       <div className="absolute top-0 left-0 bg-gtl-red pointer-events-none"
-        style={{ height: 5, width: 168, animation: 'gtl-corner-h-in 1000ms cubic-bezier(0.2,1,0.3,1) 700ms both' }} />
+        style={{ height: 5, width: 168, animation: skipLoading ? 'none' : 'gtl-corner-h-in 1000ms cubic-bezier(0.2,1,0.3,1) 700ms both' }} />
       <div className="absolute top-0 left-0 bg-gtl-red pointer-events-none"
-        style={{ width: 5, height: 168, animation: 'gtl-corner-v-in 1000ms cubic-bezier(0.2,1,0.3,1) 800ms both' }} />
+        style={{ width: 5, height: 168, animation: skipLoading ? 'none' : 'gtl-corner-v-in 1000ms cubic-bezier(0.2,1,0.3,1) 800ms both' }} />
       <div className="absolute bottom-0 right-0 bg-gtl-red pointer-events-none"
-        style={{ height: 5, width: 168, animation: 'gtl-corner-h-in 1000ms cubic-bezier(0.2,1,0.3,1) 700ms both' }} />
+        style={{ height: 5, width: 168, animation: skipLoading ? 'none' : 'gtl-corner-h-in 1000ms cubic-bezier(0.2,1,0.3,1) 700ms both' }} />
       <div className="absolute bottom-0 right-0 bg-gtl-red pointer-events-none"
-        style={{ width: 5, height: 168, animation: 'gtl-corner-v-in 1000ms cubic-bezier(0.2,1,0.3,1) 800ms both' }} />
+        style={{ width: 5, height: 168, animation: skipLoading ? 'none' : 'gtl-corner-v-in 1000ms cubic-bezier(0.2,1,0.3,1) 800ms both' }} />
 
       {/* ── Swipe hints — plain red, no blend mode, no underlay.
           Outer wrapper handles the loadingComplete opacity gate so the inner
