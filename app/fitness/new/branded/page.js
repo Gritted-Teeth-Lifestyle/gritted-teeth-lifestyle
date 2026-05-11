@@ -1002,22 +1002,82 @@ export default function SchedulePage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  // Serialize current selection state to the draft keys. Returns the
+  // serialized payload so callers can reuse it for the active-cycle sync.
+  const serializeSchedule = () => {
+    const trainingDays = [...selectedDays].sort()
+    const dailyPlan = {}
+    Object.entries(assignments).forEach(([iso, set]) => {
+      if (set.size > 0) dailyPlan[iso] = [...set]
+    })
+    return { trainingDays, dailyPlan }
+  }
+
+  // Auto-rest gap fill: span from min..max of user-picked days, inclusive.
+  // Mirrors the contiguous-span derivation in /fitness/new/summary so the
+  // shape Attune renders matches what Summary would commit.
+  const contiguousSpan = (trainingDays) => {
+    if (!trainingDays.length) return []
+    const first = trainingDays[0]
+    const last  = trainingDays[trainingDays.length - 1]
+    const out = []
+    let cur = new Date(first + 'T00:00:00Z')
+    const end = new Date(last + 'T00:00:00Z')
+    while (cur <= end) {
+      out.push(cur.toISOString().slice(0, 10))
+      cur.setUTCDate(cur.getUTCDate() + 1)
+    }
+    return out
+  }
+
+  const persistScheduleDraft = () => {
+    try {
+      const { trainingDays, dailyPlan } = serializeSchedule()
+      localStorage.setItem(pk('training-days'), JSON.stringify(trainingDays))
+      localStorage.setItem(pk('daily-plan'),    JSON.stringify(dailyPlan))
+      return { trainingDays, dailyPlan }
+    } catch (_) {
+      return { trainingDays: [], dailyPlan: {} }
+    }
+  }
+
+  // Side-load the active cycle's days + dailyPlan so the next consumer
+  // (Attune) sees the picks the user just made. Without this, Attune
+  // reads pk('cycles')[active-cycle-id].days, which only the Summary
+  // commit path writes — bypassing it (e.g. tapping ATTUNE before
+  // CARVE) leaves Attune rendering the previous commit's days.
+  const syncActiveCycle = (trainingDays, dailyPlan) => {
+    try {
+      const cycleId = localStorage.getItem(pk('active-cycle-id'))
+                   || localStorage.getItem(pk('editing-cycle-id'))
+      if (!cycleId) return
+      const raw = localStorage.getItem(pk('cycles'))
+      if (!raw) return
+      const cycles = JSON.parse(raw)
+      if (!Array.isArray(cycles)) return
+      const span = contiguousSpan(trainingDays)
+      const next = cycles.map((c) =>
+        c.id === cycleId ? { ...c, days: span, dailyPlan } : c
+      )
+      localStorage.setItem(pk('cycles'), JSON.stringify(next))
+    } catch (_) {}
+  }
+
   const handleCarve = () => {
     if (!carveEnabled) return
     play('card-confirm')
-    try {
-      // Persist all user-picked days (including intentional-rest days with no muscles).
-      // Auto-rest gap days are NOT saved — they're derived at render time on summary
-      // from min/max of the persisted picks. P1 design.
-      const trainingDays = [...selectedDays].sort()
-      localStorage.setItem(pk('training-days'), JSON.stringify(trainingDays))
-      const serialized = {}
-      Object.entries(assignments).forEach(([iso, set]) => {
-        if (set.size > 0) serialized[iso] = [...set]
-      })
-      localStorage.setItem(pk('daily-plan'), JSON.stringify(serialized))
-    } catch (_) {}
+    persistScheduleDraft()
     setFireActive(true)
+  }
+
+  // ATTUNE MOVEMENTS bypasses the CARVE → Summary commit. Persist
+  // everything Attune needs to read fresh values: the draft keys AND
+  // the active cycle's snapshot in pk('cycles').
+  const handleAttuneHandoff = () => {
+    play('option-select')
+    const { trainingDays, dailyPlan } = persistScheduleDraft()
+    syncActiveCycle(trainingDays, dailyPlan)
+    router.push('/attune')
   }
 
   const batchMuscleState = (muscleId) => {
@@ -1348,7 +1408,7 @@ export default function SchedulePage() {
               <AttuneMovementsButton
                 enabled={selectedDays.size > 0}
                 monthKanji={MONTH_KANJI[month]}
-                onTap={() => { play('option-select'); router.push('/attune') }}
+                onTap={handleAttuneHandoff}
                 onHover={() => play('button-hover')}
               />
             </div>
