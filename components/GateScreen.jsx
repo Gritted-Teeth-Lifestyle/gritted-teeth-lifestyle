@@ -41,6 +41,7 @@ const FAUX_SYSTEM_PHRASES = [
   'GOING FULL DEPTH...',
   'SPOTTING BIG DAWG...',
   'MIXING PRE WORKOUT...',
+  'RESTING BETWEEN SETS...',
 ]
 
 // Settled, hero presentation: each word fades in 200ms after the prior.
