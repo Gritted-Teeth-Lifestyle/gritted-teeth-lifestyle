@@ -38,6 +38,7 @@ const FAUX_SYSTEM_PHRASES = [
   'RACKING WEIGHTS...',
   'WIPING DOWN BENCH...',
   'UNRACKING THE BAR...',
+  'GOING FULL DEPTH...',
 ]
 
 // Settled, hero presentation: each word fades in 200ms after the prior.
