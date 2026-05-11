@@ -149,7 +149,7 @@ export default function GateScreen({ onEnter, onCommit, onMusicStart, onSkip, on
   // Cross-fade out is gated on the BAR reaching 100% (+ 10ms hold), not
   // on loadingComplete directly — so the user always sees a true 100%
   // before the loading screen yields to PRESS START.
-  const BAR_TAU = 3000
+  const BAR_TAU = 5000
   const BAR_PAUSE_PCT = 69
   const BAR_PHASE2_MS = 700
   const [timePct, setTimePct] = useState(skipLoading ? 100 : 0)
