@@ -1,7 +1,10 @@
 'use client'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useSound } from '../lib/useSound'
+
+// useLayoutEffect on the server warns; alias to useEffect there so SSR is silent.
+const useIsoLayoutEffect = typeof window !== 'undefined' ? useLayoutEffect : useEffect
 
 // Slashes take 500ms + 140ms stagger = 640ms total.
 // Exit at 600ms — slashes are 95%+ across, seamless handoff to gate-reveal.
@@ -97,23 +100,19 @@ export default function GateScreen({ onEnter, onCommit, onMusicStart, onSkip, on
   // loading screen — assets/prefetch are warm, the user has already seen
   // the ritual, just show PRESS START. Flag persists per tab/PWA session.
   //
-  // MUST start `false` and flip in a useEffect — reading sessionStorage in a
-  // useState initializer creates a hydration mismatch (SSR returns false,
-  // client first render returns true on return visits, bar renders "0%" vs
-  // "100%", React rejects hydration). The brief flash of loading content on
-  // return visits before the post-mount fast-forward is an accepted tradeoff.
+  // useState init MUST be false (matches SSR — reading sessionStorage in the
+  // initializer would mismatch SSR's '0%' vs client's '100%' in the bar).
+  // useLayoutEffect runs synchronously BEFORE paint on the client, so a return
+  // visit fast-forwards every gate in the same commit cycle — no flash of
+  // loading content between the initial render and the snap.
   const [skipLoading, setSkipLoading] = useState(false)
-  useEffect(() => {
+  useIsoLayoutEffect(() => {
     let isReturn = false
     try { isReturn = sessionStorage.getItem('gtl-gate-loaded') === '1' } catch {}
     try { sessionStorage.setItem('gtl-gate-loaded', '1') } catch {}
-    if (isReturn) setSkipLoading(true)
-  }, [])
-
-  // When skipLoading flips true post-mount, fast-forward every loading gate
-  // so the bar/mantra/faux disappear and the static labels show immediately.
-  useEffect(() => {
-    if (!skipLoading) return
+    if (!isReturn) return
+    // Batch — React 18 collapses these into one re-render before paint.
+    setSkipLoading(true)
     setImgLoaded(true)
     setPageLoaded(true)
     setPrefetchSettled(true)
@@ -121,7 +120,7 @@ export default function GateScreen({ onEnter, onCommit, onMusicStart, onSkip, on
     setTimePct(100)
     setCrossfadeReady(true)
     setStaticLabelsVisible(true)
-  }, [skipLoading])
+  }, [])
 
   // Warm up the route bundles for every destination the user can hit from
   // the gate (or from the first screen after it), so post-gate taps don't
