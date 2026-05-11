@@ -808,12 +808,20 @@ export default function GateScreen({ onEnter, onCommit, onMusicStart, onSkip, on
               transition: 'opacity 250ms ease-out',
               pointerEvents: 'none',
             }}>
+              <style>{`
+                @keyframes gtl-bar-stripes {
+                  from { transform: translateX(0); }
+                  to   { transform: translateX(17px); }
+                }
+              `}</style>
               <div style={{
                 width: 'clamp(8rem, 32vw, 16rem)',
-                height: 5,
-                background: 'rgba(212, 24, 31, 0.12)',
-                border: '1px solid rgba(212, 24, 31, 0.45)',
+                height: 8,
+                background: 'rgba(212, 24, 31, 0.15)',
                 transform: 'skewX(-12deg)',
+                // Forward-pointing arrowhead clip — chevron point on the right
+                // end, flat left end. Sharper, blade-slot feel.
+                clipPath: 'polygon(0 0, calc(100% - 7px) 0, 100% 50%, calc(100% - 7px) 100%, 0 100%)',
                 position: 'relative',
                 overflow: 'hidden',
               }}>
@@ -823,7 +831,17 @@ export default function GateScreen({ onEnter, onCommit, onMusicStart, onSkip, on
                   width: `${timePct}%`,
                   background: '#d4181f',
                   transition: 'width 60ms linear',
-                }} />
+                  overflow: 'hidden',
+                }}>
+                  {/* Scrolling diagonal stripes — gentle white overlay
+                      gives the fill a sense of motion. */}
+                  <div style={{
+                    position: 'absolute',
+                    top: 0, bottom: 0, left: '-24px', right: '-24px',
+                    backgroundImage: 'repeating-linear-gradient(45deg, rgba(255,255,255,0.22) 0 6px, transparent 6px 12px)',
+                    animation: 'gtl-bar-stripes 600ms linear infinite',
+                  }} />
+                </div>
               </div>
               <div style={{
                 fontFamily: '"FOT-Matisse Pro EB", "JetBrains Mono", monospace',
