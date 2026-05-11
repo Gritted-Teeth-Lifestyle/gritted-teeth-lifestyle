@@ -702,9 +702,10 @@ export default function GateScreen({ onEnter, onCommit, onMusicStart, onSkip, on
                   }}>
                     {pickedMantra}
                   </div>
-                  {/* Mantra slash underline — breathes (extend ↔ retract)
-                      continuously via scaleX. transform-origin center makes
-                      it grow/shrink symmetrically from the middle. */}
+                  {/* Mantra slash underline — width matches the mantra text
+                      via 100%-of-flex-column (column sizes to its widest
+                      child, which is the mantra). Breathes (extend ↔ retract)
+                      from the center via scaleX. */}
                   <style>{`
                     @keyframes gtl-mantra-slash-breathe {
                       from { transform: skewX(-12deg) scaleX(0); }
@@ -717,7 +718,7 @@ export default function GateScreen({ onEnter, onCommit, onMusicStart, onSkip, on
                     transform: 'skewX(-12deg) scaleX(0)',
                     transformOrigin: 'center center',
                     mixBlendMode: 'difference',
-                    width: 'clamp(6rem, 18vw, 12rem)',
+                    width: '100%',
                     animation: pickedMantra
                       ? 'gtl-mantra-slash-breathe 1400ms cubic-bezier(0.4, 0, 0.2, 1) 300ms infinite alternate'
                       : 'none',
