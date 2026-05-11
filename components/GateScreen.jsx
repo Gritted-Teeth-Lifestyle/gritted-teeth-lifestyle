@@ -96,14 +96,32 @@ export default function GateScreen({ onEnter, onCommit, onMusicStart, onSkip, on
   // back to / from a sub-route via RetreatButton or browser back) bypass the
   // loading screen — assets/prefetch are warm, the user has already seen
   // the ritual, just show PRESS START. Flag persists per tab/PWA session.
-  // Declared first because every loading-state initializer below reads it.
-  const [skipLoading] = useState(() => {
-    if (typeof window === 'undefined') return false
-    try { return sessionStorage.getItem('gtl-gate-loaded') === '1' } catch { return false }
-  })
+  //
+  // MUST start `false` and flip in a useEffect — reading sessionStorage in a
+  // useState initializer creates a hydration mismatch (SSR returns false,
+  // client first render returns true on return visits, bar renders "0%" vs
+  // "100%", React rejects hydration). The brief flash of loading content on
+  // return visits before the post-mount fast-forward is an accepted tradeoff.
+  const [skipLoading, setSkipLoading] = useState(false)
   useEffect(() => {
+    let isReturn = false
+    try { isReturn = sessionStorage.getItem('gtl-gate-loaded') === '1' } catch {}
     try { sessionStorage.setItem('gtl-gate-loaded', '1') } catch {}
+    if (isReturn) setSkipLoading(true)
   }, [])
+
+  // When skipLoading flips true post-mount, fast-forward every loading gate
+  // so the bar/mantra/faux disappear and the static labels show immediately.
+  useEffect(() => {
+    if (!skipLoading) return
+    setImgLoaded(true)
+    setPageLoaded(true)
+    setPrefetchSettled(true)
+    setMinTimeElapsed(true)
+    setTimePct(100)
+    setCrossfadeReady(true)
+    setStaticLabelsVisible(true)
+  }, [skipLoading])
 
   // Warm up the route bundles for every destination the user can hit from
   // the gate (or from the first screen after it), so post-gate taps don't
@@ -111,7 +129,7 @@ export default function GateScreen({ onEnter, onCommit, onMusicStart, onSkip, on
   // waits for these to resolve (see prefetchSettled below) — the loading
   // screen IS the warm-up window for the whole entry path.
   const PREFETCH_ROUTES = ['/fitness', '/diet', '/attune', '/fitness/hub', '/fitness/load', '/fitness/active']
-  const [prefetchSettled, setPrefetchSettled] = useState(skipLoading)
+  const [prefetchSettled, setPrefetchSettled] = useState(false)
   useEffect(() => {
     let cancelled = false
     const promises = PREFETCH_ROUTES.map((href) => Promise.resolve(router.prefetch(href)))
@@ -146,7 +164,7 @@ export default function GateScreen({ onEnter, onCommit, onMusicStart, onSkip, on
   const BAR_TAU = 3000
   const BAR_PAUSE_PCT = 69
   const BAR_PHASE2_MS = 700
-  const [timePct, setTimePct] = useState(skipLoading ? 100 : 0)
+  const [timePct, setTimePct] = useState(0)
   // Phase 1 — rising to BAR_PAUSE_PCT.
   useEffect(() => {
     if (skipLoading) return
@@ -186,8 +204,8 @@ export default function GateScreen({ onEnter, onCommit, onMusicStart, onSkip, on
   // scripts, any DOM images), document.fonts.ready (web fonts), and the
   // logo <img> firing load/error. Failsafe: 6s timeout flips this true so a
   // stuck asset never traps the user.
-  const [imgLoaded, setImgLoaded] = useState(skipLoading)
-  const [pageLoaded, setPageLoaded] = useState(skipLoading)
+  const [imgLoaded, setImgLoaded] = useState(false)
+  const [pageLoaded, setPageLoaded] = useState(false)
   const assetsLoaded = imgLoaded && pageLoaded
   // Lazy initializers so neither reroll on rerender. Mantra is one random
   // pick. Faux-system cycles through all 3 in a randomized order.
@@ -207,7 +225,7 @@ export default function GateScreen({ onEnter, onCommit, onMusicStart, onSkip, on
   // even on warm cache reloads where assetsLoaded fires near-instantly.
   // Bumped from 1200ms to give time for at least one full faux-system cycle
   // plus the mantra reveal.
-  const [minTimeElapsed, setMinTimeElapsed] = useState(skipLoading)
+  const [minTimeElapsed, setMinTimeElapsed] = useState(false)
   useEffect(() => {
     if (skipLoading) return
     const t = setTimeout(() => setMinTimeElapsed(true), 1500)
@@ -241,7 +259,7 @@ export default function GateScreen({ onEnter, onCommit, onMusicStart, onSkip, on
   // read this so the loading screen never fades out mid-bar.
   // On skipLoading return-visits this starts true so mantra/faux/bar stay
   // invisible and the static labels render directly.
-  const [crossfadeReady, setCrossfadeReady] = useState(skipLoading)
+  const [crossfadeReady, setCrossfadeReady] = useState(false)
   useEffect(() => {
     if (skipLoading) return
     if (timePct < 100) return
@@ -254,7 +272,7 @@ export default function GateScreen({ onEnter, onCommit, onMusicStart, onSkip, on
   // before fading the static brand label + PRESS START in. On skipLoading
   // this also starts true so the static labels render with opacity 1 from
   // the get-go.
-  const [staticLabelsVisible, setStaticLabelsVisible] = useState(skipLoading)
+  const [staticLabelsVisible, setStaticLabelsVisible] = useState(false)
   useEffect(() => {
     if (!crossfadeReady) return
     if (skipLoading) return
