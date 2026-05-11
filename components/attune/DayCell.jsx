@@ -16,21 +16,25 @@ const MUSCLE_LABEL = {
 function muscleKanji(id) { return MUSCLE_KANJI[id] || '·' }
 function muscleLabel(id) { return MUSCLE_LABEL[id] || '' }
 
-const ALL_MUSCLES = ['chest', 'shoulders', 'back', 'forearms', 'quads', 'hamstrings', 'calves', 'biceps', 'triceps', 'glutes', 'abs']
-const UPPER_MUSCLES = ['chest', 'back', 'shoulders', 'biceps', 'triceps', 'forearms']
-const LOWER_MUSCLES = ['quads', 'hamstrings', 'calves', 'glutes']
+// Minimums for the collapsed group titles. A day qualifies for UPPER if
+// chest+back+shoulders are all present (regardless of extras); LOWER if
+// quads+hamstrings+glutes are all present; FULL BODY if both minimums
+// are satisfied simultaneously.
+const UPPER_MIN = ['chest', 'back', 'shoulders']
+const LOWER_MIN = ['quads', 'hamstrings', 'glutes']
 
-function setEquals(a, b) {
-  if (a.length !== b.length) return false
-  const s = new Set(a)
-  return b.every((x) => s.has(x))
+function containsAll(muscles, required) {
+  const s = new Set(muscles)
+  return required.every((x) => s.has(x))
 }
 
 function muscleGroupLabel(muscles) {
   if (!muscles || muscles.length < 2) return null
-  if (setEquals(muscles, ALL_MUSCLES))   return { kanji: '全', label: 'FULL BODY' }
-  if (setEquals(muscles, UPPER_MUSCLES)) return { kanji: '上', label: 'UPPER' }
-  if (setEquals(muscles, LOWER_MUSCLES)) return { kanji: '下', label: 'LOWER' }
+  const upper = containsAll(muscles, UPPER_MIN)
+  const lower = containsAll(muscles, LOWER_MIN)
+  if (upper && lower) return { kanji: '全', label: 'FULL BODY' }
+  if (upper)          return { kanji: '上', label: 'UPPER' }
+  if (lower)          return { kanji: '下', label: 'LOWER' }
   return null
 }
 
