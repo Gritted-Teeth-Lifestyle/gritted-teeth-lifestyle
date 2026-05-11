@@ -36,7 +36,7 @@ const MANTRAS = [
 
 const FAUX_SYSTEM_PHRASES = [
   'RACKING WEIGHTS...',
-  'WIPING THE BENCH...',
+  'WIPING DOWN BENCH...',
   'UNRACKING THE BAR...',
 ]
 
