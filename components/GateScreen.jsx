@@ -838,7 +838,7 @@ export default function GateScreen({ onEnter, onCommit, onMusicStart, onSkip, on
                   <div style={{
                     position: 'absolute',
                     top: 0, bottom: 0, left: '-24px', right: '-24px',
-                    backgroundImage: 'repeating-linear-gradient(45deg, rgba(255,255,255,0.22) 0 6px, transparent 6px 12px)',
+                    backgroundImage: 'repeating-linear-gradient(45deg, rgba(0,0,0,0.45) 0 6px, transparent 6px 12px)',
                     animation: 'gtl-bar-stripes 600ms linear infinite',
                   }} />
                 </div>
