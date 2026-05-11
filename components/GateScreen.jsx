@@ -1,10 +1,17 @@
 'use client'
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useSound } from '../lib/useSound'
 
-// useLayoutEffect on the server warns; alias to useEffect there so SSR is silent.
-const useIsoLayoutEffect = typeof window !== 'undefined' ? useLayoutEffect : useEffect
+// Module-level flag: tracks whether GateScreen has mounted in the current JS
+// bundle's lifetime. Resets on full page reload (module re-evaluates) but
+// persists across soft navigation back to /. On return visits the very first
+// useState initializer reads this true, skipLoading is true on initial render,
+// and the loading-only DOM elements are conditionally not rendered at all —
+// no flash possible because nothing exists to paint.
+// SSR-safe: server always sees a fresh module, so SSR + client first render
+// agree on skipLoading=false during initial cold load. No hydration mismatch.
+let gateHasMountedOnce = false
 
 // Slashes take 500ms + 140ms stagger = 640ms total.
 // Exit at 600ms — slashes are 95%+ across, seamless handoff to gate-reveal.
@@ -95,38 +102,13 @@ export default function GateScreen({ onEnter, onCommit, onMusicStart, onSkip, on
   const { play } = useSound()
   const router = useRouter()
 
-  // skipLoading: subsequent mounts in the same session (e.g., user navigating
-  // back to / from a sub-route via RetreatButton or browser back) bypass the
-  // loading screen — assets/prefetch are warm, the user has already seen
-  // the ritual, just show PRESS START. Flag persists per tab/PWA session.
-  //
-  // useState init MUST be false (matches SSR — reading sessionStorage in the
-  // initializer would mismatch SSR's '0%' vs client's '100%' in the bar).
-  // useLayoutEffect runs synchronously BEFORE paint on the client, so a return
-  // visit fast-forwards every gate in the same commit cycle — no flash of
-  // loading content between the initial render and the snap.
-  const [skipLoading, setSkipLoading] = useState(false)
-  useIsoLayoutEffect(() => {
-    let isReturn = false
-    try { isReturn = sessionStorage.getItem('gtl-gate-loaded') === '1' } catch {}
-    try { sessionStorage.setItem('gtl-gate-loaded', '1') } catch {}
-    if (!isReturn) return
-    // Batch — React 18 collapses these into one re-render before paint.
-    setSkipLoading(true)
-    setImgLoaded(true)
-    setPageLoaded(true)
-    setPrefetchSettled(true)
-    setMinTimeElapsed(true)
-    setTimePct(100)
-    setCrossfadeReady(true)
-    setStaticLabelsVisible(true)
-    // Also fast-forward the entrance cascade so bands/corners/logo land
-    // at their settled positions immediately. instant=true makes transOf
-    // return 'none', killing transitions; phase 'idle' is the settled
-    // state; logoEntranceDone wakes the post-roll sparkles.
-    setPhase('idle')
-    setInstant(true)
-    setLogoEntranceDone(true)
+  // skipLoading: true from initial render on return visits within this JS
+  // bundle's lifetime (soft nav back to / from any sub-route). When true, the
+  // loading-only DOM elements (mantra slot, faux-system, bar) aren't rendered
+  // at all and the entrance cascade is bypassed.
+  const [skipLoading] = useState(() => gateHasMountedOnce)
+  useEffect(() => {
+    gateHasMountedOnce = true
   }, [])
 
   // Warm up the route bundles for every destination the user can hit from
@@ -135,7 +117,7 @@ export default function GateScreen({ onEnter, onCommit, onMusicStart, onSkip, on
   // waits for these to resolve (see prefetchSettled below) — the loading
   // screen IS the warm-up window for the whole entry path.
   const PREFETCH_ROUTES = ['/fitness', '/diet', '/attune', '/fitness/hub', '/fitness/load', '/fitness/active']
-  const [prefetchSettled, setPrefetchSettled] = useState(false)
+  const [prefetchSettled, setPrefetchSettled] = useState(skipLoading)
   useEffect(() => {
     let cancelled = false
     const promises = PREFETCH_ROUTES.map((href) => Promise.resolve(router.prefetch(href)))
@@ -170,7 +152,7 @@ export default function GateScreen({ onEnter, onCommit, onMusicStart, onSkip, on
   const BAR_TAU = 3000
   const BAR_PAUSE_PCT = 69
   const BAR_PHASE2_MS = 700
-  const [timePct, setTimePct] = useState(0)
+  const [timePct, setTimePct] = useState(skipLoading ? 100 : 0)
   // Phase 1 — rising to BAR_PAUSE_PCT.
   useEffect(() => {
     if (skipLoading) return
@@ -185,12 +167,12 @@ export default function GateScreen({ onEnter, onCommit, onMusicStart, onSkip, on
     return () => clearInterval(t)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
-  const [phase, setPhase] = useState('pre')
+  const [phase, setPhase] = useState(skipLoading ? 'idle' : 'pre')
   // pre → in → idle → out
   // `instant` flag: when set by snapToIdle, all entrance keyframes + transitions
   // null out so elements jump to their settled state instead of continuing to
   // play out their delayed animation schedule.
-  const [instant, setInstant] = useState(false)
+  const [instant, setInstant] = useState(skipLoading)
   const exitTimerRef = useRef(null)
   const touchStartY = useRef(null)
   // Tracks the timestamp of a tap that landed during entrance (snapToIdle).
@@ -205,13 +187,13 @@ export default function GateScreen({ onEnter, onCommit, onMusicStart, onSkip, on
   // Sparkles wake up only after the logo has finished rolling in. Entrance
   // schedule: phase='in' at +60ms, transform transition is 200ms delay +
   // 1400ms duration = lands at +1660ms. Bump a bit past that for safety.
-  const [logoEntranceDone, setLogoEntranceDone] = useState(false)
+  const [logoEntranceDone, setLogoEntranceDone] = useState(skipLoading)
   // Gate the entrance cascade on ALL assets being ready: window.load (CSS,
   // scripts, any DOM images), document.fonts.ready (web fonts), and the
   // logo <img> firing load/error. Failsafe: 6s timeout flips this true so a
   // stuck asset never traps the user.
-  const [imgLoaded, setImgLoaded] = useState(false)
-  const [pageLoaded, setPageLoaded] = useState(false)
+  const [imgLoaded, setImgLoaded] = useState(skipLoading)
+  const [pageLoaded, setPageLoaded] = useState(skipLoading)
   const assetsLoaded = imgLoaded && pageLoaded
   // Lazy initializers so neither reroll on rerender. Mantra is one random
   // pick. Faux-system cycles through all 3 in a randomized order.
@@ -231,7 +213,7 @@ export default function GateScreen({ onEnter, onCommit, onMusicStart, onSkip, on
   // even on warm cache reloads where assetsLoaded fires near-instantly.
   // Bumped from 1200ms to give time for at least one full faux-system cycle
   // plus the mantra reveal.
-  const [minTimeElapsed, setMinTimeElapsed] = useState(false)
+  const [minTimeElapsed, setMinTimeElapsed] = useState(skipLoading)
   useEffect(() => {
     if (skipLoading) return
     const t = setTimeout(() => setMinTimeElapsed(true), 1500)
@@ -265,7 +247,7 @@ export default function GateScreen({ onEnter, onCommit, onMusicStart, onSkip, on
   // read this so the loading screen never fades out mid-bar.
   // On skipLoading return-visits this starts true so mantra/faux/bar stay
   // invisible and the static labels render directly.
-  const [crossfadeReady, setCrossfadeReady] = useState(false)
+  const [crossfadeReady, setCrossfadeReady] = useState(skipLoading)
   useEffect(() => {
     if (skipLoading) return
     if (timePct < 100) return
@@ -278,7 +260,7 @@ export default function GateScreen({ onEnter, onCommit, onMusicStart, onSkip, on
   // before fading the static brand label + PRESS START in. On skipLoading
   // this also starts true so the static labels render with opacity 1 from
   // the get-go.
-  const [staticLabelsVisible, setStaticLabelsVisible] = useState(false)
+  const [staticLabelsVisible, setStaticLabelsVisible] = useState(skipLoading)
   useEffect(() => {
     if (!crossfadeReady) return
     if (skipLoading) return
@@ -322,14 +304,17 @@ export default function GateScreen({ onEnter, onCommit, onMusicStart, onSkip, on
   // screen — the user always sees motion. The logo wrapper (see logoActive
   // below) stays off-screen until assetsLoaded, then rolls in.
   useEffect(() => {
+    if (skipLoading) return
     const t = setTimeout(() => setPhase('in'), 60)
     return () => clearTimeout(t)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   // Logo roll completion + idle handoff are scheduled relative to assetsLoaded
   // so they line up with the actual roll-in (which only starts once assets are
   // ready). On warm loads this fires near-immediately and matches original timing.
   useEffect(() => {
+    if (skipLoading) return
     if (!assetsLoaded) return
     // Logo roll-in: 200ms delay + 1400ms duration = lands at +1600ms after assetsLoaded.
     const t1 = setTimeout(() => setLogoEntranceDone(true), 1800)
@@ -338,6 +323,7 @@ export default function GateScreen({ onEnter, onCommit, onMusicStart, onSkip, on
       clearTimeout(t1); clearTimeout(t2)
       if (exitTimerRef.current) clearTimeout(exitTimerRef.current)
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [assetsLoaded])
 
   // Full-cascade commit (idle → gate-exit slashes → onEnter triggers calling
@@ -685,46 +671,45 @@ export default function GateScreen({ onEnter, onCommit, onMusicStart, onSkip, on
             display: 'grid', placeItems: 'center',
             position: 'relative', zIndex: 10,
           }}>
-            <div style={{
-              gridArea: '1 / 1',
-              opacity: crossfadeReady ? 0 : 1,
-              transition: 'opacity 250ms ease-out',
-              pointerEvents: 'none',
-            }}>
+            {!skipLoading && (
               <div style={{
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                gap: '0.6rem',
-                transform: 'rotate(-27deg)',
+                gridArea: '1 / 1',
+                opacity: crossfadeReady ? 0 : 1,
+                transition: 'opacity 250ms ease-out',
+                pointerEvents: 'none',
               }}>
                 <div style={{
-                  fontFamily: 'Anton, Impact, sans-serif',
-                  fontSize: 'clamp(2.5rem, 9vw, 5rem)',
-                  lineHeight: 1.05,
-                  letterSpacing: '-0.01em',
-                  color: '#f1eee5',
-                  textShadow: '3px 3px 0 #d4181f, 6px 6px 0 #070708',
-                  textTransform: 'uppercase',
-                  maxWidth: '85vw',
-                  textAlign: 'center',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  gap: '0.6rem',
+                  transform: 'rotate(-27deg)',
                 }}>
-                  {pickedMantra}
+                  <div style={{
+                    fontFamily: 'Anton, Impact, sans-serif',
+                    fontSize: 'clamp(2.5rem, 9vw, 5rem)',
+                    lineHeight: 1.05,
+                    letterSpacing: '-0.01em',
+                    color: '#f1eee5',
+                    textShadow: '3px 3px 0 #d4181f, 6px 6px 0 #070708',
+                    textTransform: 'uppercase',
+                    maxWidth: '85vw',
+                    textAlign: 'center',
+                  }}>
+                    {pickedMantra}
+                  </div>
+                  {/* Mantra slash underline. */}
+                  <div style={{
+                    height: 5,
+                    background: '#d4181f',
+                    transform: 'skewX(-12deg)',
+                    mixBlendMode: 'difference',
+                    width: pickedMantra ? 'clamp(6rem, 18vw, 12rem)' : 0,
+                    transition: 'width 900ms cubic-bezier(0.2, 1, 0.3, 1) 300ms',
+                  }} />
                 </div>
-                {/* Mantra slash underline — same vocabulary as the gate
-                    slash divider (red, skewX -12deg, 5px). Rotates with the
-                    mantra via the parent's rotate(-27deg). Draws in 300ms
-                    after the mantra appears via the width transition delay. */}
-                <div style={{
-                  height: 5,
-                  background: '#d4181f',
-                  transform: 'skewX(-12deg)',
-                  mixBlendMode: 'difference',
-                  width: pickedMantra ? 'clamp(6rem, 18vw, 12rem)' : 0,
-                  transition: 'width 900ms cubic-bezier(0.2, 1, 0.3, 1) 300ms',
-                }} />
               </div>
-            </div>
+            )}
             <div style={{
               gridArea: '1 / 1',
               opacity: staticLabelsVisible ? 1 : 0,
@@ -773,23 +758,25 @@ export default function GateScreen({ onEnter, onCommit, onMusicStart, onSkip, on
               then PRESS START fades in. Same grid-stack pattern as the
               brand-label slot above; both swaps run in parallel. */}
           <div style={{ display: 'grid', placeItems: 'center' }}>
-            <div style={{
-              gridArea: '1 / 1',
-              opacity: crossfadeReady ? 0 : 1,
-              transition: 'opacity 250ms ease-out',
-              pointerEvents: 'none',
-            }}>
+            {!skipLoading && (
               <div style={{
-                fontFamily: '"FOT-Matisse Pro EB", Anton, Impact, sans-serif',
-                fontSize: 'clamp(1.3rem, 3.8vw, 2.2rem)',
-                fontWeight: 900,
-                letterSpacing: '0.10em', color: '#d4181f',
-                mixBlendMode: 'difference',
-                whiteSpace: 'nowrap',
+                gridArea: '1 / 1',
+                opacity: crossfadeReady ? 0 : 1,
+                transition: 'opacity 250ms ease-out',
+                pointerEvents: 'none',
               }}>
-                {shuffledSystem && <FauxSystemCycle phrases={shuffledSystem} />}
+                <div style={{
+                  fontFamily: '"FOT-Matisse Pro EB", Anton, Impact, sans-serif',
+                  fontSize: 'clamp(1.3rem, 3.8vw, 2.2rem)',
+                  fontWeight: 900,
+                  letterSpacing: '0.10em', color: '#d4181f',
+                  mixBlendMode: 'difference',
+                  whiteSpace: 'nowrap',
+                }}>
+                  {shuffledSystem && <FauxSystemCycle phrases={shuffledSystem} />}
+                </div>
               </div>
-            </div>
+            )}
             <div style={{
               gridArea: '1 / 1',
               opacity: staticLabelsVisible ? 1 : 0,
@@ -812,45 +799,47 @@ export default function GateScreen({ onEnter, onCommit, onMusicStart, onSkip, on
           {/* Loading progress bar — time-based: fills smoothly over
               BAR_DURATION_MS, holds at 100% until loadingComplete cross-
               fades it out. Skewed -12deg to match the slash divider. */}
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '0.7rem',
-            opacity: crossfadeReady ? 0 : 1,
-            transition: 'opacity 250ms ease-out',
-            pointerEvents: 'none',
-          }}>
+          {!skipLoading && (
             <div style={{
-              width: 'clamp(8rem, 32vw, 16rem)',
-              height: 5,
-              background: 'rgba(212, 24, 31, 0.12)',
-              border: '1px solid rgba(212, 24, 31, 0.45)',
-              transform: 'skewX(-12deg)',
-              position: 'relative',
-              overflow: 'hidden',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.7rem',
+              opacity: crossfadeReady ? 0 : 1,
+              transition: 'opacity 250ms ease-out',
+              pointerEvents: 'none',
             }}>
               <div style={{
-                position: 'absolute',
-                top: 0, bottom: 0, left: 0,
-                width: `${timePct}%`,
-                background: '#d4181f',
-                transition: 'width 60ms linear',
-              }} />
+                width: 'clamp(8rem, 32vw, 16rem)',
+                height: 5,
+                background: 'rgba(212, 24, 31, 0.12)',
+                border: '1px solid rgba(212, 24, 31, 0.45)',
+                transform: 'skewX(-12deg)',
+                position: 'relative',
+                overflow: 'hidden',
+              }}>
+                <div style={{
+                  position: 'absolute',
+                  top: 0, bottom: 0, left: 0,
+                  width: `${timePct}%`,
+                  background: '#d4181f',
+                  transition: 'width 60ms linear',
+                }} />
+              </div>
+              <div style={{
+                fontFamily: '"FOT-Matisse Pro EB", "JetBrains Mono", monospace',
+                fontSize: '0.85rem',
+                fontWeight: 900,
+                letterSpacing: '0.08em',
+                color: '#d4181f',
+                mixBlendMode: 'difference',
+                fontVariantNumeric: 'tabular-nums',
+                minWidth: '2.8em',
+                textAlign: 'right',
+              }}>
+                {timePct}%
+              </div>
             </div>
-            <div style={{
-              fontFamily: '"FOT-Matisse Pro EB", "JetBrains Mono", monospace',
-              fontSize: '0.85rem',
-              fontWeight: 900,
-              letterSpacing: '0.08em',
-              color: '#d4181f',
-              mixBlendMode: 'difference',
-              fontVariantNumeric: 'tabular-nums',
-              minWidth: '2.8em',
-              textAlign: 'right',
-            }}>
-              {timePct}%
-            </div>
-          </div>
+          )}
 
           {/* Sub-hint — no entrance animation; visible from t=0 in red so the
               difference-blend live-flips as bands sweep behind it. */}
