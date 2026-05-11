@@ -35,12 +35,7 @@
  */
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { searchExercises } from '../../lib/exerciseLibrary'
-
-const MUSCLE_KANJI = {
-  chest: '胸', shoulders: '肩', back: '背', forearms: '腕',
-  quads: '腿', hamstrings: '裏', calves: '脛',
-  biceps: '二', triceps: '三', glutes: '尻', abs: '腹',
-}
+import { MUSCLE_KANJI, MUSCLE_LABEL, muscleGroupLabel } from '../../lib/attuneGroups'
 
 export default function PickerSheet({
   sourceDayId,
@@ -87,16 +82,74 @@ export default function PickerSheet({
     try { e.currentTarget.releasePointerCapture(e.pointerId) } catch (_) {}
   }
 
-  const sourceMuscle = useMemo(() => {
-    if (!cycle || !sourceDayId) return null
-    const m = cycle?.dailyPlan?.[sourceDayId] || []
-    return m[0] || null
+  // Full muscle list for the source day (was single-muscle before — bug).
+  const dayMuscles = useMemo(() => {
+    if (!cycle || !sourceDayId) return []
+    return cycle?.dailyPlan?.[sourceDayId] || []
   }, [cycle, sourceDayId])
 
-  const exercises = useMemo(
-    () => searchExercises(sourceMuscle, query),
-    [sourceMuscle, query],
-  )
+  // Group titles (UPPER / LOWER / ARMS / FULL BODY) computed from the day's
+  // muscle list. Each title carries its `covers` — the subset of dayMuscles
+  // it absorbs.
+  const { titles } = useMemo(() => muscleGroupLabel(dayMuscles), [dayMuscles])
+
+  // Picker filter sections, each a {title, muscles} pair. Title is null
+  // for the leftover-remainder section (muscles outside any title).
+  // Each title section's title row is selectable AND each muscle row under
+  // it is selectable. Single-select across all sections.
+  const sections = useMemo(() => {
+    const out = []
+    const covered = new Set()
+    for (const t of titles) {
+      out.push({ title: t, muscles: t.covers })
+      for (const m of t.covers) covered.add(m)
+    }
+    const remainder = dayMuscles.filter((m) => !covered.has(m))
+    if (remainder.length > 0) out.push({ title: null, muscles: remainder })
+    return out
+  }, [titles, dayMuscles])
+
+  // Selected filter — either a title (group) or an individual muscle.
+  //   { kind: 'group', label: 'UPPER', muscles: [...] }
+  //   { kind: 'muscle', id: 'chest' }
+  // Default on mount / sourceDayId change: first title if it exists,
+  // otherwise the first individual muscle. Null when day has no muscles.
+  const [selectedFilter, setSelectedFilter] = useState(null)
+  useEffect(() => {
+    if (titles.length > 0) {
+      const t = titles[0]
+      setSelectedFilter({ kind: 'group', label: t.label, kanji: t.kanji, muscles: t.covers })
+    } else if (dayMuscles.length > 0) {
+      setSelectedFilter({ kind: 'muscle', id: dayMuscles[0] })
+    } else {
+      setSelectedFilter(null)
+    }
+    // sourceDayId churn re-derives titles + dayMuscles upstream; resetting
+    // on those deps keeps the picker in sync when the user switches days.
+  }, [sourceDayId, titles, dayMuscles])
+
+  // Filter helpers for row-highlight logic.
+  const isFilterMuscle = (id) => selectedFilter?.kind === 'muscle' && selectedFilter.id === id
+  const isFilterGroup  = (label) => selectedFilter?.kind === 'group' && selectedFilter.label === label
+
+  const exercises = useMemo(() => {
+    if (!selectedFilter) return []
+    if (selectedFilter.kind === 'muscle') {
+      return searchExercises(selectedFilter.id, query)
+    }
+    // Group: union searchExercises across each muscle in the group; dedup by id.
+    const seen = new Set()
+    const out = []
+    for (const m of selectedFilter.muscles) {
+      for (const ex of searchExercises(m, query)) {
+        if (!seen.has(ex.id)) {
+          seen.add(ex.id)
+          out.push(ex)
+        }
+      }
+    }
+    return out
+  }, [selectedFilter, query])
 
   // sr-only input scrollIntoView fallback (per memory:
   // feedback_ios_pwa_sr_only_input_scroll). Not strictly needed since
@@ -194,33 +247,97 @@ export default function PickerSheet({
             borderRadius: 2,
           }} />
         </div>
-        {/* Minimal header — muscle name + close ×. Mode/lock/count prefix
-            and the calendar-tap subtext both removed. */}
+        {/* Header: close button + selectable filter rows. Title rows
+            (UPPER / LOWER / ARMS / FULL BODY) sit above their muscle
+            children; each row is plain text, single-select, highlighted
+            red when active. Tapping a title widens the exercise list to
+            every muscle in the group; tapping a muscle narrows to it. */}
         <div style={{
           display: 'flex',
-          alignItems: 'center',
+          alignItems: 'flex-start',
           justifyContent: 'space-between',
-          padding: '0.6rem 0.75rem',
-          fontFamily: 'var(--font-display, Anton, sans-serif)',
-          fontSize: '1rem',
-          letterSpacing: '0.18em',
-          textTransform: 'uppercase',
-          color: '#d4181f',
+          padding: '0.4rem 0.75rem 0.5rem',
           borderBottom: '1px solid #2a2a30',
+          gap: '0.75rem',
         }}>
-          <span style={{ display: 'inline-flex', alignItems: 'baseline', gap: 8 }}>
-            {sourceMuscle && MUSCLE_KANJI[sourceMuscle] && (
-              <span style={{
-                fontFamily: '"Noto Serif JP", "Yu Mincho", serif',
-                fontSize: '1.2rem',
-                lineHeight: 1,
-                color: '#d4181f',
-              }}>
-                {MUSCLE_KANJI[sourceMuscle]}
-              </span>
-            )}
-            <span>{(sourceMuscle || '').toUpperCase()}</span>
-          </span>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.1rem', flex: 1, minWidth: 0 }}>
+            {sections.map((section, si) => (
+              <div key={si} style={{ display: 'flex', flexDirection: 'column' }}>
+                {section.title && (() => {
+                  const active = isFilterGroup(section.title.label)
+                  return (
+                    <button
+                      type="button"
+                      onClick={() => setSelectedFilter({
+                        kind: 'group',
+                        label: section.title.label,
+                        kanji: section.title.kanji,
+                        muscles: section.muscles,
+                      })}
+                      style={{
+                        background: 'transparent', border: 'none',
+                        textAlign: 'left',
+                        padding: '0.15rem 0',
+                        cursor: 'pointer',
+                        fontFamily: 'var(--font-display, Anton, sans-serif)',
+                        fontSize: '1rem',
+                        letterSpacing: '0.18em',
+                        textTransform: 'uppercase',
+                        color: active ? '#ff2a36' : '#d4181f',
+                        textShadow: active ? '0 0 6px rgba(255,42,54,0.45)' : 'none',
+                        fontWeight: active ? 900 : 700,
+                        display: 'inline-flex', alignItems: 'baseline', gap: 8,
+                      }}
+                    >
+                      <span style={{
+                        fontFamily: '"Noto Serif JP", "Yu Mincho", serif',
+                        fontSize: '1.2rem',
+                        lineHeight: 1,
+                      }}>
+                        {section.title.kanji}
+                      </span>
+                      <span>{section.title.label}</span>
+                    </button>
+                  )
+                })()}
+                {section.muscles.map((m) => {
+                  const active = isFilterMuscle(m)
+                  return (
+                    <button
+                      key={m}
+                      type="button"
+                      onClick={() => setSelectedFilter({ kind: 'muscle', id: m })}
+                      style={{
+                        background: 'transparent', border: 'none',
+                        textAlign: 'left',
+                        // Slight indent only when there's a title above the muscle row.
+                        paddingLeft: section.title ? '1rem' : 0,
+                        padding: section.title ? '0.1rem 0 0.1rem 1rem' : '0.1rem 0',
+                        cursor: 'pointer',
+                        fontFamily: 'inherit',
+                        fontSize: '0.75rem',
+                        letterSpacing: '0.12em',
+                        textTransform: 'uppercase',
+                        color: active ? '#ff2a36' : '#a8a39a',
+                        textShadow: active ? '0 0 6px rgba(255,42,54,0.4)' : 'none',
+                        fontWeight: active ? 900 : 600,
+                        display: 'inline-flex', alignItems: 'baseline', gap: 6,
+                      }}
+                    >
+                      <span style={{
+                        fontFamily: '"Noto Serif JP", "Yu Mincho", serif',
+                        fontSize: '0.9rem',
+                        lineHeight: 1,
+                      }}>
+                        {MUSCLE_KANJI[m]}
+                      </span>
+                      <span>{MUSCLE_LABEL[m] || m.toUpperCase()}</span>
+                    </button>
+                  )
+                })}
+              </div>
+            ))}
+          </div>
           <button
             type="button"
             aria-label="close"
@@ -234,6 +351,7 @@ export default function PickerSheet({
               padding: '0 0.4rem',
               cursor: 'pointer',
               fontFamily: 'inherit',
+              alignSelf: 'flex-start',
             }}
           >
             ×
@@ -253,7 +371,9 @@ export default function PickerSheet({
             name="gtl-attune-picker-search"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder={sourceMuscle ? `search ${sourceMuscle} exercises…` : 'search exercises…'}
+            placeholder={selectedFilter
+              ? `search ${(selectedFilter.kind === 'group' ? selectedFilter.label : selectedFilter.id).toLowerCase()} exercises…`
+              : 'search exercises…'}
             inputMode="search"
             enterKeyHint="search"
             autoComplete="off"
@@ -285,12 +405,12 @@ export default function PickerSheet({
             maxHeight: 132,
           }}
         >
-          {!sourceMuscle && (
+          {!selectedFilter && (
             <div style={{ color: '#888', fontSize: '0.75rem', padding: '0.5rem' }}>
               No muscle assigned to this day. Assign one on the schedule first.
             </div>
           )}
-          {sourceMuscle && exercises.length === 0 && (
+          {selectedFilter && exercises.length === 0 && (
             <div style={{ color: '#888', fontSize: '0.75rem', padding: '0.5rem' }}>
               No matches.
             </div>

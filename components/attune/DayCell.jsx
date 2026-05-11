@@ -1,70 +1,7 @@
 'use client'
 import { useDroppable } from '@dnd-kit/core'
 import SetChip from './SetChip'
-
-const MUSCLE_KANJI = {
-  chest: '胸', shoulders: '肩', back: '背', forearms: '腕',
-  quads: '腿', hamstrings: '裏', calves: '脛',
-  biceps: '二', triceps: '三', glutes: '尻', abs: '腹',
-}
-const MUSCLE_LABEL = {
-  chest: 'CHEST', shoulders: 'SHOULDERS', back: 'BACK', forearms: 'FOREARMS',
-  quads: 'QUADS', hamstrings: 'HAMSTRINGS', calves: 'CALVES',
-  biceps: 'BICEPS', triceps: 'TRICEPS', glutes: 'GLUTES', abs: 'ABS',
-}
-
-function muscleKanji(id) { return MUSCLE_KANJI[id] || '·' }
-function muscleLabel(id) { return MUSCLE_LABEL[id] || '' }
-
-// Minimum muscle sets that trigger collapsed group titles.
-//   UPPER (上) — chest + back + shoulders
-//   LOWER (下) — quads + hamstrings + glutes
-//   ARMS  (腕) — biceps + triceps
-//   FULL BODY (全) — UPPER_MIN AND LOWER_MIN both present.
-//                    ARMS is NOT required for FULL BODY.
-// Extras outside a title's covered set render as per-muscle kanji in the
-// remainder stack ("title + remainder" model).
-const UPPER_MIN = ['chest', 'back', 'shoulders']
-const LOWER_MIN = ['quads', 'hamstrings', 'glutes']
-const ARMS_MIN  = ['biceps', 'triceps']
-
-// `covers` is what each title visually absorbs (its min muscles are
-// hidden under the single title glyph). ARMS additionally absorbs
-// forearms so a biceps+triceps+forearms day reads as 腕 once, not 腕 + 腕.
-const UPPER_COVERS = UPPER_MIN
-const LOWER_COVERS = LOWER_MIN
-const ARMS_COVERS  = [...ARMS_MIN, 'forearms']
-
-function containsAll(muscles, required) {
-  const s = new Set(muscles)
-  return required.every((x) => s.has(x))
-}
-
-// Returns { titles: Array<{kanji,label}>, covered: string[] }.
-// FULL BODY is exclusive — suppresses UPPER, LOWER, AND ARMS titles
-// even when their minimums are met. Other titles can stack
-// (e.g., UPPER + ARMS for an upper-day with biceps+triceps).
-function muscleGroupLabel(muscles) {
-  if (!muscles || muscles.length < 2) return { titles: [], covered: [] }
-  const upper = containsAll(muscles, UPPER_MIN)
-  const lower = containsAll(muscles, LOWER_MIN)
-  const arms  = containsAll(muscles, ARMS_MIN)
-
-  if (upper && lower) {
-    // FULL BODY absorbs EVERY muscle on the day — abs, calves, arms,
-    // forearms all hide under the single 全 title. No remainder.
-    return {
-      titles: [{ kanji: '全', label: 'FULL BODY' }],
-      covered: [...muscles],
-    }
-  }
-  const titles = []
-  const covered = []
-  if (upper) { titles.push({ kanji: '上', label: 'UPPER' }); covered.push(...UPPER_COVERS) }
-  if (lower) { titles.push({ kanji: '下', label: 'LOWER' }); covered.push(...LOWER_COVERS) }
-  if (arms)  { titles.push({ kanji: '腕', label: 'ARMS' });  covered.push(...ARMS_COVERS) }
-  return { titles, covered }
-}
+import { muscleGroupLabel, muscleKanji, muscleLabel } from '../../lib/attuneGroups'
 
 export default function DayCell({
   cycleId,
