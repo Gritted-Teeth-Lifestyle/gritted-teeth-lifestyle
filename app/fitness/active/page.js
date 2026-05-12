@@ -2994,6 +2994,19 @@ export default function ActiveCyclePage() {
     }
   }, [fireDayHop, router])
 
+  // Predictive-tap chain — open the 'today' window IMMEDIATELY on mount,
+  // before the ready-gated consume below fires. Without this, currentStep
+  // stays at the prior page's 'activate' for the duration of the
+  // localStorage-load gap (typically 20-150ms). A fast 5th tap landing in
+  // that gap would compute nextHopAfter('activate') = 'today' and re-stage
+  // 'today' instead of 'muscle' — silently breaking the final chain hop.
+  // Setting currentStep='today' eagerly closes that gap so any tap during
+  // mount stages 'muscle' correctly. The ready-gated consume below still
+  // runs the actual handleDayHop once cycles + days are loaded.
+  useEffect(() => {
+    setInAnimation('today', true)
+  }, [])
+
   // Predictive-tap consume: when the page is ready, check for a 'today'
   // prefire intent staged on the prior page's HT (e.g., user tapped during
   // ACTIVATE's slash). If matched, auto-fire handleDayHop(target) as if the
