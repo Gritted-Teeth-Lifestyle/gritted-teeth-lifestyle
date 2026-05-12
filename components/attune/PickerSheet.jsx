@@ -37,6 +37,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { searchExercises } from '../../lib/exerciseLibrary'
 import { MUSCLE_KANJI, MUSCLE_LABEL, muscleGroupLabel } from '../../lib/attuneGroups'
 import { byNotoriety } from '../../lib/exerciseNotoriety'
+import { prettyExerciseLabel } from '../../lib/exerciseLabel'
 
 // Compact horizontal rolodex for the target-filter selection. Mirrors
 // the vertical active-page rolodex (active/page.js:2810-2871) flipped
@@ -636,7 +637,7 @@ export default function PickerSheet({
                 }}
               >
                 <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {ex.label}
+                  {prettyExerciseLabel(ex.label)}
                 </span>
               </button>
             )
