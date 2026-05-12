@@ -333,19 +333,30 @@ export default function PickerSheet({
 
   const exercises = useMemo(() => {
     if (!selectedFilter) return []
+    // Each exercise belongs to its PRIMARY muscle(s) only. Bench press's
+    // muscles[] array also lists shoulders + triceps as secondaries, but
+    // its primaryMuscles is [chest] — so it should only appear in the
+    // chest filter, not shoulders or triceps. Likewise squat's
+    // primaryMuscles is [quads]; it shouldn't surface under glutes or
+    // hamstrings even though those engage on the descent.
     let out
     if (selectedFilter.kind === 'muscle') {
-      out = searchExercises(selectedFilter.id, query)
+      out = searchExercises(selectedFilter.id, query).filter(
+        (ex) => (ex.primaryMuscles || []).includes(selectedFilter.id),
+      )
     } else {
-      // Group: union searchExercises across each muscle; dedup by id.
+      // Group: an exercise appears if any of its primaries lands in the
+      // group's muscle set. Dedup by id across the per-muscle searches.
+      const groupSet = new Set(selectedFilter.muscles)
       const seen = new Set()
       out = []
       for (const m of selectedFilter.muscles) {
         for (const ex of searchExercises(m, query)) {
-          if (!seen.has(ex.id)) {
-            seen.add(ex.id)
-            out.push(ex)
-          }
+          if (seen.has(ex.id)) continue
+          const primaries = ex.primaryMuscles || []
+          if (!primaries.some((p) => groupSet.has(p))) continue
+          seen.add(ex.id)
+          out.push(ex)
         }
       }
     }
