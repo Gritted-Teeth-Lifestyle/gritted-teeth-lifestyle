@@ -447,10 +447,19 @@ export default function PickerSheet({
           max-width: 430px;
           max-height: 70vh;
         }
+        .gtl-picker-header {
+          gap: 1.75rem;
+        }
         @media (orientation: landscape) and (max-height: 500px) {
           .gtl-picker-sheet {
             max-width: 100%;
             max-height: 60vh;
+          }
+          /* Tighten the title-chip → rolodex spacing in landscape.
+             The rolodex no longer overflows on a wide viewport, so the
+             1.75rem portrait gap reads as a chasm; collapse it. */
+          .gtl-picker-header {
+            gap: 0.5rem;
           }
         }
       `}</style>
@@ -503,14 +512,16 @@ export default function PickerSheet({
 
             Title chips sit BESIDE the rolodex (not above), and titles are
             never rolodex rows themselves. */}
-        <div style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          padding: '0.2rem 0.75rem 0.4rem',
-          borderBottom: '1px solid #2a2a30',
-          gap: '1.75rem',
-        }}>
+        <div
+          className="gtl-picker-header"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            padding: '0.2rem 0.75rem 0.4rem',
+            borderBottom: '1px solid #2a2a30',
+          }}
+        >
           {/* Title chips column — empty when day has no group titles. */}
           {titleChips.length > 0 && (
             <div style={{
