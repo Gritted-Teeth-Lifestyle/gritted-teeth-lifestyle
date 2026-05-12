@@ -44,7 +44,7 @@ import { MUSCLE_KANJI, MUSCLE_LABEL, muscleGroupLabel } from '../../lib/attuneGr
 // driven by scroll position, snap-on-scroll-end. The entry that lands
 // at center IS the active selection.
 const ROLODEX_HEIGHT = 38
-const ROLODEX_ENTRY_W = 92   // tight fit for longest label ("HAMSTRINGS")
+const ROLODEX_ENTRY_W = 72   // long labels (HAMSTRINGS, SHOULDERS) ellipsis-clip
 const ROLODEX_SNAP_MS = 80
 
 function MuscleRolodex({ entries, selectedKey, onSelect }) {
@@ -174,10 +174,18 @@ function MuscleRolodex({ entries, selectedKey, onSelect }) {
             fontFamily: '"Noto Serif JP", "Yu Mincho", serif',
             fontSize: '0.95rem',
             lineHeight: 1,
+            flexShrink: 0,
           }}>
             {e.kanji}
           </span>
-          <span style={{ textTransform: 'uppercase' }}>{e.label}</span>
+          <span style={{
+            textTransform: 'uppercase',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            minWidth: 0,
+          }}>
+            {e.label}
+          </span>
         </div>
       ))}
       {/* Trailing spacer — same idea for the last entry. */}
