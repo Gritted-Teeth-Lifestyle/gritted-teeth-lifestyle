@@ -51,6 +51,11 @@ const ROLODEX_SNAP_MS = 80
 
 function MuscleRolodex({ entries, selectedKey, onSelect }) {
   const containerRef = useRef(null)
+  // Whether the content actually overflows the container. When false
+  // (landscape, or few enough entries that everything fits), we drop
+  // the rolodex affordances entirely — no fade, no snap, no mask —
+  // and just behave as a normal row of tappable entries.
+  const [overflows, setOverflows] = useState(false)
 
   // Update --rolodex-t per entry + snap-to-nearest on scroll-end.
   useEffect(() => {
@@ -58,10 +63,23 @@ function MuscleRolodex({ entries, selectedKey, onSelect }) {
     if (!container) return
     let snapTimer = null
 
+    const checkOverflow = () => {
+      setOverflows(container.scrollWidth > container.clientWidth + 1)
+    }
+
     const update = () => {
+      const fits = container.scrollWidth <= container.clientWidth + 1
+      const nodes = container.querySelectorAll('[data-rolodex-key]')
+      if (fits) {
+        // Nothing to scroll — every entry sits at full prominence.
+        nodes.forEach((node) => {
+          node.style.setProperty('--rolodex-t', '1')
+          node.removeAttribute('data-rolodex-centered')
+        })
+        return
+      }
       const rect = container.getBoundingClientRect()
       const activeX = rect.left + rect.width / 2
-      const nodes = container.querySelectorAll('[data-rolodex-key]')
       nodes.forEach((node) => {
         const nrect = node.getBoundingClientRect()
         const center = nrect.left + nrect.width / 2
@@ -74,6 +92,7 @@ function MuscleRolodex({ entries, selectedKey, onSelect }) {
     }
 
     const snap = () => {
+      if (container.scrollWidth <= container.clientWidth + 1) return
       const rect = container.getBoundingClientRect()
       const activeX = rect.left + rect.width / 2
       const nodes = container.querySelectorAll('[data-rolodex-key]')
@@ -100,10 +119,16 @@ function MuscleRolodex({ entries, selectedKey, onSelect }) {
       snapTimer = setTimeout(snap, ROLODEX_SNAP_MS)
     }
     update()
+    checkOverflow()
     container.addEventListener('scroll', onScroll, { passive: true })
+    // Re-check overflow whenever the container resizes (orientation flip,
+    // sheet drag-resize, etc.) so the rolodex effects toggle on/off live.
+    const ro = new ResizeObserver(() => { checkOverflow(); update() })
+    ro.observe(container)
     return () => {
       container.removeEventListener('scroll', onScroll)
       if (snapTimer) clearTimeout(snapTimer)
+      ro.disconnect()
     }
   }, [entries, selectedKey, onSelect])
 
@@ -141,13 +166,18 @@ function MuscleRolodex({ entries, selectedKey, onSelect }) {
         alignItems: 'center',
         // Hide native scrollbar — drag is the affordance.
         scrollbarWidth: 'none',
-        // Soft fade at left/right so off-center entries feel "out of frame".
-        maskImage: 'linear-gradient(to right, transparent 0%, black 25%, black 75%, transparent 100%)',
-        WebkitMaskImage: 'linear-gradient(to right, transparent 0%, black 25%, black 75%, transparent 100%)',
+        // Soft fade at left/right ONLY when scroll is meaningful. When
+        // the row fits without overflow (landscape, few entries) the
+        // mask is dropped so end entries aren't dimmed for no reason.
+        maskImage: overflows ? 'linear-gradient(to right, transparent 0%, black 25%, black 75%, transparent 100%)' : 'none',
+        WebkitMaskImage: overflows ? 'linear-gradient(to right, transparent 0%, black 25%, black 75%, transparent 100%)' : 'none',
+        justifyContent: overflows ? 'flex-start' : 'center',
       }}
     >
-      {/* Leading spacer — lets the first entry scroll to dead center. */}
-      <div style={{ flex: '0 0 auto', width: spacerWidth }} />
+      {/* Leading spacer — only when content overflows; lets the first
+          entry scroll to dead center. Skipped in fit-without-scroll
+          mode so the row sits naturally centered in the container. */}
+      {overflows && <div style={{ flex: '0 0 auto', width: spacerWidth }} />}
       {entries.map((e) => {
         const isSelected = e.key === selectedKey
         return (
@@ -194,8 +224,8 @@ function MuscleRolodex({ entries, selectedKey, onSelect }) {
         </div>
         )
       })}
-      {/* Trailing spacer — same idea for the last entry. */}
-      <div style={{ flex: '0 0 auto', width: spacerWidth }} />
+      {/* Trailing spacer — same as leading: only when content overflows. */}
+      {overflows && <div style={{ flex: '0 0 auto', width: spacerWidth }} />}
     </div>
   )
 }
