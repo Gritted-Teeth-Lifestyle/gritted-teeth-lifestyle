@@ -44,7 +44,7 @@ import { MUSCLE_KANJI, MUSCLE_LABEL, muscleGroupLabel } from '../../lib/attuneGr
 // driven by scroll position, snap-on-scroll-end. The entry that lands
 // at center IS the active selection.
 const ROLODEX_HEIGHT = 38
-const ROLODEX_ENTRY_W = 108  // wide enough for the longest label ("HAMSTRINGS")
+const ROLODEX_ENTRY_W = 92   // tight fit for longest label ("HAMSTRINGS")
 const ROLODEX_SNAP_MS = 80
 
 function MuscleRolodex({ entries, selectedKey, onSelect }) {
