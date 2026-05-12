@@ -785,22 +785,34 @@ export default function PickerSheet({
           style={{
             flexShrink: 0,
             alignSelf: 'stretch',
+            // Min-height ensures the vertical text always has room to
+            // render fully even when the main column is short.
+            minHeight: 200,
             width: 56,
-            background: canConfirm ? '#d4181f' : '#2a2a30',
-            color: canConfirm ? '#fff' : '#666',
+            // Always-red so the button is unmistakably present. Opacity
+            // drops when disabled to communicate "not ready yet" — much
+            // more visible than blending into the #1a1a1e sheet bg.
+            background: '#d4181f',
+            opacity: canConfirm ? 1 : 0.45,
+            color: '#fff',
             border: 'none',
-            borderLeft: `1px solid ${canConfirm ? '#ff2a36' : '#2a2a30'}`,
+            borderLeft: '1px solid #ff2a36',
             cursor: canConfirm ? 'pointer' : 'default',
             fontFamily: 'var(--font-display, Anton, sans-serif)',
-            fontSize: '1.35rem',
+            fontSize: '1.4rem',
             fontWeight: 900,
-            letterSpacing: '0.22em',
+            letterSpacing: '0.24em',
             textTransform: 'uppercase',
             writingMode: 'vertical-rl',
+            WebkitWritingMode: 'vertical-rl',
             textOrientation: 'mixed',
-            padding: '1rem 0',
-            textShadow: canConfirm ? '0 0 12px rgba(255,42,54,0.45)' : 'none',
-            transition: 'background 120ms linear, color 120ms linear, border-color 120ms linear, text-shadow 120ms linear',
+            WebkitTextOrientation: 'mixed',
+            padding: '1.25rem 0',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            textShadow: canConfirm ? '0 0 14px rgba(255,42,54,0.55)' : 'none',
+            transition: 'opacity 120ms linear, text-shadow 120ms linear',
           }}
         >
           ATTUNE
