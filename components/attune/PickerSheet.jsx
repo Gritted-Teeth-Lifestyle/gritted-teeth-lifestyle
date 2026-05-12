@@ -429,7 +429,7 @@ export default function PickerSheet({
           justifyContent: 'space-between',
           padding: '0.2rem 0.75rem 0.4rem',
           borderBottom: '1px solid #2a2a30',
-          gap: '0.75rem',
+          gap: '1.75rem',
         }}>
           {/* Title chips column — empty when day has no group titles. */}
           {titleChips.length > 0 && (
