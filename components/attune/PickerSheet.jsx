@@ -253,7 +253,10 @@ export default function PickerSheet({
 
   const onGrabberPointerDown = (e) => {
     e.preventDefault()
-    const sheet = e.currentTarget.parentElement
+    // Walk up to the sheet — the grabber now lives inside the main
+    // column wrapper, so parentElement points there instead of the
+    // sheet. closest() resolves regardless of nesting depth.
+    const sheet = e.currentTarget.closest('.gtl-picker-sheet')
     if (!sheet) return
     const startY = e.clientY
     const startH = sheet.getBoundingClientRect().height
@@ -470,15 +473,28 @@ export default function PickerSheet({
           position: 'relative',
           background: '#1a1a1e',
           borderTop: '2px solid #d4181f',
-          padding: '1.5rem 1rem calc(1.5rem + env(safe-area-inset-bottom, 0px))',
+          // Padding only on left/top/bottom — the right edge belongs
+          // to the vertical ATTUNE button which sits flush.
+          padding: '0 0 calc(env(safe-area-inset-bottom, 0px)) 0',
           fontFamily: 'var(--font-display, Anton, sans-serif)',
           color: '#f1eee5',
-          display: 'flex', flexDirection: 'column', gap: '0.6rem',
+          // Sheet is now a horizontal row: main content on the left,
+          // vertical ATTUNE button on the right spanning full height.
+          display: 'flex', flexDirection: 'row', gap: 0,
           boxShadow: '0 -8px 24px rgba(0,0,0,0.6)',
           height: userHeight ? `${userHeight}px` : undefined,
           maxHeight: userHeight ? `${userHeight}px` : undefined,
         }}
       >
+        <div
+          style={{
+            flex: 1,
+            minWidth: 0,
+            position: 'relative',
+            display: 'flex', flexDirection: 'column', gap: '0.6rem',
+            padding: '1.5rem 1rem 1.5rem',
+          }}
+        >
         {/* Drag-resize grabber — 16px hit area at top edge, grey pill affordance. */}
         <div
           onPointerDown={onGrabberPointerDown}
@@ -577,58 +593,24 @@ export default function PickerSheet({
             />
           </div>
 
-          {/* Right column — close × on top, Confirm action stacked
-              underneath where there's plenty of room. */}
-          <div style={{
-            display: 'flex', flexDirection: 'column',
-            alignItems: 'flex-end',
-            gap: '0.4rem',
-            flexShrink: 0,
-          }}>
-            <button
-              type="button"
-              aria-label="close"
-              onClick={() => onClose && onClose()}
-              style={{
-                background: 'transparent',
-                border: 'none',
-                color: '#a8a39a',
-                fontSize: '1.2rem',
-                lineHeight: 1,
-                padding: '0 0.4rem',
-                cursor: 'pointer',
-                fontFamily: 'inherit',
-              }}
-            >
-              ×
-            </button>
-            <button
-              type="button"
-              disabled={!canConfirm}
-              onClick={commit}
-              aria-label="confirm picks"
-              style={{
-                background: canConfirm ? '#d4181f' : '#2a2a30',
-                color: canConfirm ? '#fff' : '#666',
-                border: `1px solid ${canConfirm ? '#ff2a36' : '#2a2a30'}`,
-                padding: '0.45rem 0.75rem',
-                fontFamily: 'inherit',
-                fontSize: '0.7rem',
-                fontWeight: 900,
-                letterSpacing: '0.18em',
-                textTransform: 'uppercase',
-                cursor: canConfirm ? 'pointer' : 'default',
-                clipPath: 'polygon(4% 0%, 100% 0%, 96% 100%, 0% 100%)',
-                whiteSpace: 'nowrap',
-              }}
-            >
-              {canConfirm
-                ? `Confirm ${exerciseCount}×${targetCount}`
-                : exerciseCount === 0
-                  ? 'Pick ex.'
-                  : 'Pick days'}
-            </button>
-          </div>
+          <button
+            type="button"
+            aria-label="close"
+            onClick={() => onClose && onClose()}
+            style={{
+              background: 'transparent',
+              border: 'none',
+              color: '#a8a39a',
+              fontSize: '1.2rem',
+              lineHeight: 1,
+              padding: '0 0.4rem',
+              cursor: 'pointer',
+              fontFamily: 'inherit',
+              alignSelf: 'flex-start',
+            }}
+          >
+            ×
+          </button>
         </div>
 
         {/* Search input — iOS PWA keyboard recipe */}
@@ -789,6 +771,40 @@ export default function PickerSheet({
             +
           </button>
         </form>
+        </div>
+
+        {/* Vertical ATTUNE button — spans the sheet's full height on
+            the right side. writing-mode: vertical-rl renders the text
+            top→bottom so the user reads with a slight rightward head
+            tilt. Disabled (greyed) when nothing's pickable yet. */}
+        <button
+          type="button"
+          disabled={!canConfirm}
+          onClick={commit}
+          aria-label={canConfirm ? 'attune picks' : 'pick exercises and days'}
+          style={{
+            flexShrink: 0,
+            alignSelf: 'stretch',
+            width: 56,
+            background: canConfirm ? '#d4181f' : '#2a2a30',
+            color: canConfirm ? '#fff' : '#666',
+            border: 'none',
+            borderLeft: `1px solid ${canConfirm ? '#ff2a36' : '#2a2a30'}`,
+            cursor: canConfirm ? 'pointer' : 'default',
+            fontFamily: 'var(--font-display, Anton, sans-serif)',
+            fontSize: '1.35rem',
+            fontWeight: 900,
+            letterSpacing: '0.22em',
+            textTransform: 'uppercase',
+            writingMode: 'vertical-rl',
+            textOrientation: 'mixed',
+            padding: '1rem 0',
+            textShadow: canConfirm ? '0 0 12px rgba(255,42,54,0.45)' : 'none',
+            transition: 'background 120ms linear, color 120ms linear, border-color 120ms linear, text-shadow 120ms linear',
+          }}
+        >
+          ATTUNE
+        </button>
       </div>
     </div>
   )
