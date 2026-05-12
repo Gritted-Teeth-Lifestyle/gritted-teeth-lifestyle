@@ -51,40 +51,30 @@ const ROLODEX_SNAP_MS = 80
 
 function MuscleRolodex({ entries, selectedKey, onSelect }) {
   const containerRef = useRef(null)
-  // Whether the content actually overflows the container. When false
-  // (landscape, or few enough entries that everything fits), we drop
-  // the rolodex affordances entirely — no fade, no snap, no mask —
-  // and just behave as a normal row of tappable entries.
-  const [overflows, setOverflows] = useState(false)
 
   // Update --rolodex-t per entry + snap-to-nearest on scroll-end.
+  // The rolodex behaviors (fade, mask, snap) are always on — even in
+  // landscape where the row could fit without scrolling, the spacers
+  // intentionally force overflow so the user can swipe entries to
+  // center for that "rolodex selector" feel.
   useEffect(() => {
     const container = containerRef.current
     if (!container) return
     let snapTimer = null
 
-    const checkOverflow = () => {
-      setOverflows(container.scrollWidth > container.clientWidth + 1)
-    }
-
     const update = () => {
-      const fits = container.scrollWidth <= container.clientWidth + 1
-      const nodes = container.querySelectorAll('[data-rolodex-key]')
-      if (fits) {
-        // Nothing to scroll — every entry sits at full prominence.
-        nodes.forEach((node) => {
-          node.style.setProperty('--rolodex-t', '1')
-          node.removeAttribute('data-rolodex-centered')
-        })
-        return
-      }
       const rect = container.getBoundingClientRect()
       const activeX = rect.left + rect.width / 2
+      const nodes = container.querySelectorAll('[data-rolodex-key]')
       nodes.forEach((node) => {
         const nrect = node.getBoundingClientRect()
         const center = nrect.left + nrect.width / 2
         const dist = Math.abs(center - activeX)
-        const t = Math.max(0, Math.min(1, 1 - dist / ROLODEX_ENTRY_W))
+        // Falloff unit = the entry's own width so the fade scales
+        // naturally for both fixed-width entries (portrait) and
+        // natural-width entries (landscape).
+        const unit = nrect.width || ROLODEX_ENTRY_W
+        const t = Math.max(0, Math.min(1, 1 - dist / unit))
         node.style.setProperty('--rolodex-t', String(t))
         if (t >= 0.9) node.setAttribute('data-rolodex-centered', '')
         else node.removeAttribute('data-rolodex-centered')
@@ -92,7 +82,6 @@ function MuscleRolodex({ entries, selectedKey, onSelect }) {
     }
 
     const snap = () => {
-      if (container.scrollWidth <= container.clientWidth + 1) return
       const rect = container.getBoundingClientRect()
       const activeX = rect.left + rect.width / 2
       const nodes = container.querySelectorAll('[data-rolodex-key]')
@@ -119,11 +108,9 @@ function MuscleRolodex({ entries, selectedKey, onSelect }) {
       snapTimer = setTimeout(snap, ROLODEX_SNAP_MS)
     }
     update()
-    checkOverflow()
     container.addEventListener('scroll', onScroll, { passive: true })
-    // Re-check overflow whenever the container resizes (orientation flip,
-    // sheet drag-resize, etc.) so the rolodex effects toggle on/off live.
-    const ro = new ResizeObserver(() => { checkOverflow(); update() })
+    // Re-run t-fade on container/resize (orientation flip, sheet drag).
+    const ro = new ResizeObserver(update)
     ro.observe(container)
     return () => {
       container.removeEventListener('scroll', onScroll)
@@ -166,21 +153,18 @@ function MuscleRolodex({ entries, selectedKey, onSelect }) {
         alignItems: 'center',
         // Hide native scrollbar — drag is the affordance.
         scrollbarWidth: 'none',
-        // Soft fade at left/right ONLY when scroll is meaningful. When
-        // the row fits without overflow (landscape, few entries) the
-        // mask is dropped so end entries aren't dimmed for no reason.
-        maskImage: overflows ? 'linear-gradient(to right, transparent 0%, black 25%, black 75%, transparent 100%)' : 'none',
-        WebkitMaskImage: overflows ? 'linear-gradient(to right, transparent 0%, black 25%, black 75%, transparent 100%)' : 'none',
-        // Anchor non-overflowing contents to the left so the muscle row
-        // sits flush against the title chip column instead of floating
-        // in the middle of the stretched flex:1 container.
-        justifyContent: 'flex-start',
+        // Soft fade at left/right is always on so the rolodex reads as
+        // a rolodex selector even in landscape (where content might
+        // otherwise sit naturally without scrolling).
+        maskImage: 'linear-gradient(to right, transparent 0%, black 25%, black 75%, transparent 100%)',
+        WebkitMaskImage: 'linear-gradient(to right, transparent 0%, black 25%, black 75%, transparent 100%)',
       }}
     >
-      {/* Leading spacer — only when content overflows; lets the first
-          entry scroll to dead center. Skipped in fit-without-scroll
-          mode so the row sits naturally centered in the container. */}
-      {overflows && <div style={{ flex: '0 0 auto', width: spacerWidth }} />}
+      {/* Leading spacer — always rendered so the first entry can
+          scroll to dead center, even in landscape where content would
+          otherwise fit without overflow. The forced overflow is what
+          keeps the rolodex feeling like a selector. */}
+      <div style={{ flex: '0 0 auto', width: spacerWidth }} />
       {entries.map((e) => {
         const isSelected = e.key === selectedKey
         return (
@@ -190,12 +174,11 @@ function MuscleRolodex({ entries, selectedKey, onSelect }) {
           onClick={() => onSelect(e.key)}
           style={{
             flex: '0 0 auto',
-            // Fixed-width tiles only when content overflows (so the
-            // rolodex's t-fade math has a known unit). When everything
-            // fits, entries take their natural width so long labels
-            // (HAMSTRINGS, SHOULDERS) read in full instead of clipping.
-            width: overflows ? ROLODEX_ENTRY_W : 'auto',
-            paddingInline: overflows ? 0 : '0.6rem',
+            // Natural width with internal horizontal padding so long
+            // labels (HAMSTRINGS, SHOULDERS) read in full. The t-fade
+            // math (see update() above) uses the entry's measured
+            // width as the falloff unit so varying widths still work.
+            paddingInline: '0.6rem',
             height: ROLODEX_HEIGHT,
             display: 'flex',
             alignItems: 'center',
@@ -223,20 +206,18 @@ function MuscleRolodex({ entries, selectedKey, onSelect }) {
           </span>
           <span style={{
             textTransform: 'uppercase',
-            // Truncate only when entries are constrained to fixed width
-            // (overflow mode). In fits-without-scroll mode, let the
-            // label render in full at its natural width.
-            overflow: overflows ? 'hidden' : 'visible',
-            textOverflow: overflows ? 'ellipsis' : 'clip',
-            minWidth: 0,
+            // Entries take natural width so labels never need to clip;
+            // HAMSTRINGS / SHOULDERS render in full.
+            whiteSpace: 'nowrap',
           }}>
             {e.label}
           </span>
         </div>
         )
       })}
-      {/* Trailing spacer — same as leading: only when content overflows. */}
-      {overflows && <div style={{ flex: '0 0 auto', width: spacerWidth }} />}
+      {/* Trailing spacer — same as leading: always rendered so the
+          last entry can scroll to dead center. */}
+      <div style={{ flex: '0 0 auto', width: spacerWidth }} />
     </div>
   )
 }
