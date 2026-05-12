@@ -13,7 +13,7 @@
  * Helpers below (ExercisePanel, popups, etc.) are duplicated from the
  * day route verbatim. Stage 3 will dedup them into shared modules.
  */
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { useSound } from '../../../../../lib/useSound'
 import { useProfileGuard } from '../../../../../lib/useProfileGuard'
@@ -71,20 +71,6 @@ const MONTH_FULL  = ['JANUARY','FEBRUARY','MARCH','APRIL','MAY','JUNE','JULY','A
 
 const SLAB_ROTATIONS = ['-1.5deg','1deg','-0.8deg','1.5deg','-1.2deg','0.8deg','-1.8deg','1.2deg','-0.6deg','1.4deg','-1deg']
 const CARD_ROTATIONS = ['-0.8deg','0.6deg','-0.5deg','0.9deg','-0.7deg','0.4deg','-1deg','0.7deg','-0.6deg','0.8deg']
-
-const EXERCISES = {
-  chest:      ['BARBELL BENCH PRESS','INCLINE DUMBBELL PRESS','DUMBBELL FLY','CABLE CROSSOVER'],
-  back:       ['DEADLIFT','PULL-UP','BARBELL ROW','LAT PULLDOWN'],
-  shoulders:  ['OVERHEAD PRESS','LATERAL RAISE','REAR DELT FLY','ARNOLD PRESS'],
-  biceps:     ['BARBELL CURL','DUMBBELL CURL','HAMMER CURL','PREACHER CURL'],
-  triceps:    ['CLOSE-GRIP BENCH PRESS','SKULL CRUSHER','TRICEP PUSHDOWN','OVERHEAD EXTENSION'],
-  forearms:   ['WRIST CURL','REVERSE WRIST CURL','HAMMER CURL','FARMER CARRY'],
-  abs:        ['CRUNCH','PLANK','HANGING LEG RAISE','AB WHEEL ROLLOUT'],
-  glutes:     ['HIP THRUST','SQUAT','ROMANIAN DEADLIFT','BULGARIAN SPLIT SQUAT'],
-  quads:      ['SQUAT','LEG PRESS','LEG EXTENSION','HACK SQUAT'],
-  hamstrings: ['ROMANIAN DEADLIFT','LEG CURL','NORDIC CURL','GLUTE-HAM RAISE'],
-  calves:     ['STANDING CALF RAISE','SEATED CALF RAISE','DONKEY CALF RAISE','LEG PRESS CALF RAISE'],
-}
 
 function parseDate(iso) {
   return new Date(iso + 'T12:00:00')
@@ -1479,7 +1465,37 @@ function ExercisePanel({ muscleId, dayIso, originRect, onClose, cycleId }) {
   const [activeExerciseRect, setActiveExerciseRect] = useState(null)
   const [activeSetIndex, setActiveSetIndex] = useState(0)
   const [phase, setPhase]               = useState(null) // 'weight' | 'reps'
-  const exercises    = EXERCISES[muscleId] || []
+  // Read the attune-picked exercises for this (cycle, day) and filter
+  // to those whose primaryMuscles include the route's muscleId. This
+  // is the bridge that was previously hardcoded — picking BENCH PRESS
+  // on attune now actually surfaces on the chest set-log instead of
+  // the static 4-exercise list.
+  //
+  // - Library exercises: filter by primaryMuscles.
+  // - Library-unknown ids (custom names typed into the picker's
+  //   custom-input form): pass through as-is so the user's typed
+  //   exercises aren't lost. They'll appear on whichever muscle
+  //   set-log they navigate to since we can't infer their primary.
+  //   Acceptable until/if Jordan asks for a per-chip muscle tag.
+  // - Dedup by exerciseId preserving chip insertion order.
+  const exercises = useMemo(() => {
+    if (!cycleId || !dayIso) return []
+    const chips = chipsForDay(cycleId, dayIso)
+    const seen = new Set()
+    const out = []
+    for (const chip of chips) {
+      if (!chip?.exerciseId || seen.has(chip.exerciseId)) continue
+      const ex = getExerciseById(chip.exerciseId)
+      if (ex) {
+        if (!(ex.primaryMuscles || []).includes(muscleId)) continue
+      }
+      // For library-unknown ids (custom typed), include without
+      // filtering so the user's exercise isn't dropped.
+      seen.add(chip.exerciseId)
+      out.push(chip.exerciseId)
+    }
+    return out
+  }, [cycleId, dayIso, muscleId])
   const label        = MUSCLE_LABELS[muscleId] || muscleId.toUpperCase()
   const storageKey   = pk(`ex-${cycleId}-${dayIso}-${muscleId}`)
   const weightKey    = pk(`wt-${cycleId}-${dayIso}-${muscleId}`)
