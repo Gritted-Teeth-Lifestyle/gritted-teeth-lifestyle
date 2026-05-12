@@ -505,11 +505,12 @@ export default function PickerSheet({
                       fontSize: '1rem',
                       letterSpacing: '0.16em',
                       textTransform: 'uppercase',
-                      color: active ? '#ff2a36' : '#d4181f',
+                      color: active ? '#ff2a36' : '#d8d2c2',
                       textShadow: active ? '0 0 8px rgba(255,42,54,0.55)' : 'none',
                       fontWeight: active ? 900 : 700,
-                      opacity: active ? 1 : 0.7,
+                      opacity: active ? 1 : 0.85,
                       display: 'inline-flex', alignItems: 'baseline', gap: 6,
+                      transition: 'color 120ms linear, text-shadow 120ms linear',
                     }}
                   >
                     <span style={{
