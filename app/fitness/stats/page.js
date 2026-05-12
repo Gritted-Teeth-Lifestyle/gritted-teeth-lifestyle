@@ -47,7 +47,7 @@ function getLevelInfo(totalXP) {
   let level = 0
   let xpUsed = 0
   while (true) {
-    const threshold = 15000 + level * 1000
+    const threshold = 150 + level * 10
     if (xpUsed + threshold > totalXP) {
       return { level, progress: totalXP - xpUsed, threshold }
     }

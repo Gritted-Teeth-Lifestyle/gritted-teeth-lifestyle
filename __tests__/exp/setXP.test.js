@@ -105,9 +105,10 @@ describe('calculateSetXP — golden vectors', () => {
     expect(snap.normFactor).toBeCloseTo(0.95, 2)
     expect(snap.combinedFactor).toBeCloseTo(snap.normFactor, 5)
     expect(snap.heavyLiftBonus).toBe(0)
-    expect(snap.rawBase).toBe(1350)
-    // stackBase = 135 × normFactor × 1.0 × 10
-    expect(snap.baseXP).toBeCloseTo(1350 * snap.normFactor, 5)
+    // /100 display scale: rawBase 1350 -> 13.5
+    expect(snap.rawBase).toBeCloseTo(13.5, 5)
+    // stackBase = 135 × normFactor × 1.0 × 10 / 100
+    expect(snap.baseXP).toBeCloseTo(13.5 * snap.normFactor, 5)
     // R2 totalXP = stackBase × class (1.5) + 0 + 0
     expect(snap.totalXP).toBeCloseTo(snap.baseXP * 1.5, 5)
     // R12c gate: relative_load 0.675 < star_floor 1.125 → no stars
@@ -126,8 +127,8 @@ describe('calculateSetXP — golden vectors', () => {
     )
     // 315/200 = 1.575 < threshold 2.0 → no heavy bonus
     expect(snap.heavyLiftBonus).toBe(0)
-    // stackBase = 315 × normFactor × 1.0 × 5
-    expect(snap.baseXP).toBeCloseTo(1575 * snap.normFactor, 5)
+    // stackBase = 315 × normFactor × 1.0 × 5 / 100
+    expect(snap.baseXP).toBeCloseTo(15.75 * snap.normFactor, 5)
     // R2 totalXP (king 1.75 + prestige 0.50, consistency deferred)
     expect(snap.totalXP).toBeCloseTo(snap.baseXP * 1.75 + snap.baseXP * 0.50, 5)
     // star_floor = 0.75 × 2.0 = 1.5; relative_load 1.575 ≥ 1.5 → stars earned
@@ -208,10 +209,10 @@ describe('calculateSetXP — golden vectors', () => {
       { bodyweight: 180, sex: 'm' },
       { tierMult: 3.00, prestigeMult: 0, holidayMult: 0 },
     )
-    // baseXP = 100 × 1.0 × 1.0 × 5 = 500. Compound class mult = 1.5.
-    // totalXP should be 500 × 1.5 = 750 (NOT 500 × 1.5 + 500 × 3.0 = 2250).
-    expect(snap.baseXP).toBeCloseTo(500, 5)
-    expect(snap.totalXP).toBeCloseTo(750, 5)
+    // baseXP = 100 × 1.0 × 1.0 × 5 / 100 = 5. Compound class mult = 1.5.
+    // totalXP should be 5 × 1.5 = 7.5 (NOT 5 × 1.5 + 5 × 3.0 = 22.5).
+    expect(snap.baseXP).toBeCloseTo(5, 5)
+    expect(snap.totalXP).toBeCloseTo(7.5, 5)
     expect(snap.consistencyMult).toBe(3.00)  // recorded for cinematic only
   })
 })

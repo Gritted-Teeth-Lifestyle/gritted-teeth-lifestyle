@@ -170,8 +170,8 @@ describe('dayXPWithFallback + computeProfileTotalXP — legacy fallback path', (
     )
   })
 
-  test('legacy day → 1350 XP (135 × 1.0 × 10)', () => {
-    expect(dayXPWithFallback({ id: CYCLE_ID, dailyPlan: { [ISO]: ['chest'] } }, ISO)).toBeCloseTo(1350, 5)
+  test('legacy day → 13.5 XP (135 × 1.0 × 10 /100 display scale)', () => {
+    expect(dayXPWithFallback({ id: CYCLE_ID, dailyPlan: { [ISO]: ['chest'] } }, ISO)).toBeCloseTo(13.5, 5)
   })
 
   test('snapshot day overrides legacy', () => {
@@ -184,14 +184,14 @@ describe('dayXPWithFallback + computeProfileTotalXP — legacy fallback path', (
   test('computeProfileTotalXP picks the right path per day', () => {
     const result = computeProfileTotalXP()
     expect(result.totalDays).toBe(1)
-    expect(result.xp).toBeCloseTo(1350, 5)
+    expect(result.xp).toBeCloseTo(13.5, 5)
   })
 
   test('computeProfileStats produces region XP via legacy 1:1 map', () => {
     const stats = computeProfileStats(MUSCLE_TO_REGION)
     expect(stats.daysCompleted).toBe(1)
-    expect(stats.totalXP).toBeCloseTo(1350, 5)
+    expect(stats.totalXP).toBeCloseTo(13.5, 5)
     // muscle 'chest' under R10a → FRONT (index 3).
-    expect(stats.regionXP[3]).toBeCloseTo(1350, 5)
+    expect(stats.regionXP[3]).toBeCloseTo(13.5, 5)
   })
 })
