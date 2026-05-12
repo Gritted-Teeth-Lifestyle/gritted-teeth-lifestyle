@@ -146,7 +146,9 @@ function MuscleRolodex({ entries, selectedKey, onSelect }) {
     >
       {/* Leading spacer — lets the first entry scroll to dead center. */}
       <div style={{ flex: '0 0 auto', width: spacerWidth }} />
-      {entries.map((e) => (
+      {entries.map((e) => {
+        const isSelected = e.key === selectedKey
+        return (
         <div
           key={e.key}
           data-rolodex-key={e.key}
@@ -161,12 +163,13 @@ function MuscleRolodex({ entries, selectedKey, onSelect }) {
             gap: 6,
             cursor: 'pointer',
             opacity: 'calc(0.35 + 0.65 * var(--rolodex-t, 0))',
-            transition: 'opacity 100ms linear',
+            transition: 'opacity 100ms linear, color 120ms linear, text-shadow 120ms linear',
             fontFamily: 'inherit',
             fontSize: '0.78rem',
             letterSpacing: '0.12em',
-            color: '#d8d2c2',
-            fontWeight: 700,
+            color: isSelected ? '#ff2a36' : '#d8d2c2',
+            textShadow: isSelected ? '0 0 8px rgba(255,42,54,0.55)' : 'none',
+            fontWeight: isSelected ? 900 : 700,
             whiteSpace: 'nowrap',
           }}
         >
@@ -187,7 +190,8 @@ function MuscleRolodex({ entries, selectedKey, onSelect }) {
             {e.label}
           </span>
         </div>
-      ))}
+        )
+      })}
       {/* Trailing spacer — same idea for the last entry. */}
       <div style={{ flex: '0 0 auto', width: spacerWidth }} />
     </div>
