@@ -9,6 +9,7 @@ import { LogoStencil, LogoTarget } from '../../components/LogoHalf'
 import { armChain, setInAnimation } from '../../lib/predictiveTap'
 import { pk } from '../../lib/storage'
 import BodyweightStep from '../../components/onboarding/BodyweightStep'
+import DateOfBirthStep from '../../components/onboarding/DateOfBirthStep'
 
 function ProfileChip({ name, onSelect, onSwipeSelect }) {
   const { play } = useSound()
@@ -226,6 +227,9 @@ export default function ProfilePage() {
   const [transitioning, setTransitioning] = useState(false)
   // Onboarding BW step — captured for new warriors before routing to hub.
   const [pendingNewName, setPendingNewName] = useState(null)
+  // Onboarding DOB step — runs after BW step; skippable (R16 birthday is
+  // optional). Holds the new warrior's name until DOB capture or skip.
+  const [pendingDOBName, setPendingDOBName] = useState(null)
   const inputRef = useRef(null)
   // Latches once skipAll fires so HeistTransition.onComplete won't double-route.
   const skippedRef = useRef(false)
@@ -340,6 +344,26 @@ export default function ProfilePage() {
     const name = pendingNewName
     setPendingNewName(null)
     play('card-confirm')
+    // Hand off to the (skippable) DOB step before routing to hub.
+    setPendingDOBName(name)
+  }
+
+  const handleDOBConfirm = (iso) => {
+    if (!pendingDOBName) return
+    if (/^\d{4}-\d{2}-\d{2}$/.test(iso)) {
+      try { localStorage.setItem(pk('user-dob'), iso) } catch (_) {}
+    }
+    const name = pendingDOBName
+    setPendingDOBName(null)
+    play('card-confirm')
+    selectProfile(name)
+  }
+
+  const handleDOBSkip = () => {
+    if (!pendingDOBName) return
+    const name = pendingDOBName
+    setPendingDOBName(null)
+    play('menu-close')
     selectProfile(name)
   }
 
@@ -533,6 +557,18 @@ export default function ProfilePage() {
         aria-label="Enter body weight"
       >
         <BodyweightStep onConfirm={handleBodyweightConfirm} />
+      </div>
+    )}
+
+    {pendingDOBName && (
+      <div
+        className="fixed inset-0 z-[10000] flex items-center justify-center px-6"
+        style={{ background: 'rgba(8,8,12,0.78)', backdropFilter: 'blur(4px)' }}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Enter birthday"
+      >
+        <DateOfBirthStep onConfirm={handleDOBConfirm} onSkip={handleDOBSkip} />
       </div>
     )}
     </>
