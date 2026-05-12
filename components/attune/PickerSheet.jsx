@@ -133,13 +133,10 @@ function MuscleRolodex({ entries, selectedKey, onSelect }) {
     }
   }, [selectedKey])
 
-  // Spacer width = (entry_width / 2) at minimum so the first/last entries
-  // can scroll to center. Using a flex pseudo-spacer at each end.
-  const spacerWidth = ROLODEX_ENTRY_W / 2 + 16
-
   return (
     <div
       ref={containerRef}
+      className="gtl-picker-rolodex"
       style={{
         position: 'relative',
         height: ROLODEX_HEIGHT,
@@ -151,20 +148,22 @@ function MuscleRolodex({ entries, selectedKey, onSelect }) {
         touchAction: 'pan-x',
         display: 'flex',
         alignItems: 'center',
+        // Half-container leading + trailing padding ensures the first
+        // AND last entries can each scroll to dead center. Approximated
+        // with calc(50% - half-entry-width) so the math works without
+        // measuring at runtime; the small offset for variable-width
+        // entries is unnoticeable.
+        paddingInline: `calc(50% - ${ROLODEX_ENTRY_W / 2}px)`,
+        scrollSnapType: 'x mandatory',
         // Hide native scrollbar — drag is the affordance.
         scrollbarWidth: 'none',
         // Soft fade at left/right is always on so the rolodex reads as
         // a rolodex selector even in landscape (where content might
         // otherwise sit naturally without scrolling).
-        maskImage: 'linear-gradient(to right, transparent 0%, black 25%, black 75%, transparent 100%)',
-        WebkitMaskImage: 'linear-gradient(to right, transparent 0%, black 25%, black 75%, transparent 100%)',
+        maskImage: 'linear-gradient(to right, transparent 0%, black 22%, black 78%, transparent 100%)',
+        WebkitMaskImage: 'linear-gradient(to right, transparent 0%, black 22%, black 78%, transparent 100%)',
       }}
     >
-      {/* Leading spacer — always rendered so the first entry can
-          scroll to dead center, even in landscape where content would
-          otherwise fit without overflow. The forced overflow is what
-          keeps the rolodex feeling like a selector. */}
-      <div style={{ flex: '0 0 auto', width: spacerWidth }} />
       {entries.map((e) => {
         const isSelected = e.key === selectedKey
         return (
@@ -178,7 +177,7 @@ function MuscleRolodex({ entries, selectedKey, onSelect }) {
             // labels (HAMSTRINGS, SHOULDERS) read in full. The t-fade
             // math (see update() above) uses the entry's measured
             // width as the falloff unit so varying widths still work.
-            paddingInline: '0.6rem',
+            paddingInline: '0.7rem',
             height: ROLODEX_HEIGHT,
             display: 'flex',
             alignItems: 'center',
@@ -194,6 +193,10 @@ function MuscleRolodex({ entries, selectedKey, onSelect }) {
             textShadow: isSelected ? '0 0 8px rgba(255,42,54,0.55)' : 'none',
             fontWeight: isSelected ? 900 : 700,
             whiteSpace: 'nowrap',
+            scrollSnapAlign: 'center',
+            scrollSnapStop: 'always',
+            userSelect: 'none',
+            WebkitUserSelect: 'none',
           }}
         >
           <span style={{
@@ -215,9 +218,6 @@ function MuscleRolodex({ entries, selectedKey, onSelect }) {
         </div>
         )
       })}
-      {/* Trailing spacer — same as leading: always rendered so the
-          last entry can scroll to dead center. */}
-      <div style={{ flex: '0 0 auto', width: spacerWidth }} />
     </div>
   )
 }
@@ -442,6 +442,10 @@ export default function PickerSheet({
         .gtl-picker-header {
           gap: 1.75rem;
         }
+        /* Hide WebKit's native scrollbar on the rolodex — drag/swipe is
+           the only affordance. scrollbarWidth:'none' (Firefox/Chromium)
+           is set inline; ::-webkit-scrollbar covers iOS/desktop Safari. */
+        .gtl-picker-rolodex::-webkit-scrollbar { display: none; }
         @media (orientation: landscape) and (max-height: 500px) {
           .gtl-picker-sheet {
             max-width: 100%;
