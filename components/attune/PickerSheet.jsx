@@ -36,6 +36,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { searchExercises } from '../../lib/exerciseLibrary'
 import { MUSCLE_KANJI, MUSCLE_LABEL, muscleGroupLabel } from '../../lib/attuneGroups'
+import { byNotoriety } from '../../lib/exerciseNotoriety'
 
 // Compact horizontal rolodex for the target-filter selection. Mirrors
 // the vertical active-page rolodex (active/page.js:2810-2871) flipped
@@ -332,21 +333,26 @@ export default function PickerSheet({
 
   const exercises = useMemo(() => {
     if (!selectedFilter) return []
+    let out
     if (selectedFilter.kind === 'muscle') {
-      return searchExercises(selectedFilter.id, query)
-    }
-    // Group: union searchExercises across each muscle; dedup by id.
-    const seen = new Set()
-    const out = []
-    for (const m of selectedFilter.muscles) {
-      for (const ex of searchExercises(m, query)) {
-        if (!seen.has(ex.id)) {
-          seen.add(ex.id)
-          out.push(ex)
+      out = searchExercises(selectedFilter.id, query)
+    } else {
+      // Group: union searchExercises across each muscle; dedup by id.
+      const seen = new Set()
+      out = []
+      for (const m of selectedFilter.muscles) {
+        for (const ex of searchExercises(m, query)) {
+          if (!seen.has(ex.id)) {
+            seen.add(ex.id)
+            out.push(ex)
+          }
         }
       }
     }
-    return out
+    // Sort by notoriety so iconic lifts (BENCH PRESS, SQUAT, DEADLIFT,
+    // etc.) surface at the top of each muscle / group result set.
+    // Alphabetical tiebreak.
+    return [...out].sort(byNotoriety)
   }, [selectedFilter, query])
 
   // sr-only input scrollIntoView fallback (per memory:
