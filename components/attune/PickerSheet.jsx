@@ -190,7 +190,12 @@ function MuscleRolodex({ entries, selectedKey, onSelect }) {
           onClick={() => onSelect(e.key)}
           style={{
             flex: '0 0 auto',
-            width: ROLODEX_ENTRY_W,
+            // Fixed-width tiles only when content overflows (so the
+            // rolodex's t-fade math has a known unit). When everything
+            // fits, entries take their natural width so long labels
+            // (HAMSTRINGS, SHOULDERS) read in full instead of clipping.
+            width: overflows ? ROLODEX_ENTRY_W : 'auto',
+            paddingInline: overflows ? 0 : '0.6rem',
             height: ROLODEX_HEIGHT,
             display: 'flex',
             alignItems: 'center',
@@ -218,8 +223,11 @@ function MuscleRolodex({ entries, selectedKey, onSelect }) {
           </span>
           <span style={{
             textTransform: 'uppercase',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
+            // Truncate only when entries are constrained to fixed width
+            // (overflow mode). In fits-without-scroll mode, let the
+            // label render in full at its natural width.
+            overflow: overflows ? 'hidden' : 'visible',
+            textOverflow: overflows ? 'ellipsis' : 'clip',
             minWidth: 0,
           }}>
             {e.label}
