@@ -7,6 +7,7 @@ import { useSound } from '../../lib/useSound'
 import { pk } from '../../lib/storage'
 import NumberRow from '../../components/settings/NumberRow'
 import SexToggle from '../../components/settings/SexToggle'
+import DateRow from '../../components/settings/DateRow'
 import {
   BGM_TRACKS,
   BGM_VOLUME_KEY,
@@ -141,6 +142,7 @@ export default function SettingsPage() {
   const [bgmVolume, setBgmVolume] = useState(1)
   const [userBW, setUserBW]       = useState(null)   // R1a: lb integer, profile-scoped
   const [userSex, setUserSex]     = useState('m')    // R1a: 'm' | 'f', default 'm'
+  const [userDOB, setUserDOB]     = useState(null)   // R16: ISO 'YYYY-MM-DD' | null, optional
 
   useEffect(() => {
     setActiveProfile(typeof window !== 'undefined' ? (localStorage.getItem('gtl-active-profile') || null) : null)
@@ -157,6 +159,10 @@ export default function SettingsPage() {
     try {
       const rawSex = localStorage.getItem(pk('user-sex'))
       setUserSex(rawSex === 'f' ? 'f' : 'm')
+    } catch (_) {}
+    try {
+      const rawDOB = localStorage.getItem(pk('user-dob'))
+      setUserDOB(/^\d{4}-\d{2}-\d{2}$/.test(rawDOB || '') ? rawDOB : null)
     } catch (_) {}
     // Title only — used by the "BGM TRACK → /settings/music" entry to show
     // a hint of what's currently selected.
@@ -267,6 +273,19 @@ export default function SettingsPage() {
     setUserSex(v)
     try { localStorage.setItem(pk('user-sex'), v) } catch (_) {}
     play('option-select')
+  }
+
+  // R16: ISO 'YYYY-MM-DD' string from the native date picker, or null to
+  // clear. Lets getHolidayMultiplier fire the birthday Tier-1 holiday.
+  const handleDOB = (iso) => {
+    if (iso == null) {
+      setUserDOB(null)
+      try { localStorage.removeItem(pk('user-dob')) } catch (_) {}
+      return
+    }
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) return
+    setUserDOB(iso)
+    try { localStorage.setItem(pk('user-dob'), iso) } catch (_) {}
   }
 
   const handleHaptics = (next) => {
@@ -506,6 +525,7 @@ export default function SettingsPage() {
                   placeholder="LBS"
                 />
                 <SexToggle value={userSex} onChange={handleSex} />
+                <DateRow label="BIRTHDAY" value={userDOB} onChange={handleDOB} optional />
               </div>
             </div>
           )}
