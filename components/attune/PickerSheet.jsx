@@ -232,6 +232,10 @@ export default function PickerSheet({
 }) {
   const [query, setQuery] = useState('')
   const [selectedExerciseIds, setSelectedExerciseIds] = useState([])
+  // Custom exercise entry — typed name gets added to selectedExerciseIds
+  // on submit (like tapping a list card). Committed via the Confirm
+  // button in the header's right column. Cleared on day switch.
+  const [customName, setCustomName] = useState('')
   const toggleExercise = (id) => {
     setSelectedExerciseIds((prev) =>
       prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
@@ -245,7 +249,7 @@ export default function PickerSheet({
   // re-open starts at the default size.
   const [userHeight, setUserHeight] = useState(null)
   const dragStartRef = useRef(null)
-  useEffect(() => { setUserHeight(null) }, [sourceDayId])
+  useEffect(() => { setUserHeight(null); setCustomName('') }, [sourceDayId])
 
   const onGrabberPointerDown = (e) => {
     e.preventDefault()
@@ -573,24 +577,58 @@ export default function PickerSheet({
             />
           </div>
 
-          <button
-            type="button"
-            aria-label="close"
-            onClick={() => onClose && onClose()}
-            style={{
-              background: 'transparent',
-              border: 'none',
-              color: '#a8a39a',
-              fontSize: '1.2rem',
-              lineHeight: 1,
-              padding: '0 0.4rem',
-              cursor: 'pointer',
-              fontFamily: 'inherit',
-              alignSelf: 'flex-start',
-            }}
-          >
-            ×
-          </button>
+          {/* Right column — close × on top, Confirm action stacked
+              underneath where there's plenty of room. */}
+          <div style={{
+            display: 'flex', flexDirection: 'column',
+            alignItems: 'flex-end',
+            gap: '0.4rem',
+            flexShrink: 0,
+          }}>
+            <button
+              type="button"
+              aria-label="close"
+              onClick={() => onClose && onClose()}
+              style={{
+                background: 'transparent',
+                border: 'none',
+                color: '#a8a39a',
+                fontSize: '1.2rem',
+                lineHeight: 1,
+                padding: '0 0.4rem',
+                cursor: 'pointer',
+                fontFamily: 'inherit',
+              }}
+            >
+              ×
+            </button>
+            <button
+              type="button"
+              disabled={!canConfirm}
+              onClick={commit}
+              aria-label="confirm picks"
+              style={{
+                background: canConfirm ? '#d4181f' : '#2a2a30',
+                color: canConfirm ? '#fff' : '#666',
+                border: `1px solid ${canConfirm ? '#ff2a36' : '#2a2a30'}`,
+                padding: '0.45rem 0.75rem',
+                fontFamily: 'inherit',
+                fontSize: '0.7rem',
+                fontWeight: 900,
+                letterSpacing: '0.18em',
+                textTransform: 'uppercase',
+                cursor: canConfirm ? 'pointer' : 'default',
+                clipPath: 'polygon(4% 0%, 100% 0%, 96% 100%, 0% 100%)',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {canConfirm
+                ? `Confirm ${exerciseCount}×${targetCount}`
+                : exerciseCount === 0
+                  ? 'Pick ex.'
+                  : 'Pick days'}
+            </button>
+          </div>
         </div>
 
         {/* Search input — iOS PWA keyboard recipe */}
@@ -682,30 +720,75 @@ export default function PickerSheet({
           })}
         </div>
 
-        {/* Confirm */}
-        <button
-          type="button"
-          disabled={!canConfirm}
-          onClick={commit}
-          style={{
-            background: canConfirm ? '#d4181f' : '#2a2a30',
-            color: canConfirm ? '#fff' : '#666',
-            border: `1px solid ${canConfirm ? '#ff2a36' : '#2a2a30'}`,
-            padding: '0.7rem 1rem',
-            fontFamily: 'inherit',
-            fontSize: '0.85rem',
-            letterSpacing: '0.2em',
-            textTransform: 'uppercase',
-            cursor: canConfirm ? 'pointer' : 'default',
-            clipPath: 'polygon(2% 0%, 100% 0%, 98% 100%, 0% 100%)',
+        {/* Custom exercise input — sits where Confirm used to live.
+            Submitting (Enter / + button) adds the typed name to
+            selectedExerciseIds as if the user had tapped a card in
+            the list. Use to add an exercise the library doesn't
+            carry; the user's choice persists by name like the
+            built-in entries. Confirm still commits everything via
+            the button in the header's right column. */}
+        <form
+          onSubmit={(e) => {
+            e.preventDefault()
+            const name = customName.trim().toUpperCase()
+            if (!name) return
+            if (!selectedExerciseIds.includes(name)) {
+              setSelectedExerciseIds((prev) => [...prev, name])
+            }
+            setCustomName('')
           }}
+          style={{ margin: 0, display: 'flex', gap: '0.4rem', alignItems: 'stretch' }}
+          action="."
+          method="get"
         >
-          {canConfirm
-            ? `Confirm (${exerciseCount} exercise${exerciseCount === 1 ? '' : 's'} × ${targetCount} day${targetCount === 1 ? '' : 's'})`
-            : exerciseCount === 0
-              ? 'Pick exercises'
-              : 'Pick days'}
-        </button>
+          <input
+            type="search"
+            name="gtl-attune-custom-exercise"
+            value={customName}
+            onChange={(e) => setCustomName(e.target.value)}
+            placeholder="add custom exercise…"
+            inputMode="text"
+            enterKeyHint="done"
+            autoComplete="off"
+            autoCorrect="off"
+            autoCapitalize="characters"
+            spellCheck={false}
+            style={{
+              flex: 1,
+              minWidth: 0,
+              background: '#0f0f12',
+              border: '1px solid #2a2a30',
+              borderLeft: '2px solid #d4181f',
+              padding: '0.55rem 0.7rem',
+              color: '#f1eee5',
+              fontFamily: 'inherit',
+              fontSize: '0.78rem',
+              letterSpacing: '0.06em',
+              textTransform: 'uppercase',
+              outline: 'none',
+            }}
+          />
+          <button
+            type="submit"
+            disabled={!customName.trim()}
+            aria-label="add custom exercise"
+            style={{
+              background: customName.trim() ? '#d4181f' : '#2a2a30',
+              color: customName.trim() ? '#fff' : '#666',
+              border: `1px solid ${customName.trim() ? '#ff2a36' : '#2a2a30'}`,
+              padding: '0 1rem',
+              fontFamily: 'inherit',
+              fontSize: '1.1rem',
+              fontWeight: 900,
+              letterSpacing: '0.05em',
+              cursor: customName.trim() ? 'pointer' : 'default',
+              clipPath: 'polygon(8% 0%, 100% 0%, 92% 100%, 0% 100%)',
+              flexShrink: 0,
+            }}
+          >
+            +
+          </button>
+        </form>
       </div>
     </div>
   )
