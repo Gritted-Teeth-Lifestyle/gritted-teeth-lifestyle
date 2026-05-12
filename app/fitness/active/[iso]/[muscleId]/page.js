@@ -20,7 +20,7 @@ import { useProfileGuard } from '../../../../../lib/useProfileGuard'
 import { pk } from '../../../../../lib/storage'
 import PickerSheet from '../../../../../components/attune/PickerSheet'
 import HeistTransition from '../../../../../components/HeistTransition'
-import { chipsForDay, addChip } from '../../../../../lib/attunement'
+import { chipsForDay, addChip, useChipsForDay } from '../../../../../lib/attunement'
 import { consumePrefire, setInAnimation, disarmChain, subscribeStaged } from '../../../../../lib/predictiveTap'
 import {
   calculateSetXP,
@@ -1435,7 +1435,7 @@ function CustomMoveInput({ value, onChange, onConfirm, onCancel, onCharAdded }) 
 }
 
 /* ── Exercise list panel — zooms from the tapped muscle slab ── */
-function ExercisePanel({ muscleId, dayIso, originRect, onClose, cycleId }) {
+function ExercisePanel({ muscleId, dayIso, originRect, onClose, cycleId, onAddMove }) {
   const { play } = useSound()
   const [closing, setClosing]           = useState(false)
   // Entrance skip — first tap snaps the panel zoom-in + cascade to settled.
@@ -1457,45 +1457,30 @@ function ExercisePanel({ muscleId, dayIso, originRect, onClose, cycleId }) {
   const [weights, setWeights]           = useState({})
   const [setCounts, setSetCounts]       = useState({}) // exerciseName → number of sets (default 2)
   const [priorData, setPriorData]       = useState({}) // exerciseName → { weight: [], reps: [] } from prior days
-  const [customName, setCustomName]       = useState('') // user-defined 5th exercise
-  const [editingCustom, setEditingCustom] = useState(false)
-  const [draftName, setDraftName]         = useState('')
+  // shaking — used to wobble the panel briefly on certain events.
   const [shaking, setShaking]             = useState(false)
   const [activeExercise, setActiveExercise] = useState(null)
   const [activeExerciseRect, setActiveExerciseRect] = useState(null)
   const [activeSetIndex, setActiveSetIndex] = useState(0)
   const [phase, setPhase]               = useState(null) // 'weight' | 'reps'
-  // Read the attune-picked exercises for this (cycle, day) and filter
-  // to those whose primaryMuscles include the route's muscleId. This
-  // is the bridge that was previously hardcoded — picking BENCH PRESS
-  // on attune now actually surfaces on the chest set-log instead of
-  // the static 4-exercise list.
-  //
-  // - Library exercises: filter by primaryMuscles.
-  // - Library-unknown ids (custom names typed into the picker's
-  //   custom-input form): pass through as-is so the user's typed
-  //   exercises aren't lost. They'll appear on whichever muscle
-  //   set-log they navigate to since we can't infer their primary.
-  //   Acceptable until/if Jordan asks for a per-chip muscle tag.
-  // - Dedup by exerciseId preserving chip insertion order.
+  // Read the attune-picked chips for this (cycle, day) via the React
+  // subscription hook so the list re-renders when the in-the-moment
+  // picker adds a chip mid-session. Filter to chips whose library
+  // entry's primaryMuscles include the route's muscleId. Library-
+  // unknown ids (custom typed names) pass through unfiltered.
+  const dayChips = useChipsForDay(cycleId, dayIso)
   const exercises = useMemo(() => {
-    if (!cycleId || !dayIso) return []
-    const chips = chipsForDay(cycleId, dayIso)
     const seen = new Set()
     const out = []
-    for (const chip of chips) {
+    for (const chip of dayChips) {
       if (!chip?.exerciseId || seen.has(chip.exerciseId)) continue
       const ex = getExerciseById(chip.exerciseId)
-      if (ex) {
-        if (!(ex.primaryMuscles || []).includes(muscleId)) continue
-      }
-      // For library-unknown ids (custom typed), include without
-      // filtering so the user's exercise isn't dropped.
+      if (ex && !(ex.primaryMuscles || []).includes(muscleId)) continue
       seen.add(chip.exerciseId)
       out.push(chip.exerciseId)
     }
     return out
-  }, [cycleId, dayIso, muscleId])
+  }, [dayChips, muscleId])
   const label        = MUSCLE_LABELS[muscleId] || muscleId.toUpperCase()
   const storageKey   = pk(`ex-${cycleId}-${dayIso}-${muscleId}`)
   const weightKey    = pk(`wt-${cycleId}-${dayIso}-${muscleId}`)
@@ -1550,10 +1535,6 @@ function ExercisePanel({ muscleId, dayIso, originRect, onClose, cycleId }) {
     try {
       const raw = localStorage.getItem(setCountKey)
       if (raw) setSetCounts(JSON.parse(raw))
-    } catch (_) {}
-    try {
-      const name = localStorage.getItem(pk(`custom-${muscleId}`))
-      if (name) setCustomName(name)
     } catch (_) {}
   }, [storageKey, weightKey, setCountKey, muscleId])
 
@@ -1883,100 +1864,26 @@ function ExercisePanel({ muscleId, dayIso, originRect, onClose, cycleId }) {
             />
           ))}
 
-          {/* Custom exercise slot */}
+          {/* + ADD MOVE — opens the PickerSheet so the user can pick
+              additional exercises mid-session. No more bespoke custom-
+              move text input; the picker's own custom-exercise input
+              handles user-typed names. */}
           <li style={{ listStyle: 'none', animation: 'focus-content-in 250ms 470ms ease-out both' }}>
-            {customName && !editingCustom ? (
-              <ExerciseRow
-                key={customName}
-                name={customName}
-                index={4}
-                sets={Array.from({ length: setCounts[customName] ?? 2 }, (_, si) => ({
-                  reps: (reps[customName] || [])[si] ?? 0,
-                  weight: (weights[customName] || [])[si] ?? 0,
-                }))}
-                ghostSets={Array.from({ length: setCounts[customName] ?? 2 }, (_, si) => ({
-                  weight: (priorData[customName]?.weight || [])[si] ?? 0,
-                  reps:   (priorData[customName]?.reps   || [])[si] ?? 0,
-                }))}
-                onOpen={(rect, setIndex) => openExercise(customName, rect, setIndex)}
-                onAddSet={() => setSetCounts((prev) => {
-                  const next = { ...prev, [customName]: (prev[customName] ?? 2) + 1 }
-                  try { localStorage.setItem(setCountKey, JSON.stringify(next)) } catch (_) {}
-                  return next
-                })}
-                onDeleteSet={() => {
-                  const current = setCounts[customName] ?? 2
-                  if (current <= 1) return
-                  const next = current - 1
-                  setSetCounts((prev) => {
-                    const updated = { ...prev, [customName]: next }
-                    try { localStorage.setItem(setCountKey, JSON.stringify(updated)) } catch (_) {}
-                    return updated
-                  })
-                  setReps((prev) => {
-                    const arr = [...(prev[customName] || [])].slice(0, next)
-                    const updated = { ...prev, [customName]: arr }
-                    try { localStorage.setItem(storageKey, JSON.stringify(updated)) } catch (_) {}
-                    return updated
-                  })
-                  setWeights((prev) => {
-                    const arr = [...(prev[customName] || [])].slice(0, next)
-                    const updated = { ...prev, [customName]: arr }
-                    try { localStorage.setItem(weightKey, JSON.stringify(updated)) } catch (_) {}
-                    return updated
-                  })
-                }}
-              />
-            ) : editingCustom ? (
-              <div className="flex items-center gap-4 py-4 border-b" style={{ borderColor: 'rgba(212,24,31,0.6)', paddingLeft: '8px' }}>
-                <span className="font-display shrink-0 leading-none"
-                  style={{ fontSize: 'clamp(1.4rem, 3vw, 2.2rem)', color: '#e4b022', textShadow: '2px 2px 0 #8a6612', minWidth: '2.5rem' }}>
-                  05
-                </span>
-                <CustomMoveInput
-                  value={draftName}
-                  onChange={setDraftName}
-                  onCharAdded={() => {
-                    setShaking(false)
-                    requestAnimationFrame(() => setShaking(true))
-                    setTimeout(() => setShaking(false), 300)
-                  }}
-                  onConfirm={() => {
-                    const val = draftName.trim()
-                    if (val) {
-                      setCustomName(val)
-                      try { localStorage.setItem(pk(`custom-${muscleId}`), val) } catch (_) {}
-                    }
-                    setEditingCustom(false)
-                  }}
-                  onCancel={() => setEditingCustom(false)}
-                />
-              </div>
-            ) : (
-              <div
-                className="flex items-center gap-4 py-4 border-b cursor-pointer"
-                style={{ borderColor: 'rgba(58,58,66,0.3)', paddingLeft: '8px' }}
-                onClick={() => { setDraftName(customName); setEditingCustom(true) }}
-              >
-                <span className="font-display shrink-0 leading-none"
-                  style={{ fontSize: 'clamp(1.4rem, 3vw, 2.2rem)', color: '#3a3a42', minWidth: '2.5rem' }}>
-                  05
-                </span>
-                <span className="font-display leading-none"
-                  style={{ fontSize: 'clamp(1.4rem, 3.5vw, 2.8rem)', color: '#3a3a42' }}>
-                  + CUSTOM MOVE
-                </span>
-              </div>
-            )}
-            {customName && !editingCustom && (
-              <button
-                type="button"
-                onClick={() => { setDraftName(customName); setEditingCustom(true) }}
-                className="font-mono text-[8px] tracking-[0.3em] uppercase text-gtl-smoke hover:text-gtl-red transition-colors mt-1 ml-2"
-              >
-                ✎ RENAME
-              </button>
-            )}
+            <button
+              type="button"
+              onClick={() => onAddMove && onAddMove()}
+              className="flex items-center gap-4 py-4 border-b cursor-pointer w-full text-left"
+              style={{ borderColor: 'rgba(58,58,66,0.3)', paddingLeft: '8px', background: 'transparent', border: 'none', borderBottom: '1px solid rgba(58,58,66,0.3)' }}
+            >
+              <span className="font-display shrink-0 leading-none"
+                style={{ fontSize: 'clamp(1.4rem, 3vw, 2.2rem)', color: '#d4181f', textShadow: '2px 2px 0 #8a0e14', minWidth: '2.5rem' }}>
+                +
+              </span>
+              <span className="font-display leading-none"
+                style={{ fontSize: 'clamp(1.4rem, 3.5vw, 2.8rem)', color: '#d4181f' }}>
+                ADD MOVE
+              </span>
+            </button>
           </li>
         </ol>
 
@@ -2875,6 +2782,7 @@ export default function ActiveMuscleExercisePage() {
         originRect={null}
         cycleId={cycleId}
         onClose={() => router.back()}
+        onAddMove={() => { setPickerDismissed(false); setPickerOpen(true) }}
       />
       {pickerOpen && (
         <PickerSheet
