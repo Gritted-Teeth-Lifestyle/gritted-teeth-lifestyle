@@ -37,52 +37,58 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { searchExercises } from '../../lib/exerciseLibrary'
 import { MUSCLE_KANJI, MUSCLE_LABEL, muscleGroupLabel } from '../../lib/attuneGroups'
 
-// Compact vertical rolodex for the target-filter selection. Mirrors the
-// active-page rolodex (active/page.js:2810-2871): scrollable list with
-// a fixed "active line" in the middle of the container, --rolodex-t CSS
-// var per row driven by scroll position, snap-on-scroll-end. The
-// centered row IS the active selection — parent reads `selectedKey`.
-const ROLODEX_ROW_H = 30
-const ROLODEX_VISIBLE_ROWS = 3
-const ROLODEX_HEIGHT = ROLODEX_ROW_H * ROLODEX_VISIBLE_ROWS
-const ROLODEX_ACTIVE_Y = ROLODEX_ROW_H * Math.floor(ROLODEX_VISIBLE_ROWS / 2)
-const ROLODEX_PHANTOM = ROLODEX_ACTIVE_Y  // matches active-line offset
+// Compact horizontal rolodex for the target-filter selection. Mirrors
+// the vertical active-page rolodex (active/page.js:2810-2871) flipped
+// onto the X axis: a single-row strip with a fixed "active line" at
+// the container's horizontal center, --rolodex-t CSS var per entry
+// driven by scroll position, snap-on-scroll-end. The entry that lands
+// at center IS the active selection.
+const ROLODEX_HEIGHT = 38
+const ROLODEX_ENTRY_W = 108  // wide enough for the longest label ("HAMSTRINGS")
 const ROLODEX_SNAP_MS = 80
 
 function MuscleRolodex({ entries, selectedKey, onSelect }) {
   const containerRef = useRef(null)
 
-  // Update --rolodex-t per row + snap-to-nearest on scroll-end.
+  // Update --rolodex-t per entry + snap-to-nearest on scroll-end.
   useEffect(() => {
     const container = containerRef.current
     if (!container) return
     let snapTimer = null
 
     const update = () => {
-      const rows = container.querySelectorAll('[data-rolodex-key]')
-      rows.forEach((row) => {
-        const dist = Math.abs(row.offsetTop - container.scrollTop - ROLODEX_ACTIVE_Y)
-        const t = Math.max(0, Math.min(1, 1 - dist / ROLODEX_ROW_H))
-        row.style.setProperty('--rolodex-t', String(t))
-        if (t >= 0.9) row.setAttribute('data-rolodex-centered', '')
-        else row.removeAttribute('data-rolodex-centered')
+      const rect = container.getBoundingClientRect()
+      const activeX = rect.left + rect.width / 2
+      const nodes = container.querySelectorAll('[data-rolodex-key]')
+      nodes.forEach((node) => {
+        const nrect = node.getBoundingClientRect()
+        const center = nrect.left + nrect.width / 2
+        const dist = Math.abs(center - activeX)
+        const t = Math.max(0, Math.min(1, 1 - dist / ROLODEX_ENTRY_W))
+        node.style.setProperty('--rolodex-t', String(t))
+        if (t >= 0.9) node.setAttribute('data-rolodex-centered', '')
+        else node.removeAttribute('data-rolodex-centered')
       })
     }
 
     const snap = () => {
-      const rows = container.querySelectorAll('[data-rolodex-key]')
-      let bestRow = null
+      const rect = container.getBoundingClientRect()
+      const activeX = rect.left + rect.width / 2
+      const nodes = container.querySelectorAll('[data-rolodex-key]')
+      let best = null
       let bestDist = Infinity
-      rows.forEach((row) => {
-        const dist = Math.abs(row.offsetTop - container.scrollTop - ROLODEX_ACTIVE_Y)
-        if (dist < bestDist) { bestDist = dist; bestRow = row }
+      nodes.forEach((node) => {
+        const nrect = node.getBoundingClientRect()
+        const center = nrect.left + nrect.width / 2
+        const dist = Math.abs(center - activeX)
+        if (dist < bestDist) { bestDist = dist; best = node }
       })
-      if (!bestRow) return
-      const target = bestRow.offsetTop - ROLODEX_ACTIVE_Y
-      if (Math.abs(container.scrollTop - target) >= 1) {
-        container.scrollTo({ top: target, behavior: 'smooth' })
+      if (!best) return
+      const target = best.offsetLeft + best.offsetWidth / 2 - container.clientWidth / 2
+      if (Math.abs(container.scrollLeft - target) >= 1) {
+        container.scrollTo({ left: target, behavior: 'smooth' })
       }
-      const key = bestRow.getAttribute('data-rolodex-key')
+      const key = best.getAttribute('data-rolodex-key')
       if (key && key !== selectedKey) onSelect(key)
     }
 
@@ -100,18 +106,22 @@ function MuscleRolodex({ entries, selectedKey, onSelect }) {
   }, [entries, selectedKey, onSelect])
 
   // Center the externally-selected entry on selectedKey change. Direct
-  // scrollTop assignment (no scrollBy) per iOS PWA WebKit reliability —
+  // scrollLeft assignment (no scrollBy) per iOS PWA WebKit reliability —
   // see memory feedback_ios_pwa_scrollby_unreliable.md.
   useEffect(() => {
     const container = containerRef.current
     if (!container || !selectedKey) return
     const node = container.querySelector(`[data-rolodex-key="${selectedKey}"]`)
     if (!node) return
-    const target = node.offsetTop - ROLODEX_ACTIVE_Y
-    if (Math.abs(container.scrollTop - target) > 1) {
-      container.scrollTop = target
+    const target = node.offsetLeft + node.offsetWidth / 2 - container.clientWidth / 2
+    if (Math.abs(container.scrollLeft - target) > 1) {
+      container.scrollLeft = target
     }
   }, [selectedKey])
+
+  // Spacer width = (entry_width / 2) at minimum so the first/last entries
+  // can scroll to center. Using a flex pseudo-spacer at each end.
+  const spacerWidth = ROLODEX_ENTRY_W / 2 + 16
 
   return (
     <div
@@ -119,29 +129,36 @@ function MuscleRolodex({ entries, selectedKey, onSelect }) {
       style={{
         position: 'relative',
         height: ROLODEX_HEIGHT,
-        overflowY: 'auto',
-        overflowX: 'hidden',
+        width: '100%',
+        overflowX: 'auto',
+        overflowY: 'hidden',
         WebkitOverflowScrolling: 'touch',
-        overscrollBehaviorY: 'contain',
-        touchAction: 'pan-y',
-        paddingTop: ROLODEX_PHANTOM,
-        paddingBottom: ROLODEX_PHANTOM,
-        // Soft fade at top/bottom so off-center rows feel "out of frame"
-        // instead of cropped at a hard edge.
-        maskImage: 'linear-gradient(to bottom, transparent 0%, black 30%, black 70%, transparent 100%)',
-        WebkitMaskImage: 'linear-gradient(to bottom, transparent 0%, black 30%, black 70%, transparent 100%)',
+        overscrollBehaviorX: 'contain',
+        touchAction: 'pan-x',
+        display: 'flex',
+        alignItems: 'center',
+        // Hide native scrollbar — drag is the affordance.
+        scrollbarWidth: 'none',
+        // Soft fade at left/right so off-center entries feel "out of frame".
+        maskImage: 'linear-gradient(to right, transparent 0%, black 25%, black 75%, transparent 100%)',
+        WebkitMaskImage: 'linear-gradient(to right, transparent 0%, black 25%, black 75%, transparent 100%)',
       }}
     >
+      {/* Leading spacer — lets the first entry scroll to dead center. */}
+      <div style={{ flex: '0 0 auto', width: spacerWidth }} />
       {entries.map((e) => (
         <div
           key={e.key}
           data-rolodex-key={e.key}
           onClick={() => onSelect(e.key)}
           style={{
-            height: ROLODEX_ROW_H,
+            flex: '0 0 auto',
+            width: ROLODEX_ENTRY_W,
+            height: ROLODEX_HEIGHT,
             display: 'flex',
             alignItems: 'center',
-            gap: 8,
+            justifyContent: 'center',
+            gap: 6,
             cursor: 'pointer',
             opacity: 'calc(0.35 + 0.65 * var(--rolodex-t, 0))',
             transition: 'opacity 100ms linear',
@@ -150,6 +167,7 @@ function MuscleRolodex({ entries, selectedKey, onSelect }) {
             letterSpacing: '0.12em',
             color: '#d8d2c2',
             fontWeight: 700,
+            whiteSpace: 'nowrap',
           }}
         >
           <span style={{
@@ -162,6 +180,8 @@ function MuscleRolodex({ entries, selectedKey, onSelect }) {
           <span style={{ textTransform: 'uppercase' }}>{e.label}</span>
         </div>
       ))}
+      {/* Trailing spacer — same idea for the last entry. */}
+      <div style={{ flex: '0 0 auto', width: spacerWidth }} />
     </div>
   )
 }
