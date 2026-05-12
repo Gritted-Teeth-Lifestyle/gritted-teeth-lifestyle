@@ -171,7 +171,10 @@ function MuscleRolodex({ entries, selectedKey, onSelect }) {
         // mask is dropped so end entries aren't dimmed for no reason.
         maskImage: overflows ? 'linear-gradient(to right, transparent 0%, black 25%, black 75%, transparent 100%)' : 'none',
         WebkitMaskImage: overflows ? 'linear-gradient(to right, transparent 0%, black 25%, black 75%, transparent 100%)' : 'none',
-        justifyContent: overflows ? 'flex-start' : 'center',
+        // Anchor non-overflowing contents to the left so the muscle row
+        // sits flush against the title chip column instead of floating
+        // in the middle of the stretched flex:1 container.
+        justifyContent: 'flex-start',
       }}
     >
       {/* Leading spacer — only when content overflows; lets the first
