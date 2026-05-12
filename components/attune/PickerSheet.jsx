@@ -145,25 +145,16 @@ function MuscleRolodex({ entries, selectedKey, onSelect }) {
             cursor: 'pointer',
             opacity: 'calc(0.35 + 0.65 * var(--rolodex-t, 0))',
             transition: 'opacity 100ms linear',
-            paddingLeft: e.indent ? '1rem' : 0,
-            ...(e.kind === 'group' ? {
-              fontFamily: 'var(--font-display, Anton, sans-serif)',
-              fontSize: '1rem',
-              letterSpacing: '0.18em',
-              color: '#d4181f',
-              fontWeight: 700,
-            } : {
-              fontFamily: 'inherit',
-              fontSize: '0.78rem',
-              letterSpacing: '0.12em',
-              color: '#d8d2c2',
-              fontWeight: 700,
-            }),
+            fontFamily: 'inherit',
+            fontSize: '0.78rem',
+            letterSpacing: '0.12em',
+            color: '#d8d2c2',
+            fontWeight: 700,
           }}
         >
           <span style={{
             fontFamily: '"Noto Serif JP", "Yu Mincho", serif',
-            fontSize: e.kind === 'group' ? '1.2rem' : '0.95rem',
+            fontSize: '0.95rem',
             lineHeight: 1,
           }}>
             {e.kanji}
@@ -231,71 +222,81 @@ export default function PickerSheet({
   // it absorbs.
   const { titles } = useMemo(() => muscleGroupLabel(dayMuscles), [dayMuscles])
 
-  // Flat rolodex entries: per title, push the title row first, then its
-  // covered muscle rows (indented). Day-only muscles outside any title
-  // append at the bottom, no indent. Each entry has a stable key so the
-  // rolodex's centered-row tracker can resolve back to a filter.
+  // Title chips sit BESIDE the rolodex, not inside it. Each title can be
+  // tapped to select the group filter (widens search to every muscle in
+  // its covers). The rolodex only carries muscle rows.
+  const titleChips = useMemo(
+    () => titles.map((t) => ({
+      key: `group:${t.label}`,
+      kanji: t.kanji,
+      label: t.label,
+      muscles: t.covers,
+    })),
+    [titles],
+  )
+
+  // Rolodex entries — muscles only. Ordered: title-covered muscles first
+  // (in title order), then any remainder muscles outside the titles.
   const entries = useMemo(() => {
     const out = []
-    const covered = new Set()
+    const seen = new Set()
     for (const t of titles) {
-      out.push({
-        key: `group:${t.label}`,
-        kanji: t.kanji,
-        label: t.label,
-        kind: 'group',
-        muscles: t.covers,
-      })
       for (const m of t.covers) {
+        if (seen.has(m)) continue
         out.push({
           key: `muscle:${m}`,
           kanji: MUSCLE_KANJI[m] || '·',
           label: MUSCLE_LABEL[m] || m.toUpperCase(),
           kind: 'muscle',
-          indent: true,
           muscleId: m,
         })
-        covered.add(m)
+        seen.add(m)
       }
     }
     for (const m of dayMuscles) {
-      if (covered.has(m)) continue
+      if (seen.has(m)) continue
       out.push({
         key: `muscle:${m}`,
         kanji: MUSCLE_KANJI[m] || '·',
         label: MUSCLE_LABEL[m] || m.toUpperCase(),
         kind: 'muscle',
-        indent: false,
         muscleId: m,
       })
+      seen.add(m)
     }
     return out
   }, [titles, dayMuscles])
 
-  // Which rolodex row is currently centered (= active filter).
+  // Active filter for the exercise list. Either a `group:<label>` chip
+  // tap or a `muscle:<id>` rolodex centering sets this. Default on day
+  // change: first title if any, else first muscle.
   const [selectedKey, setSelectedKey] = useState(null)
   useEffect(() => {
-    // Reset when the day's entries change (e.g., sourceDayId switch).
-    if (entries.length === 0) { setSelectedKey(null); return }
-    if (!entries.find((e) => e.key === selectedKey)) {
-      setSelectedKey(entries[0].key)
+    if (titleChips.length === 0 && entries.length === 0) {
+      setSelectedKey(null)
+      return
+    }
+    const allKeys = [...titleChips.map((t) => t.key), ...entries.map((e) => e.key)]
+    if (!allKeys.includes(selectedKey)) {
+      setSelectedKey(titleChips[0]?.key || entries[0].key)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [entries])
-
-  const selectedEntry = useMemo(
-    () => entries.find((e) => e.key === selectedKey) || null,
-    [entries, selectedKey],
-  )
+  }, [titleChips, entries])
 
   // Derived filter the exercise query uses.
   const selectedFilter = useMemo(() => {
-    if (!selectedEntry) return null
-    if (selectedEntry.kind === 'group') {
-      return { kind: 'group', label: selectedEntry.label, kanji: selectedEntry.kanji, muscles: selectedEntry.muscles }
+    if (!selectedKey) return null
+    if (selectedKey.startsWith('group:')) {
+      const t = titleChips.find((x) => x.key === selectedKey)
+      if (!t) return null
+      return { kind: 'group', label: t.label, kanji: t.kanji, muscles: t.muscles }
     }
-    return { kind: 'muscle', id: selectedEntry.muscleId }
-  }, [selectedEntry])
+    if (selectedKey.startsWith('muscle:')) {
+      const m = selectedKey.slice('muscle:'.length)
+      return { kind: 'muscle', id: m }
+    }
+    return null
+  }, [selectedKey, titleChips])
 
   const exercises = useMemo(() => {
     if (!selectedFilter) return []
@@ -412,9 +413,16 @@ export default function PickerSheet({
             borderRadius: 2,
           }} />
         </div>
-        {/* Header: compact target-filter rolodex + close button. Vertical
-            scroll-snap rolodex shows ~3 rows; the centered row IS the
-            active filter. Mirrors the active-page rolodex pattern. */}
+        {/* Header — three columns:
+            (1) Group title chip(s) — UPPER / LOWER / ARMS / FULL BODY,
+                tappable; selecting one widens the exercise list to every
+                muscle in its covers.
+            (2) Compact muscle rolodex — vertical scroll-snap, ~3 rows
+                visible; centering a row narrows the search to that muscle.
+            (3) Close button.
+
+            Title chips sit BESIDE the rolodex (not above), and titles are
+            never rolodex rows themselves. */}
         <div style={{
           display: 'flex',
           alignItems: 'center',
@@ -423,6 +431,52 @@ export default function PickerSheet({
           borderBottom: '1px solid #2a2a30',
           gap: '0.75rem',
         }}>
+          {/* Title chips column — empty when day has no group titles. */}
+          {titleChips.length > 0 && (
+            <div style={{
+              display: 'flex', flexDirection: 'column',
+              gap: '0.25rem',
+              flexShrink: 0,
+              alignSelf: 'center',
+            }}>
+              {titleChips.map((t) => {
+                const active = selectedKey === t.key
+                return (
+                  <button
+                    key={t.key}
+                    type="button"
+                    onClick={() => setSelectedKey(t.key)}
+                    style={{
+                      background: 'transparent', border: 'none',
+                      textAlign: 'left',
+                      padding: '0.1rem 0',
+                      cursor: 'pointer',
+                      fontFamily: 'var(--font-display, Anton, sans-serif)',
+                      fontSize: '1rem',
+                      letterSpacing: '0.16em',
+                      textTransform: 'uppercase',
+                      color: active ? '#ff2a36' : '#d4181f',
+                      textShadow: active ? '0 0 8px rgba(255,42,54,0.55)' : 'none',
+                      fontWeight: active ? 900 : 700,
+                      opacity: active ? 1 : 0.7,
+                      display: 'inline-flex', alignItems: 'baseline', gap: 6,
+                    }}
+                  >
+                    <span style={{
+                      fontFamily: '"Noto Serif JP", "Yu Mincho", serif',
+                      fontSize: '1.15rem',
+                      lineHeight: 1,
+                    }}>
+                      {t.kanji}
+                    </span>
+                    <span>{t.label}</span>
+                  </button>
+                )
+              })}
+            </div>
+          )}
+
+          {/* Rolodex column — flexes to fill remaining width. */}
           <div style={{ flex: 1, minWidth: 0 }}>
             <MuscleRolodex
               entries={entries}
@@ -430,6 +484,7 @@ export default function PickerSheet({
               onSelect={setSelectedKey}
             />
           </div>
+
           <button
             type="button"
             aria-label="close"
