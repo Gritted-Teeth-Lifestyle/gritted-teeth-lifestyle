@@ -37,6 +37,144 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { searchExercises } from '../../lib/exerciseLibrary'
 import { MUSCLE_KANJI, MUSCLE_LABEL, muscleGroupLabel } from '../../lib/attuneGroups'
 
+// Compact vertical rolodex for the target-filter selection. Mirrors the
+// active-page rolodex (active/page.js:2810-2871): scrollable list with
+// a fixed "active line" in the middle of the container, --rolodex-t CSS
+// var per row driven by scroll position, snap-on-scroll-end. The
+// centered row IS the active selection — parent reads `selectedKey`.
+const ROLODEX_ROW_H = 30
+const ROLODEX_VISIBLE_ROWS = 3
+const ROLODEX_HEIGHT = ROLODEX_ROW_H * ROLODEX_VISIBLE_ROWS
+const ROLODEX_ACTIVE_Y = ROLODEX_ROW_H * Math.floor(ROLODEX_VISIBLE_ROWS / 2)
+const ROLODEX_PHANTOM = ROLODEX_ACTIVE_Y  // matches active-line offset
+const ROLODEX_SNAP_MS = 80
+
+function MuscleRolodex({ entries, selectedKey, onSelect }) {
+  const containerRef = useRef(null)
+
+  // Update --rolodex-t per row + snap-to-nearest on scroll-end.
+  useEffect(() => {
+    const container = containerRef.current
+    if (!container) return
+    let snapTimer = null
+
+    const update = () => {
+      const rows = container.querySelectorAll('[data-rolodex-key]')
+      rows.forEach((row) => {
+        const dist = Math.abs(row.offsetTop - container.scrollTop - ROLODEX_ACTIVE_Y)
+        const t = Math.max(0, Math.min(1, 1 - dist / ROLODEX_ROW_H))
+        row.style.setProperty('--rolodex-t', String(t))
+        if (t >= 0.9) row.setAttribute('data-rolodex-centered', '')
+        else row.removeAttribute('data-rolodex-centered')
+      })
+    }
+
+    const snap = () => {
+      const rows = container.querySelectorAll('[data-rolodex-key]')
+      let bestRow = null
+      let bestDist = Infinity
+      rows.forEach((row) => {
+        const dist = Math.abs(row.offsetTop - container.scrollTop - ROLODEX_ACTIVE_Y)
+        if (dist < bestDist) { bestDist = dist; bestRow = row }
+      })
+      if (!bestRow) return
+      const target = bestRow.offsetTop - ROLODEX_ACTIVE_Y
+      if (Math.abs(container.scrollTop - target) >= 1) {
+        container.scrollTo({ top: target, behavior: 'smooth' })
+      }
+      const key = bestRow.getAttribute('data-rolodex-key')
+      if (key && key !== selectedKey) onSelect(key)
+    }
+
+    const onScroll = () => {
+      update()
+      if (snapTimer) clearTimeout(snapTimer)
+      snapTimer = setTimeout(snap, ROLODEX_SNAP_MS)
+    }
+    update()
+    container.addEventListener('scroll', onScroll, { passive: true })
+    return () => {
+      container.removeEventListener('scroll', onScroll)
+      if (snapTimer) clearTimeout(snapTimer)
+    }
+  }, [entries, selectedKey, onSelect])
+
+  // Center the externally-selected entry on selectedKey change. Direct
+  // scrollTop assignment (no scrollBy) per iOS PWA WebKit reliability —
+  // see memory feedback_ios_pwa_scrollby_unreliable.md.
+  useEffect(() => {
+    const container = containerRef.current
+    if (!container || !selectedKey) return
+    const node = container.querySelector(`[data-rolodex-key="${selectedKey}"]`)
+    if (!node) return
+    const target = node.offsetTop - ROLODEX_ACTIVE_Y
+    if (Math.abs(container.scrollTop - target) > 1) {
+      container.scrollTop = target
+    }
+  }, [selectedKey])
+
+  return (
+    <div
+      ref={containerRef}
+      style={{
+        position: 'relative',
+        height: ROLODEX_HEIGHT,
+        overflowY: 'auto',
+        overflowX: 'hidden',
+        WebkitOverflowScrolling: 'touch',
+        overscrollBehaviorY: 'contain',
+        touchAction: 'pan-y',
+        paddingTop: ROLODEX_PHANTOM,
+        paddingBottom: ROLODEX_PHANTOM,
+        // Soft fade at top/bottom so off-center rows feel "out of frame"
+        // instead of cropped at a hard edge.
+        maskImage: 'linear-gradient(to bottom, transparent 0%, black 30%, black 70%, transparent 100%)',
+        WebkitMaskImage: 'linear-gradient(to bottom, transparent 0%, black 30%, black 70%, transparent 100%)',
+      }}
+    >
+      {entries.map((e) => (
+        <div
+          key={e.key}
+          data-rolodex-key={e.key}
+          onClick={() => onSelect(e.key)}
+          style={{
+            height: ROLODEX_ROW_H,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            cursor: 'pointer',
+            opacity: 'calc(0.35 + 0.65 * var(--rolodex-t, 0))',
+            transition: 'opacity 100ms linear',
+            paddingLeft: e.indent ? '1rem' : 0,
+            ...(e.kind === 'group' ? {
+              fontFamily: 'var(--font-display, Anton, sans-serif)',
+              fontSize: '1rem',
+              letterSpacing: '0.18em',
+              color: '#d4181f',
+              fontWeight: 700,
+            } : {
+              fontFamily: 'inherit',
+              fontSize: '0.78rem',
+              letterSpacing: '0.12em',
+              color: '#d8d2c2',
+              fontWeight: 700,
+            }),
+          }}
+        >
+          <span style={{
+            fontFamily: '"Noto Serif JP", "Yu Mincho", serif',
+            fontSize: e.kind === 'group' ? '1.2rem' : '0.95rem',
+            lineHeight: 1,
+          }}>
+            {e.kanji}
+          </span>
+          <span style={{ textTransform: 'uppercase' }}>{e.label}</span>
+        </div>
+      ))}
+    </div>
+  )
+}
+
 export default function PickerSheet({
   sourceDayId,
   selectedDayIds,
@@ -93,51 +231,78 @@ export default function PickerSheet({
   // it absorbs.
   const { titles } = useMemo(() => muscleGroupLabel(dayMuscles), [dayMuscles])
 
-  // Picker filter sections, each a {title, muscles} pair. Title is null
-  // for the leftover-remainder section (muscles outside any title).
-  // Each title section's title row is selectable AND each muscle row under
-  // it is selectable. Single-select across all sections.
-  const sections = useMemo(() => {
+  // Flat rolodex entries: per title, push the title row first, then its
+  // covered muscle rows (indented). Day-only muscles outside any title
+  // append at the bottom, no indent. Each entry has a stable key so the
+  // rolodex's centered-row tracker can resolve back to a filter.
+  const entries = useMemo(() => {
     const out = []
     const covered = new Set()
     for (const t of titles) {
-      out.push({ title: t, muscles: t.covers })
-      for (const m of t.covers) covered.add(m)
+      out.push({
+        key: `group:${t.label}`,
+        kanji: t.kanji,
+        label: t.label,
+        kind: 'group',
+        muscles: t.covers,
+      })
+      for (const m of t.covers) {
+        out.push({
+          key: `muscle:${m}`,
+          kanji: MUSCLE_KANJI[m] || '·',
+          label: MUSCLE_LABEL[m] || m.toUpperCase(),
+          kind: 'muscle',
+          indent: true,
+          muscleId: m,
+        })
+        covered.add(m)
+      }
     }
-    const remainder = dayMuscles.filter((m) => !covered.has(m))
-    if (remainder.length > 0) out.push({ title: null, muscles: remainder })
+    for (const m of dayMuscles) {
+      if (covered.has(m)) continue
+      out.push({
+        key: `muscle:${m}`,
+        kanji: MUSCLE_KANJI[m] || '·',
+        label: MUSCLE_LABEL[m] || m.toUpperCase(),
+        kind: 'muscle',
+        indent: false,
+        muscleId: m,
+      })
+    }
     return out
   }, [titles, dayMuscles])
 
-  // Selected filter — either a title (group) or an individual muscle.
-  //   { kind: 'group', label: 'UPPER', muscles: [...] }
-  //   { kind: 'muscle', id: 'chest' }
-  // Default on mount / sourceDayId change: first title if it exists,
-  // otherwise the first individual muscle. Null when day has no muscles.
-  const [selectedFilter, setSelectedFilter] = useState(null)
+  // Which rolodex row is currently centered (= active filter).
+  const [selectedKey, setSelectedKey] = useState(null)
   useEffect(() => {
-    if (titles.length > 0) {
-      const t = titles[0]
-      setSelectedFilter({ kind: 'group', label: t.label, kanji: t.kanji, muscles: t.covers })
-    } else if (dayMuscles.length > 0) {
-      setSelectedFilter({ kind: 'muscle', id: dayMuscles[0] })
-    } else {
-      setSelectedFilter(null)
+    // Reset when the day's entries change (e.g., sourceDayId switch).
+    if (entries.length === 0) { setSelectedKey(null); return }
+    if (!entries.find((e) => e.key === selectedKey)) {
+      setSelectedKey(entries[0].key)
     }
-    // sourceDayId churn re-derives titles + dayMuscles upstream; resetting
-    // on those deps keeps the picker in sync when the user switches days.
-  }, [sourceDayId, titles, dayMuscles])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [entries])
 
-  // Filter helpers for row-highlight logic.
-  const isFilterMuscle = (id) => selectedFilter?.kind === 'muscle' && selectedFilter.id === id
-  const isFilterGroup  = (label) => selectedFilter?.kind === 'group' && selectedFilter.label === label
+  const selectedEntry = useMemo(
+    () => entries.find((e) => e.key === selectedKey) || null,
+    [entries, selectedKey],
+  )
+
+  // Derived filter the exercise query uses.
+  const selectedFilter = useMemo(() => {
+    if (!selectedEntry) return null
+    if (selectedEntry.kind === 'group') {
+      return { kind: 'group', label: selectedEntry.label, kanji: selectedEntry.kanji, muscles: selectedEntry.muscles }
+    }
+    return { kind: 'muscle', id: selectedEntry.muscleId }
+  }, [selectedEntry])
 
   const exercises = useMemo(() => {
     if (!selectedFilter) return []
     if (selectedFilter.kind === 'muscle') {
       return searchExercises(selectedFilter.id, query)
     }
-    // Group: union searchExercises across each muscle in the group; dedup by id.
+    // Group: union searchExercises across each muscle; dedup by id.
     const seen = new Set()
     const out = []
     for (const m of selectedFilter.muscles) {
@@ -247,96 +412,23 @@ export default function PickerSheet({
             borderRadius: 2,
           }} />
         </div>
-        {/* Header: close button + selectable filter rows. Title rows
-            (UPPER / LOWER / ARMS / FULL BODY) sit above their muscle
-            children; each row is plain text, single-select, highlighted
-            red when active. Tapping a title widens the exercise list to
-            every muscle in the group; tapping a muscle narrows to it. */}
+        {/* Header: compact target-filter rolodex + close button. Vertical
+            scroll-snap rolodex shows ~3 rows; the centered row IS the
+            active filter. Mirrors the active-page rolodex pattern. */}
         <div style={{
           display: 'flex',
-          alignItems: 'flex-start',
+          alignItems: 'center',
           justifyContent: 'space-between',
-          padding: '0.4rem 0.75rem 0.5rem',
+          padding: '0.2rem 0.75rem 0.4rem',
           borderBottom: '1px solid #2a2a30',
           gap: '0.75rem',
         }}>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.1rem', flex: 1, minWidth: 0 }}>
-            {sections.map((section, si) => (
-              <div key={si} style={{ display: 'flex', flexDirection: 'column' }}>
-                {section.title && (() => {
-                  const active = isFilterGroup(section.title.label)
-                  return (
-                    <button
-                      type="button"
-                      onClick={() => setSelectedFilter({
-                        kind: 'group',
-                        label: section.title.label,
-                        kanji: section.title.kanji,
-                        muscles: section.muscles,
-                      })}
-                      style={{
-                        background: 'transparent', border: 'none',
-                        textAlign: 'left',
-                        padding: '0.15rem 0',
-                        cursor: 'pointer',
-                        fontFamily: 'var(--font-display, Anton, sans-serif)',
-                        fontSize: '1rem',
-                        letterSpacing: '0.18em',
-                        textTransform: 'uppercase',
-                        color: active ? '#ff2a36' : '#d4181f',
-                        textShadow: active ? '0 0 6px rgba(255,42,54,0.45)' : 'none',
-                        fontWeight: active ? 900 : 700,
-                        display: 'inline-flex', alignItems: 'baseline', gap: 8,
-                      }}
-                    >
-                      <span style={{
-                        fontFamily: '"Noto Serif JP", "Yu Mincho", serif',
-                        fontSize: '1.2rem',
-                        lineHeight: 1,
-                      }}>
-                        {section.title.kanji}
-                      </span>
-                      <span>{section.title.label}</span>
-                    </button>
-                  )
-                })()}
-                {section.muscles.map((m) => {
-                  const active = isFilterMuscle(m)
-                  return (
-                    <button
-                      key={m}
-                      type="button"
-                      onClick={() => setSelectedFilter({ kind: 'muscle', id: m })}
-                      style={{
-                        background: 'transparent', border: 'none',
-                        textAlign: 'left',
-                        // Slight indent only when there's a title above the muscle row.
-                        paddingLeft: section.title ? '1rem' : 0,
-                        padding: section.title ? '0.1rem 0 0.1rem 1rem' : '0.1rem 0',
-                        cursor: 'pointer',
-                        fontFamily: 'inherit',
-                        fontSize: '0.75rem',
-                        letterSpacing: '0.12em',
-                        textTransform: 'uppercase',
-                        color: active ? '#ff2a36' : '#a8a39a',
-                        textShadow: active ? '0 0 6px rgba(255,42,54,0.4)' : 'none',
-                        fontWeight: active ? 900 : 600,
-                        display: 'inline-flex', alignItems: 'baseline', gap: 6,
-                      }}
-                    >
-                      <span style={{
-                        fontFamily: '"Noto Serif JP", "Yu Mincho", serif',
-                        fontSize: '0.9rem',
-                        lineHeight: 1,
-                      }}>
-                        {MUSCLE_KANJI[m]}
-                      </span>
-                      <span>{MUSCLE_LABEL[m] || m.toUpperCase()}</span>
-                    </button>
-                  )
-                })}
-              </div>
-            ))}
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <MuscleRolodex
+              entries={entries}
+              selectedKey={selectedKey}
+              onSelect={setSelectedKey}
+            />
           </div>
           <button
             type="button"
