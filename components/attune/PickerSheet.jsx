@@ -393,23 +393,26 @@ export default function PickerSheet({
     // Sort library entries by notoriety so iconic lifts (BENCH PRESS,
     // SQUAT, DEADLIFT, etc.) surface at the top of each muscle / group
     // result set. Alphabetical tiebreak.
-    out.sort(byNotoriety)
+    return out.sort(byNotoriety)
+  }, [selectedFilter, query])
 
-    // Custom exercises the user previously typed for this filter's
-    // muscle(s) — surface them ABOVE the library list so they're easy
-    // to re-pick. Synthesized as fake exercise entries with isCustom
-    // tag so the row render can flag them visually.
+  // Custom exercises the user previously typed for this filter's
+  // muscle(s) — surface them ABOVE the library list so they're easy
+  // to re-pick. Computed on every render (NOT memoized) so a name
+  // just added via + appears immediately — the custom store isn't a
+  // reactive source, so memo deps wouldn't catch the change.
+  const customPrepend = (() => {
+    if (!selectedFilter) return []
     const muscleScope = selectedFilter.kind === 'group'
       ? selectedFilter.muscles
       : [selectedFilter.id]
     const customNames = getCustomExercisesForMuscles(muscleScope)
     const q = (query || '').trim().toLowerCase()
-    const customMatching = customNames
+    return customNames
       .filter((n) => !q || n.toLowerCase().includes(q))
       .map((n) => ({ id: n, label: n, isCustom: true }))
-
-    return [...customMatching, ...out]
-  }, [selectedFilter, query])
+  })()
+  const exerciseRows = [...customPrepend, ...exercises]
 
   // sr-only input scrollIntoView fallback (per memory:
   // feedback_ios_pwa_sr_only_input_scroll). Not strictly needed since
@@ -711,12 +714,12 @@ export default function PickerSheet({
               No muscle assigned to this day. Assign one on the schedule first.
             </div>
           )}
-          {selectedFilter && exercises.length === 0 && (
+          {selectedFilter && exerciseRows.length === 0 && (
             <div style={{ color: '#888', fontSize: '0.75rem', padding: '0.5rem' }}>
               No matches.
             </div>
           )}
-          {exercises.map((ex) => {
+          {exerciseRows.map((ex) => {
             const selected = selectedExerciseIds.includes(ex.id)
             return (
               <button
