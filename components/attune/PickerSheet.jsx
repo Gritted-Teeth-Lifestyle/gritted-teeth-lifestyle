@@ -434,7 +434,10 @@ export default function PickerSheet({
         // above stays tappable so the user can add/remove target days
         // while the picker is open.
         position: 'fixed', left: 0, right: 0, bottom: 0,
-        zIndex: 100,
+        // Must sit above ExercisePanel (z 9995) when the picker is
+        // opened from the set-log page's ADD MOVE button. Sits below
+        // RepsPopup / WeightPopup (z 9999) which can stack on top.
+        zIndex: 9998,
         display: 'flex', justifyContent: 'center',
         pointerEvents: 'none',
       }}
