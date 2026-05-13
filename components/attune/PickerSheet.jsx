@@ -827,43 +827,6 @@ export default function PickerSheet({
           </button>
         </form>
 
-        {/* Queued custom exercises — names typed into the input and
-            submitted via + or Enter land here as red chips. Tap × to
-            remove one before ATTUNE commits. */}
-        {(() => {
-          const customQueued = selectedExerciseIds.filter((id) => !getExerciseById(id))
-          if (customQueued.length === 0) return null
-          return (
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.3rem', marginTop: '-0.2rem' }}>
-              {customQueued.map((name) => (
-                <button
-                  key={name}
-                  type="button"
-                  onClick={() => setSelectedExerciseIds((prev) => prev.filter((id) => id !== name))}
-                  style={{
-                    background: '#d4181f',
-                    color: '#fff',
-                    border: '1px solid #ff2a36',
-                    padding: '0.3rem 0.55rem',
-                    fontSize: '0.7rem',
-                    letterSpacing: '0.08em',
-                    textTransform: 'uppercase',
-                    fontFamily: 'inherit',
-                    fontWeight: 700,
-                    cursor: 'pointer',
-                    clipPath: 'polygon(6% 0%, 100% 0%, 94% 100%, 0% 100%)',
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '0.35rem',
-                  }}
-                >
-                  <span>{name}</span>
-                  <span aria-hidden="true" style={{ fontWeight: 900, opacity: 0.85 }}>×</span>
-                </button>
-              ))}
-            </div>
-          )
-        })()}
           </div>
 
           {/* Body-height ATTUNE column — reaches the sheet's bottom
