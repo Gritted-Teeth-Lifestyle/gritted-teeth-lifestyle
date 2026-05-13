@@ -472,28 +472,16 @@ export default function PickerSheet({
           position: 'relative',
           background: '#1a1a1e',
           borderTop: '2px solid #d4181f',
-          // No right padding — the ATTUNE column sits flush against
-          // the sheet's right edge.
-          padding: '0 0 calc(env(safe-area-inset-bottom, 0px)) 0',
+          padding: '1.5rem 0 calc(env(safe-area-inset-bottom, 0px)) 0',
           fontFamily: 'var(--font-display, Anton, sans-serif)',
           color: '#f1eee5',
-          // Two columns: main content on the left, full-height ATTUNE
-          // button on the right.
-          display: 'flex', flexDirection: 'row', gap: 0,
+          // Sheet stacks: header (full-width) → body (two-column).
+          display: 'flex', flexDirection: 'column', gap: '0.6rem',
           boxShadow: '0 -8px 24px rgba(0,0,0,0.6)',
           height: userHeight ? `${userHeight}px` : undefined,
           maxHeight: userHeight ? `${userHeight}px` : undefined,
         }}
       >
-        <div
-          style={{
-            flex: 1,
-            minWidth: 0,
-            position: 'relative',
-            display: 'flex', flexDirection: 'column', gap: '0.6rem',
-            padding: '1.5rem 1rem 1.5rem',
-          }}
-        >
         {/* Drag-resize grabber — 16px hit area at top edge, grey pill affordance. */}
         <div
           onPointerDown={onGrabberPointerDown}
@@ -611,6 +599,27 @@ export default function PickerSheet({
             ×
           </button>
         </div>
+
+        {/* Body — header sits above (full-width); below it the body
+            splits into the main column on the left and the ATTUNE
+            column on the right. The ATTUNE column anchors to the
+            search row's top and reaches the sheet's bottom edge,
+            skipping the header area above. */}
+        <div style={{
+          display: 'flex',
+          flexDirection: 'row',
+          flex: 1,
+          minHeight: 0,
+          gap: 0,
+        }}>
+          <div style={{
+            flex: 1,
+            minWidth: 0,
+            padding: '0 1rem',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '0.6rem',
+          }}>
 
         {/* Search input — iOS PWA keyboard recipe */}
         <form
@@ -770,54 +779,55 @@ export default function PickerSheet({
             +
           </button>
         </form>
-        </div>
+          </div>
 
-        {/* Full-height ATTUNE column — spans the sheet top-to-bottom on
-            the right side. Letters stack vertically and stay UPRIGHT
-            (no per-glyph rotation) via flex-column rendering one
-            letter per row. */}
-        <button
-          type="button"
-          disabled={!canConfirm}
-          onClick={commit}
-          aria-label={canConfirm ? 'attune picks' : 'pick exercises and days'}
-          style={{
-            flexShrink: 0,
-            alignSelf: 'stretch',
-            width: 56,
-            background: '#d4181f',
-            opacity: canConfirm ? 1 : 0.45,
-            color: '#fff',
-            border: 'none',
-            borderLeft: '1px solid #ff2a36',
-            cursor: canConfirm ? 'pointer' : 'default',
-            fontFamily: 'var(--font-display, Anton, sans-serif)',
-            fontWeight: 900,
-            textTransform: 'uppercase',
-            padding: '1.25rem 0',
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: '0.15rem',
-            textShadow: canConfirm ? '0 0 14px rgba(255,42,54,0.55)' : 'none',
-            transition: 'opacity 120ms linear, text-shadow 120ms linear',
-          }}
-        >
-          {'ATTUNE'.split('').map((ch, i) => (
-            <span
-              key={i}
-              style={{
-                fontSize: '1.55rem',
-                lineHeight: 1,
-                letterSpacing: 0,
-                display: 'block',
-              }}
-            >
-              {ch}
-            </span>
-          ))}
-        </button>
+          {/* Body-height ATTUNE column — reaches the sheet's bottom
+              but starts at the body's top (under the header). Letters
+              stack vertically and stay UPRIGHT (no per-glyph rotation)
+              via flex-column rendering one letter per row. */}
+          <button
+            type="button"
+            disabled={!canConfirm}
+            onClick={commit}
+            aria-label={canConfirm ? 'attune picks' : 'pick exercises and days'}
+            style={{
+              flexShrink: 0,
+              alignSelf: 'stretch',
+              width: 56,
+              background: '#d4181f',
+              opacity: canConfirm ? 1 : 0.45,
+              color: '#fff',
+              border: 'none',
+              borderLeft: '1px solid #ff2a36',
+              cursor: canConfirm ? 'pointer' : 'default',
+              fontFamily: 'var(--font-display, Anton, sans-serif)',
+              fontWeight: 900,
+              textTransform: 'uppercase',
+              padding: '1.25rem 0',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '0.15rem',
+              textShadow: canConfirm ? '0 0 14px rgba(255,42,54,0.55)' : 'none',
+              transition: 'opacity 120ms linear, text-shadow 120ms linear',
+            }}
+          >
+            {'ATTUNE'.split('').map((ch, i) => (
+              <span
+                key={i}
+                style={{
+                  fontSize: '1.55rem',
+                  lineHeight: 1,
+                  letterSpacing: 0,
+                  display: 'block',
+                }}
+              >
+                {ch}
+              </span>
+            ))}
+          </button>
+        </div>
       </div>
     </div>
   )
