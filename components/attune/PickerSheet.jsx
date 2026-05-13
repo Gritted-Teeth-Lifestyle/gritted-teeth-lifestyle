@@ -253,7 +253,9 @@ export default function PickerSheet({
 
   const onGrabberPointerDown = (e) => {
     e.preventDefault()
-    const sheet = e.currentTarget.parentElement
+    // Walk up to the sheet — the grabber lives inside the main-column
+    // wrapper, so parentElement points there instead of the sheet.
+    const sheet = e.currentTarget.closest('.gtl-picker-sheet')
     if (!sheet) return
     const startY = e.clientY
     const startH = sheet.getBoundingClientRect().height
@@ -470,15 +472,28 @@ export default function PickerSheet({
           position: 'relative',
           background: '#1a1a1e',
           borderTop: '2px solid #d4181f',
-          padding: '1.5rem 1rem calc(1.5rem + env(safe-area-inset-bottom, 0px))',
+          // No right padding — the ATTUNE column sits flush against
+          // the sheet's right edge.
+          padding: '0 0 calc(env(safe-area-inset-bottom, 0px)) 0',
           fontFamily: 'var(--font-display, Anton, sans-serif)',
           color: '#f1eee5',
-          display: 'flex', flexDirection: 'column', gap: '0.6rem',
+          // Two columns: main content on the left, full-height ATTUNE
+          // button on the right.
+          display: 'flex', flexDirection: 'row', gap: 0,
           boxShadow: '0 -8px 24px rgba(0,0,0,0.6)',
           height: userHeight ? `${userHeight}px` : undefined,
           maxHeight: userHeight ? `${userHeight}px` : undefined,
         }}
       >
+        <div
+          style={{
+            flex: 1,
+            minWidth: 0,
+            position: 'relative',
+            display: 'flex', flexDirection: 'column', gap: '0.6rem',
+            padding: '1.5rem 1rem 1.5rem',
+          }}
+        >
         {/* Drag-resize grabber — 16px hit area at top edge, grey pill affordance. */}
         <div
           onPointerDown={onGrabberPointerDown}
@@ -597,79 +612,42 @@ export default function PickerSheet({
           </button>
         </div>
 
-        {/* Search row — input on the left, vertical ATTUNE button on
-            the right. The button sits in the same flex row as the
-            search input so its height naturally matches the input,
-            and its bottom edge anchors right under the header. */}
-        <div style={{ display: 'flex', alignItems: 'stretch', gap: '0.5rem' }}>
-          <form
-            action="."
-            method="get"
-            onSubmit={(e) => e.preventDefault()}
-            style={{ margin: 0, flex: 1, minWidth: 0 }}
-          >
-            <input
-              ref={inputRef}
-              type="search"
-              name="gtl-attune-picker-search"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder={selectedFilter
-                ? `search ${(selectedFilter.kind === 'group' ? selectedFilter.label : selectedFilter.id).toLowerCase()} exercises…`
-                : 'search exercises…'}
-              inputMode="search"
-              enterKeyHint="search"
-              autoComplete="off"
-              autoCorrect="off"
-              autoCapitalize="characters"
-              spellCheck={false}
-              style={{
-                width: '100%',
-                background: '#0f0f12',
-                border: '1px solid #2a2a30',
-                borderLeft: '2px solid #d4181f',
-                padding: '0.55rem 0.7rem',
-                color: '#f1eee5',
-                fontFamily: 'inherit',
-                fontSize: '0.85rem',
-                letterSpacing: '0.05em',
-                outline: 'none',
-              }}
-            />
-          </form>
-          <button
-            type="button"
-            disabled={!canConfirm}
-            onClick={commit}
-            aria-label={canConfirm ? 'attune picks' : 'pick exercises and days'}
+        {/* Search input — iOS PWA keyboard recipe */}
+        <form
+          action="."
+          method="get"
+          onSubmit={(e) => e.preventDefault()}
+          style={{ margin: 0 }}
+        >
+          <input
+            ref={inputRef}
+            type="search"
+            name="gtl-attune-picker-search"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder={selectedFilter
+              ? `search ${(selectedFilter.kind === 'group' ? selectedFilter.label : selectedFilter.id).toLowerCase()} exercises…`
+              : 'search exercises…'}
+            inputMode="search"
+            enterKeyHint="search"
+            autoComplete="off"
+            autoCorrect="off"
+            autoCapitalize="characters"
+            spellCheck={false}
             style={{
-              flexShrink: 0,
-              width: 36,
-              background: '#d4181f',
-              opacity: canConfirm ? 1 : 0.45,
-              color: '#fff',
-              border: '1px solid #ff2a36',
-              cursor: canConfirm ? 'pointer' : 'default',
-              fontFamily: 'var(--font-display, Anton, sans-serif)',
-              fontSize: '0.7rem',
-              fontWeight: 900,
-              letterSpacing: '0.18em',
-              textTransform: 'uppercase',
-              writingMode: 'vertical-rl',
-              WebkitWritingMode: 'vertical-rl',
-              textOrientation: 'mixed',
-              WebkitTextOrientation: 'mixed',
-              padding: 0,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              textShadow: canConfirm ? '0 0 8px rgba(255,42,54,0.5)' : 'none',
-              transition: 'opacity 120ms linear, text-shadow 120ms linear',
+              width: '100%',
+              background: '#0f0f12',
+              border: '1px solid #2a2a30',
+              borderLeft: '2px solid #d4181f',
+              padding: '0.55rem 0.7rem',
+              color: '#f1eee5',
+              fontFamily: 'inherit',
+              fontSize: '0.85rem',
+              letterSpacing: '0.05em',
+              outline: 'none',
             }}
-          >
-            ATTUNE
-          </button>
-        </div>
+          />
+        </form>
 
         {/* Exercise list — capped at ~5 rows tall; rest reachable via scroll. */}
         <div
@@ -792,6 +770,54 @@ export default function PickerSheet({
             +
           </button>
         </form>
+        </div>
+
+        {/* Full-height ATTUNE column — spans the sheet top-to-bottom on
+            the right side. Letters stack vertically and stay UPRIGHT
+            (no per-glyph rotation) via flex-column rendering one
+            letter per row. */}
+        <button
+          type="button"
+          disabled={!canConfirm}
+          onClick={commit}
+          aria-label={canConfirm ? 'attune picks' : 'pick exercises and days'}
+          style={{
+            flexShrink: 0,
+            alignSelf: 'stretch',
+            width: 56,
+            background: '#d4181f',
+            opacity: canConfirm ? 1 : 0.45,
+            color: '#fff',
+            border: 'none',
+            borderLeft: '1px solid #ff2a36',
+            cursor: canConfirm ? 'pointer' : 'default',
+            fontFamily: 'var(--font-display, Anton, sans-serif)',
+            fontWeight: 900,
+            textTransform: 'uppercase',
+            padding: '1.25rem 0',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '0.15rem',
+            textShadow: canConfirm ? '0 0 14px rgba(255,42,54,0.55)' : 'none',
+            transition: 'opacity 120ms linear, text-shadow 120ms linear',
+          }}
+        >
+          {'ATTUNE'.split('').map((ch, i) => (
+            <span
+              key={i}
+              style={{
+                fontSize: '1.55rem',
+                lineHeight: 1,
+                letterSpacing: 0,
+                display: 'block',
+              }}
+            >
+              {ch}
+            </span>
+          ))}
+        </button>
       </div>
     </div>
   )
