@@ -2762,20 +2762,35 @@ function DayFocus({ iso, muscles, isLastDay, originRect, onClose, cycleId, onMus
             )}
               </div>
             ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', alignItems: 'flex-start' }}>
-                <div
-                  className="font-display text-gtl-smoke leading-none"
-                  style={{ fontSize: 'clamp(3rem, 7vw, 6rem)', transform: 'rotate(-1deg)' }}
-                >
-                  REST DAY
-                </div>
-                {/* ADD MOVEMENT — opens the picker (full muscle scope).
-                    The day is currently rest, so picked exercises drive
-                    a rest→workout conversion via DropPromptModal. */}
+              // Rest-day rolodex: three vertical options replace the muscle
+              // list. NO REST is in the hero slot (where the centered muscle
+              // would normally be — same y=466 canonical zone). EAT + REST
+              // sit below as rolodex siblings.
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', alignItems: 'stretch' }}>
+                {/* NO REST — converts the rest day to a workout via picker. */}
                 <button
                   type="button"
                   onClick={() => setRestPickerOpen(true)}
-                  className="flex items-center gap-3 py-3 px-5 cursor-pointer"
+                  data-predictive-tap-target="muscle"
+                  className="flex items-center gap-3 py-4 px-6 cursor-pointer"
+                  style={{
+                    background: '#d4181f',
+                    border: '1px solid rgba(212,24,31,0.9)',
+                    clipPath: 'polygon(4% 0%, 100% 0%, 96% 100%, 0% 100%)',
+                    boxShadow: '0 0 24px rgba(212,24,31,0.4)',
+                  }}
+                >
+                  <span className="font-display leading-none"
+                    style={{ fontSize: 'clamp(1.6rem, 3.2vw, 2.4rem)', color: '#f5f0e8', textShadow: '2px 2px 0 #070708', letterSpacing: '0.04em', transform: 'rotate(-1deg)' }}>
+                    NO REST
+                  </span>
+                </button>
+
+                {/* EAT — routes to the diet tracker. */}
+                <button
+                  type="button"
+                  onClick={() => router.push('/diet')}
+                  className="flex items-center gap-3 py-3 px-6 cursor-pointer"
                   style={{
                     background: 'transparent',
                     border: '1px solid rgba(212,24,31,0.6)',
@@ -2783,12 +2798,25 @@ function DayFocus({ iso, muscles, isLastDay, originRect, onClose, cycleId, onMus
                   }}
                 >
                   <span className="font-display leading-none"
-                    style={{ fontSize: 'clamp(1.2rem, 2.5vw, 1.7rem)', color: '#d4181f', textShadow: '2px 2px 0 #8a0e14' }}>
-                    +
+                    style={{ fontSize: 'clamp(1.2rem, 2.5vw, 1.7rem)', color: '#d4181f', letterSpacing: '0.04em' }}>
+                    EAT
                   </span>
+                </button>
+
+                {/* REST — acknowledges the rest day; no route (the existing
+                    BRING ON TOMORROW button at the bottom handles stamping). */}
+                <button
+                  type="button"
+                  className="flex items-center gap-3 py-3 px-6 cursor-default"
+                  style={{
+                    background: 'transparent',
+                    border: '1px solid rgba(212,24,31,0.3)',
+                    clipPath: 'polygon(4% 0%, 100% 0%, 96% 100%, 0% 100%)',
+                  }}
+                >
                   <span className="font-display leading-none"
-                    style={{ fontSize: 'clamp(1.1rem, 2.4vw, 1.6rem)', color: '#d4181f', letterSpacing: '0.04em' }}>
-                    ADD MOVEMENT
+                    style={{ fontSize: 'clamp(1.2rem, 2.5vw, 1.7rem)', color: 'rgba(212,24,31,0.55)', letterSpacing: '0.04em' }}>
+                    REST
                   </span>
                 </button>
               </div>
