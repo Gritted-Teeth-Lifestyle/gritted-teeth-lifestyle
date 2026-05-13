@@ -3024,7 +3024,7 @@ export default function ActiveDayPage() {
   // 'muscle' prefire was staged during the 'today' HT. Manual taps on the
   // hero muscle card set 'muscle' state via handleMuscleHop's setInAnimation.
   useEffect(() => {
-    clearChainTransient('iso-mount')
+    clearChainTransient('iso-mount', 'muscle')
   }, [])
 
   // Muscle-hop dispatch: fires HeistTransition then router.push to the

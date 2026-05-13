@@ -2748,7 +2748,7 @@ export default function ActiveCyclePage() {
   // correctly via setInAnimation('today', true). Chain arrivals consume
   // the prefire below and eagerly open inAnim there.
   useEffect(() => {
-    clearChainTransient('active-mount')
+    clearChainTransient('active-mount', 'today')
   }, [])
 
   useEffect(() => {

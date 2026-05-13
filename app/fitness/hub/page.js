@@ -454,7 +454,7 @@ export default function FitnessPage() {
   // on this static page and let StrictMode double-mount rewind state
   // from 'hub-load' back to 'profile' after consume fired.
   useEffect(() => {
-    clearChainTransient('hub-mount')
+    clearChainTransient('hub-mount', 'hub-load')
   }, [])
 
   // Predictive-tap consume on mount: if the prior hop's hit-zone tap

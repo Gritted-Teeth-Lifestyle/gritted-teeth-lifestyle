@@ -968,7 +968,7 @@ export default function LoadCyclePage() {
   // currentStep correctly via setInAnimation('activate', true). Chain
   // arrivals consume the prefire below and eagerly open inAnim there.
   useEffect(() => {
-    clearChainTransient('load-mount')
+    clearChainTransient('load-mount', 'activate')
   }, [])
 
   useEffect(() => {

@@ -2759,7 +2759,7 @@ export default function ActiveMuscleExercisePage() {
   // state from the inbound 'muscle' HT. No further hops to stage; the
   // chain naturally disarms on retreat or new chain arm.
   useEffect(() => {
-    clearChainTransient('muscleId-mount')
+    clearChainTransient('muscleId-mount', 'muscle')
   }, [])
 
   // The picker is opened only when the user taps ADD MOVE — no
