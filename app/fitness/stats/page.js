@@ -43,17 +43,19 @@ function writeRegionStarsLastSeen(stars) {
   try { localStorage.setItem(pk(REGION_STARS_LAST_SEEN_KEY), JSON.stringify(stars)) } catch (_) {}
 }
 
+const MAX_LEVEL = 100
 function getLevelInfo(totalXP) {
   let level = 0
   let xpUsed = 0
-  while (true) {
-    const threshold = 150 + level * 10
+  while (level < MAX_LEVEL) {
+    const threshold = 150 + level * 35
     if (xpUsed + threshold > totalXP) {
       return { level, progress: totalXP - xpUsed, threshold }
     }
     xpUsed += threshold
     level++
   }
+  return { level: MAX_LEVEL, progress: 1, threshold: 1 }
 }
 
 const MUSCLE_LABELS = {
