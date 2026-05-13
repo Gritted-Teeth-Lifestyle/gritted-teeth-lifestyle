@@ -16,7 +16,7 @@ import { pk } from '../../../lib/storage'
 import HeistTransition from '../../../components/HeistTransition'
 import RetreatButton from '../../../components/RetreatButton'
 import { LogoStencil, LogoTarget } from '../../../components/LogoHalf'
-import { consumePrefire, setInAnimation, registerChainStep } from '../../../lib/predictiveTap'
+import { consumePrefire, setInAnimation, registerChainStep, clearChainTransient } from '../../../lib/predictiveTap'
 
 const MUSCLE_LABELS = {
   chest: 'CHEST', back: 'BACK', shoulders: 'SHOULDERS',
@@ -963,15 +963,12 @@ export default function LoadCyclePage() {
     router.push(fireDestRef.current)
   }
 
-  // Predictive-tap chain: reset currentStep to 'hub-load' on every mount.
-  // Handles back-and-forth navigation where stale currentStep from a
-  // later hop (e.g., 'today') would cause a manual ACTIVATE tap's
-  // pointerdown to stage the wrong intent (next-after-'today'='muscle'
-  // instead of next-after-'hub-load'='activate'). With this reset, manual
-  // taps on /fitness/load always stage the correct 'activate' intent.
-  // No-op if chain isn't armed.
+  // Predictive-tap chain: clear stale transient state from any prior hop
+  // on every mount. Manual ACTIVATE tap's onClick handler sets
+  // currentStep correctly via setInAnimation('activate', true). Chain
+  // arrivals consume the prefire below and eagerly open inAnim there.
   useEffect(() => {
-    setInAnimation('hub-load', true)
+    clearChainTransient('load-mount')
   }, [])
 
   useEffect(() => {

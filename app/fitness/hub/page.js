@@ -22,7 +22,7 @@ import { useProfileGuard } from '../../../lib/useProfileGuard'
 import { pk } from '../../../lib/storage'
 import HeistTransition from '../../../components/HeistTransition'
 import RetreatButton from '../../../components/RetreatButton'
-import { consumePrefire, setInAnimation, registerChainStep } from '../../../lib/predictiveTap'
+import { consumePrefire, setInAnimation, registerChainStep, clearChainTransient } from '../../../lib/predictiveTap'
 import { isPrestigeUnlocked, computeProfileTotalXP, getTierCount, getTier } from '../../../lib/exp'
 import AscendPrompt from '../../../components/exp/AscendPrompt'
 import TierUpFlourish from '../../../components/exp/TierUpFlourish'
@@ -445,14 +445,16 @@ export default function FitnessPage() {
     setTransitioning(true)
   }
 
-  // Predictive-tap chain: reset currentStep to 'profile' on every mount.
-  // Handles back-and-forth navigation where stale currentStep from a
-  // later hop (e.g., 'today') would cause a manual LOAD CYCLE tap's
-  // pointerdown to stage the wrong intent. With this reset, manual taps
-  // on /fitness/hub always stage the correct 'hub-load' intent.
-  // No-op if chain isn't armed.
+  // Predictive-tap chain: clear stale transient state from any prior hop
+  // on every mount. Manual LOAD CYCLE tap's onClick handler sets
+  // currentStep correctly via setInAnimation('hub-load', true) before
+  // the canonical-zone pointerdown stages anything. Predictive-chain
+  // arrivals consume the prefire below and eagerly open inAnim there.
+  // Old pattern set ('profile', true) which incorrectly re-armed inAnim
+  // on this static page and let StrictMode double-mount rewind state
+  // from 'hub-load' back to 'profile' after consume fired.
   useEffect(() => {
-    setInAnimation('profile', true)
+    clearChainTransient('hub-mount')
   }, [])
 
   // Predictive-tap consume on mount: if the prior hop's hit-zone tap

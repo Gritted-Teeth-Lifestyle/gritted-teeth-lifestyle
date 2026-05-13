@@ -21,7 +21,7 @@ import { pk } from '../../../../../lib/storage'
 import PickerSheet from '../../../../../components/attune/PickerSheet'
 import HeistTransition from '../../../../../components/HeistTransition'
 import { chipsForDay, addChip, useChipsForDay } from '../../../../../lib/attunement'
-import { consumePrefire, setInAnimation, disarmChain, subscribeStaged } from '../../../../../lib/predictiveTap'
+import { consumePrefire, setInAnimation, disarmChain, subscribeStaged, clearChainTransient } from '../../../../../lib/predictiveTap'
 import {
   calculateSetXP,
   upsertSetSnapshot,
@@ -2755,11 +2755,11 @@ export default function ActiveMuscleExercisePage() {
     setReady(true)
   }, [])
 
-  // Predictive-tap chain: this is the chain END. Mark the step so the
-  // chain disarm flow happens naturally if the user backs out (matches
-  // the chain-window pattern at hub-load / activate / today).
+  // Predictive-tap chain: this is the chain END. Clear stale transient
+  // state from the inbound 'muscle' HT. No further hops to stage; the
+  // chain naturally disarms on retreat or new chain arm.
   useEffect(() => {
-    setInAnimation('muscle', true)
+    clearChainTransient('muscleId-mount')
   }, [])
 
   // The picker is opened only when the user taps ADD MOVE — no

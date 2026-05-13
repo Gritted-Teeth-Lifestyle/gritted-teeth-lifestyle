@@ -26,7 +26,7 @@ import {
   getTierCount,
   getTier,
 } from '../../../lib/exp'
-import { consumePrefire, setInAnimation, disarmChain, subscribeStaged, registerChainStep } from '../../../lib/predictiveTap'
+import { consumePrefire, setInAnimation, disarmChain, subscribeStaged, registerChainStep, clearChainTransient } from '../../../lib/predictiveTap'
 import TierUpFlourish from '../../../components/exp/TierUpFlourish'
 // Day-hop and BEGIN HERE muscle-hop now navigate to /fitness/active/[iso]
 // (Stage 1 of App Router refactor) so HeistTransition fires naturally and
@@ -2743,16 +2743,12 @@ export default function ActiveCyclePage() {
   useEffect(() => { barXPRef.current = barXP }, [barXP])
   useEffect(() => { mountTimeRef.current = performance.now() }, [])
 
-  // Predictive-tap chain: reset currentStep to 'activate' on every mount.
-  // Handles back-and-forth navigation where stale currentStep from a
-  // later hop (e.g., 'today' or 'muscle' from a prior round in DayFocus)
-  // would cause a manual TODAY tap's pointerdown to stage the wrong
-  // intent. With this reset, manual taps on /fitness/active always stage
-  // the correct 'today' intent. No-op if chain isn't armed. The consume
-  // useEffect's eager-inAnim later overrides currentStep to 'today' if
-  // the prior hop's intent matched, which is correct.
+  // Predictive-tap chain: clear stale transient state from any prior hop
+  // on every mount. Manual TODAY tap's onClick handler sets currentStep
+  // correctly via setInAnimation('today', true). Chain arrivals consume
+  // the prefire below and eagerly open inAnim there.
   useEffect(() => {
-    setInAnimation('activate', true)
+    clearChainTransient('active-mount')
   }, [])
 
   useEffect(() => {

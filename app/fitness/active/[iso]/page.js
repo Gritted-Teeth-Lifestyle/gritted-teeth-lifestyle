@@ -22,7 +22,7 @@ import DropPromptModal from '../../../../components/attune/DropPromptModal'
 import HeistTransition from '../../../../components/HeistTransition'
 import { chipsForDay, addChip } from '../../../../lib/attunement'
 import { getExerciseById } from '../../../../lib/exerciseLibrary'
-import { consumePrefire, setInAnimation, disarmChain, subscribeStaged, registerChainStep } from '../../../../lib/predictiveTap'
+import { consumePrefire, setInAnimation, disarmChain, subscribeStaged, registerChainStep, clearChainTransient } from '../../../../lib/predictiveTap'
 import {
   computeProfileTotalXP,
   computeDailyReckoning,
@@ -3019,11 +3019,12 @@ export default function ActiveDayPage() {
     setReady(true)
   }, [])
 
-  // Predictive-tap chain: this route is the destination of the 'today' hop.
-  // Mark the chain step so DayFocus's mount-time consume can fire 'muscle'
-  // for the predictive tap that arrived during the inbound HeistTransition.
+  // Predictive-tap chain: clear stale transient state from the inbound hop
+  // on every mount. The consume effect below re-opens inAnim eagerly if a
+  // 'muscle' prefire was staged during the 'today' HT. Manual taps on the
+  // hero muscle card set 'muscle' state via handleMuscleHop's setInAnimation.
   useEffect(() => {
-    setInAnimation('today', true)
+    clearChainTransient('iso-mount')
   }, [])
 
   // Muscle-hop dispatch: fires HeistTransition then router.push to the
