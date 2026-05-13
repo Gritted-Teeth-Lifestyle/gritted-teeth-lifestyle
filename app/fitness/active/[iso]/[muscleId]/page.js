@@ -2659,7 +2659,7 @@ function DayFocus({ iso, muscles, isLastDay, originRect, onClose, cycleId, onMus
             sourceDayId={iso}
             mode="in-the-moment"
             cycle={{ id: cycleId, dailyPlan: { [iso]: muscles } }}
-            onConfirm={(_targetDayIds, exerciseId) => {
+            onConfirm={(exerciseId) => {
               addChip(cycleId, iso, exerciseId)
               setPickerOpen(false)
             }}
@@ -2794,7 +2794,7 @@ export default function ActiveMuscleExercisePage() {
           // group titles (UPPER / LOWER / ARMS / FULL BODY) shouldn't
           // fire here. Passing [muscleId] gives a single-muscle picker.
           cycle={{ id: cycleId, dailyPlan: { [iso]: [muscleId] } }}
-          onConfirm={(_targetDayIds, exerciseId) => {
+          onConfirm={(exerciseId) => {
             addChip(cycleId, iso, exerciseId)
             setPickerOpen(false)
           }}
