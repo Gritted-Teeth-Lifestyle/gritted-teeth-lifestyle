@@ -2760,15 +2760,9 @@ export default function ActiveMuscleExercisePage() {
     setInAnimation('muscle', true)
   }, [])
 
-  // Auto-open the picker if the day has no chips yet. Skipped if the
-  // user dismissed it on this visit; remount (back+forward) re-evaluates.
-  useEffect(() => {
-    if (!ready) return
-    if (pickerDismissed) return
-    if (!cycleId) return
-    if (chipsForDay(cycleId, iso).length > 0) return
-    setPickerOpen(true)
-  }, [ready, cycleId, iso, pickerDismissed])
+  // The picker is opened only when the user taps ADD MOVE — no
+  // auto-open even on an empty-chip day. Empty days simply render
+  // the set-log shell with just the + ADD MOVE row.
 
   if (!ready) return null
 
