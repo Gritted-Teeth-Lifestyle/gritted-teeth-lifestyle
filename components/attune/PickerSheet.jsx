@@ -38,7 +38,7 @@ import { searchExercises, getExerciseById } from '../../lib/exerciseLibrary'
 import { MUSCLE_KANJI, MUSCLE_LABEL, muscleGroupLabel } from '../../lib/attuneGroups'
 import { byNotoriety } from '../../lib/exerciseNotoriety'
 import { prettyExerciseLabel } from '../../lib/exerciseLabel'
-import { getCustomExercisesForMuscles, addCustomExercise } from '../../lib/customExercises'
+import { getCustomExercisesForMuscles, addCustomExercise, removeCustomExercise } from '../../lib/customExercises'
 
 // Compact horizontal rolodex for the target-filter selection. Mirrors
 // the vertical active-page rolodex (active/page.js:2810-2871) flipped
@@ -721,27 +721,77 @@ export default function PickerSheet({
           )}
           {exerciseRows.map((ex) => {
             const selected = selectedExerciseIds.includes(ex.id)
+            const rowBase = {
+              textAlign: 'left',
+              background: selected ? '#d4181f' : '#0f0f12',
+              color: selected ? '#fff' : '#d8d2c2',
+              border: `1px solid ${selected ? '#ff2a36' : '#2a2a30'}`,
+              borderLeft: `2px solid ${selected ? '#fff' : '#d4181f'}`,
+              padding: '0.55rem 0.7rem',
+              fontFamily: 'inherit',
+              fontSize: '0.78rem',
+              letterSpacing: '0.06em',
+              textTransform: 'uppercase',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.5rem',
+            }
+            // Custom rows: split into [main toggle button | × delete
+            // button]. Tapping × removes the name from the custom
+            // store globally (every muscle it's recorded under) and
+            // from the current selection queue. Already-logged sets
+            // and existing attunement chips are left alone — per
+            // Jordan, those can stay as artifacts.
+            if (ex.isCustom) {
+              const handleDelete = (e) => {
+                e.stopPropagation()
+                removeCustomExercise(ex.id, null)
+                setSelectedExerciseIds((prev) => prev.filter((id) => id !== ex.id))
+              }
+              return (
+                <div key={ex.id} style={{ display: 'flex', alignItems: 'stretch', gap: 0 }}>
+                  <button
+                    type="button"
+                    onClick={() => toggleExercise(ex.id)}
+                    style={{ ...rowBase, flex: 1, minWidth: 0, borderRight: 'none' }}
+                  >
+                    <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {prettyExerciseLabel(ex.label)}
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    aria-label={`delete custom exercise ${ex.id}`}
+                    onClick={handleDelete}
+                    style={{
+                      flexShrink: 0,
+                      width: 32,
+                      background: selected ? '#7a0e14' : '#0f0f12',
+                      color: selected ? '#fff' : '#a8a39a',
+                      border: `1px solid ${selected ? '#ff2a36' : '#2a2a30'}`,
+                      borderLeft: 'none',
+                      fontFamily: 'inherit',
+                      fontSize: '1rem',
+                      fontWeight: 900,
+                      lineHeight: 1,
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}
+                  >
+                    ×
+                  </button>
+                </div>
+              )
+            }
             return (
               <button
                 key={ex.id}
                 type="button"
                 onClick={() => toggleExercise(ex.id)}
-                style={{
-                  textAlign: 'left',
-                  background: selected ? '#d4181f' : '#0f0f12',
-                  color: selected ? '#fff' : '#d8d2c2',
-                  border: `1px solid ${selected ? '#ff2a36' : '#2a2a30'}`,
-                  borderLeft: `2px solid ${selected ? '#fff' : '#d4181f'}`,
-                  padding: '0.55rem 0.7rem',
-                  fontFamily: 'inherit',
-                  fontSize: '0.78rem',
-                  letterSpacing: '0.06em',
-                  textTransform: 'uppercase',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '0.5rem',
-                }}
+                style={rowBase}
               >
                 <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {prettyExerciseLabel(ex.label)}
