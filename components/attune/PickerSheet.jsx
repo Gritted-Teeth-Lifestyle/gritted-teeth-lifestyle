@@ -38,6 +38,7 @@ import { searchExercises, getExerciseById } from '../../lib/exerciseLibrary'
 import { MUSCLE_KANJI, MUSCLE_LABEL, muscleGroupLabel } from '../../lib/attuneGroups'
 import { byNotoriety } from '../../lib/exerciseNotoriety'
 import { prettyExerciseLabel } from '../../lib/exerciseLabel'
+import { getCustomExercisesForMuscles, addCustomExercise } from '../../lib/customExercises'
 
 // Compact horizontal rolodex for the target-filter selection. Mirrors
 // the vertical active-page rolodex (active/page.js:2810-2871) flipped
@@ -389,10 +390,25 @@ export default function PickerSheet({
         }
       }
     }
-    // Sort by notoriety so iconic lifts (BENCH PRESS, SQUAT, DEADLIFT,
-    // etc.) surface at the top of each muscle / group result set.
-    // Alphabetical tiebreak.
-    return [...out].sort(byNotoriety)
+    // Sort library entries by notoriety so iconic lifts (BENCH PRESS,
+    // SQUAT, DEADLIFT, etc.) surface at the top of each muscle / group
+    // result set. Alphabetical tiebreak.
+    out.sort(byNotoriety)
+
+    // Custom exercises the user previously typed for this filter's
+    // muscle(s) — surface them ABOVE the library list so they're easy
+    // to re-pick. Synthesized as fake exercise entries with isCustom
+    // tag so the row render can flag them visually.
+    const muscleScope = selectedFilter.kind === 'group'
+      ? selectedFilter.muscles
+      : [selectedFilter.id]
+    const customNames = getCustomExercisesForMuscles(muscleScope)
+    const q = (query || '').trim().toLowerCase()
+    const customMatching = customNames
+      .filter((n) => !q || n.toLowerCase().includes(q))
+      .map((n) => ({ id: n, label: n, isCustom: true }))
+
+    return [...customMatching, ...out]
   }, [selectedFilter, query])
 
   // sr-only input scrollIntoView fallback (per memory:
@@ -427,9 +443,16 @@ export default function PickerSheet({
       ids.push(pendingCustom)
     }
     if (ids.length === 0) return
+    // Persist every custom (library-unknown) id to the custom store so
+    // it surfaces at the top of the picker next time the user opens
+    // for the same muscle. Scoped to the active filter's muscle(s).
+    const muscleScope = selectedFilter
+      ? (selectedFilter.kind === 'group' ? selectedFilter.muscles : [selectedFilter.id])
+      : []
+    for (const id of ids) {
+      if (!getExerciseById(id)) addCustomExercise(id, muscleScope)
+    }
     if (onConfirm) {
-      // Place every selected exercise. Parent's onConfirm fans across
-      // every selected day, so N exercises × M days = N×M chips total.
       for (const id of ids) onConfirm(id)
     }
     setSelectedExerciseIds([])
@@ -739,6 +762,15 @@ export default function PickerSheet({
             if (!name) return
             if (!selectedExerciseIds.includes(name)) {
               setSelectedExerciseIds((prev) => [...prev, name])
+            }
+            // Persist to the custom store so the name surfaces at the
+            // top of the picker next time, regardless of whether the
+            // user actually goes on to tap ATTUNE.
+            if (!getExerciseById(name)) {
+              const muscleScope = selectedFilter
+                ? (selectedFilter.kind === 'group' ? selectedFilter.muscles : [selectedFilter.id])
+                : []
+              addCustomExercise(name, muscleScope)
             }
             setCustomName('')
           }}
