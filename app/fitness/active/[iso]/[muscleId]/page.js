@@ -2788,7 +2788,12 @@ export default function ActiveMuscleExercisePage() {
         <PickerSheet
           sourceDayId={iso}
           mode="in-the-moment"
-          cycle={{ id: cycleId, dailyPlan: { [iso]: muscles } }}
+          // Scope the picker to JUST the route's muscle. The user is
+          // on /fitness/active/[iso]/[muscleId] — picking a back
+          // exercise while on chest's set-log doesn't make sense, and
+          // group titles (UPPER / LOWER / ARMS / FULL BODY) shouldn't
+          // fire here. Passing [muscleId] gives a single-muscle picker.
+          cycle={{ id: cycleId, dailyPlan: { [iso]: [muscleId] } }}
           onConfirm={(_targetDayIds, exerciseId) => {
             addChip(cycleId, iso, exerciseId)
             setPickerOpen(false)
