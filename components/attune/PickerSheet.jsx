@@ -34,7 +34,7 @@
  *   onClose          - () => void
  */
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { searchExercises } from '../../lib/exerciseLibrary'
+import { searchExercises, getExerciseById } from '../../lib/exerciseLibrary'
 import { MUSCLE_KANJI, MUSCLE_LABEL, muscleGroupLabel } from '../../lib/attuneGroups'
 import { byNotoriety } from '../../lib/exerciseNotoriety'
 import { prettyExerciseLabel } from '../../lib/exerciseLabel'
@@ -411,17 +411,29 @@ export default function PickerSheet({
   const targetCount = mode === 'attune'
     ? (selectedDayIds?.length || (sourceDayId ? 1 : 0))
     : (sourceDayId ? 1 : 0)
-  const exerciseCount = selectedExerciseIds.length
+  // Pending custom-exercise text counts toward exerciseCount so ATTUNE
+  // lights up even before the user taps + (commit() auto-flushes it).
+  const hasPendingCustom = customName.trim().length > 0
+  const exerciseCount = selectedExerciseIds.length + (hasPendingCustom ? 1 : 0)
   const canConfirm = exerciseCount > 0 && targetCount > 0
 
   const commit = () => {
-    if (!canConfirm) return
+    // Auto-flush any value still sitting in the custom-exercise input.
+    // If the user typed a name but tapped ATTUNE without first tapping
+    // the + submit, include the typed value as if + had been pressed.
+    const pendingCustom = customName.trim().toUpperCase()
+    const ids = [...selectedExerciseIds]
+    if (pendingCustom && !ids.includes(pendingCustom)) {
+      ids.push(pendingCustom)
+    }
+    if (ids.length === 0) return
     if (onConfirm) {
       // Place every selected exercise. Parent's onConfirm fans across
       // every selected day, so N exercises × M days = N×M chips total.
-      for (const id of selectedExerciseIds) onConfirm(id)
+      for (const id of ids) onConfirm(id)
     }
     setSelectedExerciseIds([])
+    setCustomName('')
   }
 
   return (
@@ -782,6 +794,44 @@ export default function PickerSheet({
             +
           </button>
         </form>
+
+        {/* Queued custom exercises — names typed into the input and
+            submitted via + or Enter land here as red chips. Tap × to
+            remove one before ATTUNE commits. */}
+        {(() => {
+          const customQueued = selectedExerciseIds.filter((id) => !getExerciseById(id))
+          if (customQueued.length === 0) return null
+          return (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.3rem', marginTop: '-0.2rem' }}>
+              {customQueued.map((name) => (
+                <button
+                  key={name}
+                  type="button"
+                  onClick={() => setSelectedExerciseIds((prev) => prev.filter((id) => id !== name))}
+                  style={{
+                    background: '#d4181f',
+                    color: '#fff',
+                    border: '1px solid #ff2a36',
+                    padding: '0.3rem 0.55rem',
+                    fontSize: '0.7rem',
+                    letterSpacing: '0.08em',
+                    textTransform: 'uppercase',
+                    fontFamily: 'inherit',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    clipPath: 'polygon(6% 0%, 100% 0%, 94% 100%, 0% 100%)',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '0.35rem',
+                  }}
+                >
+                  <span>{name}</span>
+                  <span aria-hidden="true" style={{ fontWeight: 900, opacity: 0.85 }}>×</span>
+                </button>
+              ))}
+            </div>
+          )
+        })()}
           </div>
 
           {/* Body-height ATTUNE column — reaches the sheet's bottom
