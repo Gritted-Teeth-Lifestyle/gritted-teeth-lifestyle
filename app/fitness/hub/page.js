@@ -23,7 +23,7 @@ import { pk } from '../../../lib/storage'
 import HeistTransition from '../../../components/HeistTransition'
 import RetreatButton from '../../../components/RetreatButton'
 import { consumePrefire, setInAnimation, registerChainStep } from '../../../lib/predictiveTap'
-import { isPrestigeUnlocked } from '../../../lib/exp'
+import { isPrestigeUnlocked, computeProfileTotalXP, getTierCount, getTier } from '../../../lib/exp'
 import AscendPrompt from '../../../components/exp/AscendPrompt'
 import TierUpFlourish from '../../../components/exp/TierUpFlourish'
 
@@ -201,6 +201,21 @@ function CycleOption({
  * Used for "CONTINUE CYCLE WITHOUT SAVING" — a transient/throwaway path
  * for users who want to train without committing to a tracked program.
  */
+const MAX_LEVEL = 100
+function getLevelInfo(totalXP) {
+  let level = 0
+  let xpUsed = 0
+  while (level < MAX_LEVEL) {
+    const threshold = 150 + level * 35
+    if (xpUsed + threshold > totalXP) {
+      return { level, progress: totalXP - xpUsed, threshold }
+    }
+    xpUsed += threshold
+    level++
+  }
+  return { level: MAX_LEVEL, progress: 1, threshold: 1 }
+}
+
 function GhostOption({ number, label, caption, href, onClick }) {
   const { play } = useSound()
   const [hovered, setHovered] = useState(false)
@@ -365,6 +380,17 @@ export default function FitnessPage() {
   // is unlocked. Less aggressive than the profile modal per dispatch.
   const [prestigeReady, setPrestigeReady] = useState(false)
   useEffect(() => { setPrestigeReady(isPrestigeUnlocked()) }, [])
+  // Profile-button live caption: LV.{n} · {TIER_NAME}. Null until hydrated
+  // so SSR/CSR don't disagree on the caption text.
+  const [profileMeta, setProfileMeta] = useState(null)
+  useEffect(() => {
+    try {
+      const { xp } = computeProfileTotalXP()
+      const { level } = getLevelInfo(xp)
+      const tierName = getTier(getTierCount())
+      setProfileMeta({ level, tierName })
+    } catch (_) {}
+  }, [])
   // Stable ref to current href so the pointerdown listener doesn't have to
   // re-bind on every transitionConfig update.
   const hrefRef = useRef('')
@@ -577,7 +603,7 @@ export default function FitnessPage() {
             <GhostOption
               number="05"
               label="WARRIOR PROFILE"
-              caption="Identity. Tier, ribbons, prestige."
+              caption={profileMeta ? `LV.${profileMeta.level} · ${profileMeta.tierName}` : 'Identity. Tier, ribbons, prestige.'}
               href="/fitness/profile"
               onClick={handleSelect}
             />
