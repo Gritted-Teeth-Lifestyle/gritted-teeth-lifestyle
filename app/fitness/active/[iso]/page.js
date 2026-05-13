@@ -3001,8 +3001,7 @@ export default function ActiveDayPage() {
   // Muscle-hop dispatch: fires HeistTransition then router.push to the
   // muscle exercise route. Mirrors handleDayHop on the parent active page —
   // synchronous skip flag so a fast follow-up tap routes immediately rather
-  // than waiting for HT to complete. 'muscle' is the chain END so we don't
-  // setInAnimation for a further step.
+  // than waiting for HT to complete.
   const handleMuscleHop = (muscleId, { fromTimer = false } = {}) => {
     // iOS-leaked-click eat — see mountTimeRef comment above.
     if (!fromTimer && performance.now() - mountTimeRef.current < 150) return
@@ -3014,6 +3013,14 @@ export default function ActiveDayPage() {
       return
     }
     fireMuscleHopRef.current = muscleId
+    // Mark the 'muscle' HT as active so the module's grace timer starts
+    // fresh for this hop. Without this, activeHTStep stayed at 'today'
+    // (from the [iso] mount effect) and the stale grace caused leaked
+    // pointer events to fire the wrong step's routeForward — skipping
+    // the muscle slash entirely. Even though 'muscle' is the chain end
+    // and has no further step to stage, the grace timer still needs to
+    // start so the HT can play through.
+    setInAnimation('muscle', true)
     setFireMuscleHop(muscleId)
   }
 
