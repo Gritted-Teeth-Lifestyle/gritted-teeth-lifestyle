@@ -20,7 +20,7 @@ import { pk } from '../../../../lib/storage'
 import PickerSheet from '../../../../components/attune/PickerSheet'
 import HeistTransition from '../../../../components/HeistTransition'
 import { chipsForDay, addChip } from '../../../../lib/attunement'
-import { consumePrefire, setInAnimation, disarmChain, subscribeStaged } from '../../../../lib/predictiveTap'
+import { consumePrefire, setInAnimation, disarmChain, subscribeStaged, registerChainStep } from '../../../../lib/predictiveTap'
 import {
   computeProfileTotalXP,
   computeDailyReckoning,
@@ -2847,17 +2847,19 @@ function StatMini({ number, label }) {
   )
 }
 
+const MAX_LEVEL = 100
 function getLevelInfo(totalXP) {
   let level = 0
   let xpUsed = 0
-  while (true) {
-    const threshold = 150 + level * 10
+  while (level < MAX_LEVEL) {
+    const threshold = 150 + level * 35
     if (xpUsed + threshold > totalXP) {
       return { level, progress: totalXP - xpUsed, threshold }
     }
     xpUsed += threshold
     level++
   }
+  return { level: MAX_LEVEL, progress: 1, threshold: 1 }
 }
 
 // Sums setLog snapshots when populated per day; falls back to legacy
@@ -2929,28 +2931,16 @@ export default function ActiveDayPage() {
     setFireMuscleHop(muscleId)
   }
 
-  // Skip-the-fire-transition: once the muscle-hop HT is running, the next
-  // pointer/touch anywhere routes immediately. Mirrors the same listener on
-  // the parent active page (RetreatButton excluded so back-nav still works).
-  // 150ms grace window — iOS PWA can fire a follow-up touchstart/pointerdown
-  // for the SAME physical tap that triggered the hop.
-  useEffect(() => {
-    if (!fireMuscleHop) return
-    const armedAt = performance.now()
-    const handler = (e) => {
-      if (performance.now() - armedAt < 150) return
-      if (e.target?.closest?.('[data-retreat]')) return
-      if (skippedMuscleHopRef.current) return
-      skippedMuscleHopRef.current = true
-      router.push('/fitness/active/' + iso + '/' + fireMuscleHopRef.current)
-    }
-    window.addEventListener('pointerdown', handler, { capture: true })
-    window.addEventListener('touchstart',  handler, { capture: true, passive: true })
-    return () => {
-      window.removeEventListener('pointerdown', handler, { capture: true })
-      window.removeEventListener('touchstart',  handler, { capture: true })
-    }
-  }, [fireMuscleHop, iso, router])
+  // Register skip-route for the 'muscle' chain step. Module-level listener
+  // in lib/predictiveTap.js calls this when a tap arrives past
+  // SKIP_GRACE_MS during the muscle HT. Retreat-button exclusion + leaked-
+  // tap absorption are handled centrally.
+  useEffect(() => registerChainStep('muscle', () => {
+    if (skippedMuscleHopRef.current) return
+    if (!fireMuscleHopRef.current) return
+    skippedMuscleHopRef.current = true
+    router.push('/fitness/active/' + iso + '/' + fireMuscleHopRef.current)
+  }), [iso, router])
 
   if (!ready) return null
 

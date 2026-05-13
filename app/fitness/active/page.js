@@ -26,7 +26,7 @@ import {
   getTierCount,
   getTier,
 } from '../../../lib/exp'
-import { consumePrefire, setInAnimation, disarmChain, subscribeStaged } from '../../../lib/predictiveTap'
+import { consumePrefire, setInAnimation, disarmChain, subscribeStaged, registerChainStep } from '../../../lib/predictiveTap'
 import TierUpFlourish from '../../../components/exp/TierUpFlourish'
 // Day-hop and BEGIN HERE muscle-hop now navigate to /fitness/active/[iso]
 // (Stage 1 of App Router refactor) so HeistTransition fires naturally and
@@ -2685,17 +2685,19 @@ function StatMini({ number, label }) {
   )
 }
 
+const MAX_LEVEL = 100
 function getLevelInfo(totalXP) {
   let level = 0
   let xpUsed = 0
-  while (true) {
-    const threshold = 150 + level * 10
+  while (level < MAX_LEVEL) {
+    const threshold = 150 + level * 35
     if (xpUsed + threshold > totalXP) {
       return { level, progress: totalXP - xpUsed, threshold }
     }
     xpUsed += threshold
     level++
   }
+  return { level: MAX_LEVEL, progress: 1, threshold: 1 }
 }
 
 // Sums setLog snapshots when populated per day; falls back to legacy
@@ -2970,29 +2972,17 @@ export default function ActiveCyclePage() {
     setFireDayHop(iso)
   }
 
-  // Skip-the-fire-transition: once the day-hop HT is running, the next
-  // pointer/touch anywhere routes immediately. Mirrors the same listener
-  // on /fitness/load (RetreatButton excluded so back-nav still works).
-  // Guard with a 150ms grace window — iOS PWA can fire a follow-up
-  // touchstart/pointerdown for the SAME physical tap that triggered the
-  // hop, which would otherwise short-circuit HT before it renders.
-  useEffect(() => {
-    if (!fireDayHop) return
-    const armedAt = performance.now()
-    const handler = (e) => {
-      if (performance.now() - armedAt < 150) return
-      if (e.target?.closest?.('[data-retreat]')) return
-      if (skippedDayHopRef.current) return
-      skippedDayHopRef.current = true
-      router.push('/fitness/active/' + fireDayHopRef.current)
-    }
-    window.addEventListener('pointerdown', handler, { capture: true })
-    window.addEventListener('touchstart',  handler, { capture: true, passive: true })
-    return () => {
-      window.removeEventListener('pointerdown', handler, { capture: true })
-      window.removeEventListener('touchstart',  handler, { capture: true })
-    }
-  }, [fireDayHop, router])
+  // Register skip-route for the 'today' chain step. Module-level listener
+  // in lib/predictiveTap.js calls this when a tap arrives past
+  // SKIP_GRACE_MS during the today HT. Retreat-button exclusion + leaked-
+  // tap absorption are handled centrally (the grace replaces the old
+  // per-page 150ms armedAt window).
+  useEffect(() => registerChainStep('today', () => {
+    if (skippedDayHopRef.current) return
+    if (!fireDayHopRef.current) return
+    skippedDayHopRef.current = true
+    router.push('/fitness/active/' + fireDayHopRef.current)
+  }), [router])
 
   // Predictive-tap chain — open the 'today' window IMMEDIATELY on mount,
   // before the ready-gated consume below fires. Without this, currentStep

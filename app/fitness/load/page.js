@@ -16,7 +16,7 @@ import { pk } from '../../../lib/storage'
 import HeistTransition from '../../../components/HeistTransition'
 import RetreatButton from '../../../components/RetreatButton'
 import { LogoStencil, LogoTarget } from '../../../components/LogoHalf'
-import { consumePrefire, setInAnimation } from '../../../lib/predictiveTap'
+import { consumePrefire, setInAnimation, registerChainStep } from '../../../lib/predictiveTap'
 
 const MUSCLE_LABELS = {
   chest: 'CHEST', back: 'BACK', shoulders: 'SHOULDERS',
@@ -994,24 +994,11 @@ export default function LoadCyclePage() {
     setReady(true)
   }, [])
 
-  // Skip-the-fire-transition: once it's running, the next pointer/touch input
-  // anywhere routes to the destination immediately. Listen for both
-  // pointerdown AND touchstart in case iOS PWA suppresses pointerdown events
-  // during rapid-tap sequences. Taps on RetreatButton (data-retreat) are
-  // excluded so retreat navigates back instead of fast-forwarding.
-  useEffect(() => {
-    if (!fireActive) return
-    const handler = (e) => {
-      if (e.target?.closest?.('[data-retreat]')) return
-      skipNow()
-    }
-    window.addEventListener('pointerdown', handler, { capture: true })
-    window.addEventListener('touchstart',  handler, { capture: true, passive: true })
-    return () => {
-      window.removeEventListener('pointerdown', handler, { capture: true })
-      window.removeEventListener('touchstart',  handler, { capture: true })
-    }
-  }, [fireActive])
+  // Register skip-route for the 'activate' chain step. Module-level
+  // listener in lib/predictiveTap.js calls this when a tap arrives past
+  // SKIP_GRACE_MS during the activate HT. Retreat-button exclusion is
+  // handled centrally.
+  useEffect(() => registerChainStep('activate', () => skipNow()), [])
 
   const selectedCycle = cycles.find((c) => c.id === selectedId) ?? null
 

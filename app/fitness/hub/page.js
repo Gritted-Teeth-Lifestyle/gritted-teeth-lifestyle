@@ -22,7 +22,7 @@ import { useProfileGuard } from '../../../lib/useProfileGuard'
 import { pk } from '../../../lib/storage'
 import HeistTransition from '../../../components/HeistTransition'
 import RetreatButton from '../../../components/RetreatButton'
-import { consumePrefire, setInAnimation } from '../../../lib/predictiveTap'
+import { consumePrefire, setInAnimation, registerChainStep } from '../../../lib/predictiveTap'
 import { isPrestigeUnlocked } from '../../../lib/exp'
 import AscendPrompt from '../../../components/exp/AscendPrompt'
 import TierUpFlourish from '../../../components/exp/TierUpFlourish'
@@ -445,25 +445,11 @@ export default function FitnessPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // Skip-the-transition: once HeistTransition is active, the next pointer/touch
-  // input anywhere on the screen routes to the destination immediately.
-  // Listen for both pointerdown AND touchstart in case iOS PWA suppresses
-  // pointerdown events during rapid-tap sequences. Taps on RetreatButton
-  // (data-retreat) are excluded so retreat navigates back instead of fast-
-  // forwarding to the in-flight transition's destination.
-  useEffect(() => {
-    if (!transitioning) return
-    const handler = (e) => {
-      if (e.target?.closest?.('[data-retreat]')) return
-      skipNow()
-    }
-    window.addEventListener('pointerdown', handler, { capture: true })
-    window.addEventListener('touchstart',  handler, { capture: true, passive: true })
-    return () => {
-      window.removeEventListener('pointerdown', handler, { capture: true })
-      window.removeEventListener('touchstart',  handler, { capture: true })
-    }
-  }, [transitioning])
+  // Register skip-route for the 'hub-load' chain step. Module-level
+  // listener in lib/predictiveTap.js calls this when a tap arrives past
+  // SKIP_GRACE_MS during the hub-load HT. Retreat-button exclusion is
+  // handled centrally.
+  useEffect(() => registerChainStep('hub-load', () => skipNow()), [])
 
   const handleTransitionComplete = () => {
     if (skippedRef.current) return

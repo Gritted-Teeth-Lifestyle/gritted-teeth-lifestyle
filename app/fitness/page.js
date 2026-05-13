@@ -6,7 +6,7 @@ import { useSound } from '../../lib/useSound'
 import HeistTransition from '../../components/HeistTransition'
 import RetreatButton from '../../components/RetreatButton'
 import { LogoStencil, LogoTarget } from '../../components/LogoHalf'
-import { armChain, setInAnimation } from '../../lib/predictiveTap'
+import { armChain, setInAnimation, registerChainStep } from '../../lib/predictiveTap'
 import { pk } from '../../lib/storage'
 import BodyweightStep from '../../components/onboarding/BodyweightStep'
 import DateOfBirthStep from '../../components/onboarding/DateOfBirthStep'
@@ -257,24 +257,12 @@ export default function ProfilePage() {
     router.push(HUB_TARGET)
   }
 
-  // Skip-the-transition: once HeistTransition is active, the next pointer/touch
-  // input anywhere on the screen routes to the hub immediately. Listen for
-  // both pointerdown AND touchstart in case iOS PWA suppresses pointerdown
-  // events during rapid-tap sequences. Taps on RetreatButton (data-retreat)
-  // are excluded so retreat navigates back instead of fast-forwarding.
-  useEffect(() => {
-    if (!transitioning) return
-    const handler = (e) => {
-      if (e.target?.closest?.('[data-retreat]')) return
-      skipNow()
-    }
-    window.addEventListener('pointerdown', handler, { capture: true })
-    window.addEventListener('touchstart',  handler, { capture: true, passive: true })
-    return () => {
-      window.removeEventListener('pointerdown', handler, { capture: true })
-      window.removeEventListener('touchstart',  handler, { capture: true })
-    }
-  }, [transitioning])
+  // Register skip-route for the 'profile' chain step. The module-level
+  // listener in lib/predictiveTap.js calls this when a tap arrives past
+  // SKIP_GRACE_MS during the profile HT, replacing the per-page window
+  // pointerdown listener pattern. Retreat-button exclusion is handled
+  // centrally.
+  useEffect(() => registerChainStep('profile', () => skipNow()), [])
 
   const selectProfile = (name) => {
     // Already transitioning → this rapid second tap is a skip.
