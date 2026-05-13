@@ -18,8 +18,10 @@ import { useSound } from '../../../../lib/useSound'
 import { useProfileGuard } from '../../../../lib/useProfileGuard'
 import { pk } from '../../../../lib/storage'
 import PickerSheet from '../../../../components/attune/PickerSheet'
+import DropPromptModal from '../../../../components/attune/DropPromptModal'
 import HeistTransition from '../../../../components/HeistTransition'
 import { chipsForDay, addChip } from '../../../../lib/attunement'
+import { getExerciseById } from '../../../../lib/exerciseLibrary'
 import { consumePrefire, setInAnimation, disarmChain, subscribeStaged, registerChainStep } from '../../../../lib/predictiveTap'
 import {
   computeProfileTotalXP,
@@ -37,6 +39,12 @@ const MUSCLE_LABELS = {
   abs: 'ABS', glutes: 'GLUTES', quads: 'QUADS',
   hamstrings: 'HAMSTRINGS', calves: 'CALVES',
 }
+
+// All 11 muscle IDs, used to scope the picker on a rest day where
+// the day itself has no muscles assigned yet — gives the user every
+// option until they pick exercises, which then drives the rest→
+// workout-day conversion.
+const ALL_MUSCLE_IDS = Object.keys(MUSCLE_LABELS)
 // Canonical kanji-per-muscle map. Mirrors app/fitness/new/branded/page.js
 // SHEET_MUSCLES list verbatim (11 muscles). Used by the rolodex DayButton
 // to render glyph-only on non-TODAY cards.
@@ -1985,9 +1993,15 @@ function ExercisePanel({ muscleId, dayIso, originRect, onClose, cycleId }) {
 }
 
 /* ── Full-screen day focus — zooms in from the card's position ── */
-function DayFocus({ iso, muscles, isLastDay, originRect, onClose, cycleId, onMuscleHop }) {
+function DayFocus({ iso, muscles, isLastDay, originRect, onClose, cycleId, onMuscleHop, onConvertRestDay }) {
   const { play } = useSound()
   const [closing, setClosing]           = useState(false)
+  // Rest-day picker + conversion modal. Tapping ADD MOVEMENT on a
+  // rest day opens the picker with full muscle scope; once the user
+  // picks exercises, queue them and show a "Convert rest day to X
+  // day?" prompt before mutating the cycle's muscle plan.
+  const [restPickerOpen, setRestPickerOpen] = useState(false)
+  const [restConversion, setRestConversion] = useState(null)
   // R17/R18 — empty-day picker. When the user lands on a workout day with
   // zero attuned chips AND at least one assigned muscle, surface the
   // in-the-moment picker so they can pick an exercise on the spot. If the
@@ -2748,11 +2762,35 @@ function DayFocus({ iso, muscles, isLastDay, originRect, onClose, cycleId, onMus
             )}
               </div>
             ) : (
-              <div
-                className="font-display text-gtl-smoke leading-none"
-                style={{ fontSize: 'clamp(3rem, 7vw, 6rem)', transform: 'rotate(-1deg)' }}
-              >
-                REST DAY
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', alignItems: 'flex-start' }}>
+                <div
+                  className="font-display text-gtl-smoke leading-none"
+                  style={{ fontSize: 'clamp(3rem, 7vw, 6rem)', transform: 'rotate(-1deg)' }}
+                >
+                  REST DAY
+                </div>
+                {/* ADD MOVEMENT — opens the picker (full muscle scope).
+                    The day is currently rest, so picked exercises drive
+                    a rest→workout conversion via DropPromptModal. */}
+                <button
+                  type="button"
+                  onClick={() => setRestPickerOpen(true)}
+                  className="flex items-center gap-3 py-3 px-5 cursor-pointer"
+                  style={{
+                    background: 'transparent',
+                    border: '1px solid rgba(212,24,31,0.6)',
+                    clipPath: 'polygon(4% 0%, 100% 0%, 96% 100%, 0% 100%)',
+                  }}
+                >
+                  <span className="font-display leading-none"
+                    style={{ fontSize: 'clamp(1.2rem, 2.5vw, 1.7rem)', color: '#d4181f', textShadow: '2px 2px 0 #8a0e14' }}>
+                    +
+                  </span>
+                  <span className="font-display leading-none"
+                    style={{ fontSize: 'clamp(1.1rem, 2.4vw, 1.6rem)', color: '#d4181f', letterSpacing: '0.04em' }}>
+                    ADD MOVEMENT
+                  </span>
+                </button>
               </div>
             )}
           </div>
@@ -2810,7 +2848,55 @@ function DayFocus({ iso, muscles, isLastDay, originRect, onClose, cycleId, onMus
             which fires HeistTransition + router.push. Returning from that
             route remounts DayFocus with fresh localStorage reads. */}
 
-        {/* PickerSheet moved to /fitness/active/[iso]/[muscleId]. */}
+        {/* Rest-day picker — full muscle scope so the user has every
+            option until they pick. On ATTUNE the picks queue into the
+            DropPromptModal below for confirmation before the cycle's
+            dailyPlan is mutated. */}
+        {restPickerOpen && (
+          <PickerSheet
+            sourceDayId={iso}
+            mode="in-the-moment"
+            cycle={{ id: cycleId, dailyPlan: { [iso]: ALL_MUSCLE_IDS } }}
+            onConfirm={(exerciseId) => {
+              setRestConversion((prev) => ({
+                exerciseIds: [...(prev?.exerciseIds || []), exerciseId],
+              }))
+              setRestPickerOpen(false)
+            }}
+            onClose={() => setRestPickerOpen(false)}
+          />
+        )}
+
+        {restConversion && (() => {
+          // Compute the union of primary muscles across all picked
+          // library exercises (custom-typed ids contribute nothing
+          // since the library can't map them to a muscle).
+          const muscleSet = new Set()
+          for (const id of restConversion.exerciseIds) {
+            const ex = getExerciseById(id)
+            if (ex && Array.isArray(ex.primaryMuscles)) {
+              for (const m of ex.primaryMuscles) muscleSet.add(m)
+            }
+          }
+          const musclesToAdd = [...muscleSet]
+          const muscleLabel = musclesToAdd.map((m) => (MUSCLE_LABELS[m] || m).toUpperCase()).join(' + ') || 'WORKOUT'
+          return (
+            <DropPromptModal
+              variant="rest"
+              muscle={muscleLabel}
+              onConfirm={() => {
+                if (musclesToAdd.length > 0 && onConvertRestDay) {
+                  onConvertRestDay(iso, musclesToAdd)
+                }
+                for (const id of restConversion.exerciseIds) {
+                  addChip(cycleId, iso, id)
+                }
+                setRestConversion(null)
+              }}
+              onCancel={() => setRestConversion(null)}
+            />
+          )
+        })()}
       </div>
     </>
   )
@@ -2942,6 +3028,30 @@ export default function ActiveDayPage() {
     router.push('/fitness/active/' + iso + '/' + fireMuscleHopRef.current)
   }), [iso, router])
 
+  // Rest-day conversion handler — merges new muscles into dailyPlan[iso]
+  // for this cycle, then persists to both pk('daily-plan') (legacy
+  // surface) and pk('cycles')[cycleId].dailyPlan (canonical source).
+  // Local state update propagates to DayFocus's muscles prop so the
+  // page re-renders with the new muscles + a muscle slab to tap into.
+  const handleConvertRestDay = useCallback((dayIso, musclesToAdd) => {
+    if (!dayIso || !Array.isArray(musclesToAdd) || musclesToAdd.length === 0) return
+    setDailyPlan((prev) => {
+      const existing = Array.isArray(prev[dayIso]) ? prev[dayIso] : []
+      const merged = [...new Set([...existing, ...musclesToAdd])]
+      const next = { ...prev, [dayIso]: merged }
+      try { localStorage.setItem(pk('daily-plan'), JSON.stringify(next)) } catch (_) {}
+      try {
+        const raw = localStorage.getItem(pk('cycles'))
+        const cycles = raw ? JSON.parse(raw) : []
+        if (Array.isArray(cycles) && cycleId) {
+          const updated = cycles.map((c) => c.id === cycleId ? { ...c, dailyPlan: next } : c)
+          localStorage.setItem(pk('cycles'), JSON.stringify(updated))
+        }
+      } catch (_) {}
+      return next
+    })
+  }, [cycleId])
+
   if (!ready) return null
 
   const sortedDays = [...days].sort()
@@ -2958,6 +3068,7 @@ export default function ActiveDayPage() {
         onClose={() => router.back()}
         cycleId={cycleId}
         onMuscleHop={handleMuscleHop}
+        onConvertRestDay={handleConvertRestDay}
       />
       {/* Muscle-hop transition — fires on BEGIN HERE / muscle slab tap.
           HT plays transition-slash, then router.push lands on
