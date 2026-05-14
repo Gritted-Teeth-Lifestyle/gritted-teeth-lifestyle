@@ -1,6 +1,6 @@
 'use client'
 import { autoAttuneAll, useAttunement } from '../../lib/attunement'
-import { canonicalExerciseFor } from '../../lib/exerciseLibrary'
+import { randomCommonExerciseFor } from '../../lib/exerciseLibrary'
 
 /**
  * AutoAttuneButton — always visible. Each tap fills only days that are
@@ -19,10 +19,11 @@ export default function AutoAttuneButton({ cycle }) {
       const existing = state?.[iso]?.chips?.length || 0
       if (existing > 0) continue  // skip already-attuned days, fill only the gaps
       const muscles = cycle.dailyPlan?.[iso] || []
-      dayMuscleMap[iso] = muscles[0]
+      if (muscles.length === 0) continue
+      dayMuscleMap[iso] = muscles
     }
     if (Object.keys(dayMuscleMap).length === 0) return
-    autoAttuneAll(cycle.id, dayMuscleMap, canonicalExerciseFor)
+    autoAttuneAll(cycle.id, dayMuscleMap, randomCommonExerciseFor)
   }
 
   return (
