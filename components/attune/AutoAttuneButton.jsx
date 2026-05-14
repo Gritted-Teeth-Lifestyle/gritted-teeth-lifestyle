@@ -15,14 +15,23 @@ export default function AutoAttuneButton({ cycle }) {
 
   const handleClick = () => {
     const dayMuscleMap = {}
+    let hasExistingChips = false
     for (const iso of workoutDays) {
-      const existing = state?.[iso]?.chips?.length || 0
-      if (existing > 0) continue  // skip already-attuned days, fill only the gaps
+      const dayState = state?.[iso]
+      if (dayState?.completedAt) continue  // never touch completed days
+      if ((dayState?.chips?.length || 0) > 0) hasExistingChips = true
       const muscles = cycle.dailyPlan?.[iso] || []
       if (muscles.length === 0) continue
       dayMuscleMap[iso] = muscles
     }
     if (Object.keys(dayMuscleMap).length === 0) return
+
+    if (hasExistingChips) {
+      const ok = window.confirm('Overwrite your existing movements with a fresh auto-attune?')
+      if (!ok) return
+      autoAttuneAll(cycle.id, dayMuscleMap, randomCommonExerciseFor, { overwrite: true })
+      return
+    }
     autoAttuneAll(cycle.id, dayMuscleMap, randomCommonExerciseFor)
   }
 
