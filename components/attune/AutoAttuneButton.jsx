@@ -1,6 +1,6 @@
 'use client'
 import { autoAttuneAll, useAttunement } from '../../lib/attunement'
-import { randomCommonExerciseFor } from '../../lib/exerciseLibrary'
+import { randomCommonExerciseFor, honedExercisePairFor } from '../../lib/exerciseLibrary'
 
 /**
  * AutoAttuneButton — always visible. Each tap fills only days that are
@@ -12,6 +12,10 @@ export default function AutoAttuneButton({ cycle }) {
 
   const workoutDays = cycle.days.filter(iso => (cycle.dailyPlan?.[iso] || []).length > 0)
   if (workoutDays.length === 0) return null
+
+  const honedSet = new Set(cycle.targets || [])
+  const pickFor = (muscle) =>
+    honedSet.has(muscle) ? honedExercisePairFor(muscle) : randomCommonExerciseFor(muscle)
 
   const handleClick = () => {
     const dayMuscleMap = {}
@@ -29,10 +33,10 @@ export default function AutoAttuneButton({ cycle }) {
     if (hasExistingChips) {
       const ok = window.confirm('Overwrite your existing movements with a fresh auto-attune?')
       if (!ok) return
-      autoAttuneAll(cycle.id, dayMuscleMap, randomCommonExerciseFor, { overwrite: true })
+      autoAttuneAll(cycle.id, dayMuscleMap, pickFor, { overwrite: true })
       return
     }
-    autoAttuneAll(cycle.id, dayMuscleMap, randomCommonExerciseFor)
+    autoAttuneAll(cycle.id, dayMuscleMap, pickFor)
   }
 
   return (

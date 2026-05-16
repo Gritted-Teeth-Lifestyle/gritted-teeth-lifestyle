@@ -2693,9 +2693,11 @@ export default function SummaryPage() {
   useEffect(() => {
     try {
       const name = localStorage.getItem(pk('cycle-name'))
+      const rawT = localStorage.getItem(pk('muscle-targets'))
       const rawD = localStorage.getItem(pk('training-days'))
       const rawP = localStorage.getItem(pk('daily-plan'))
       if (name) setCycleName(name)
+      if (rawT) setTargets(JSON.parse(rawT))
       if (rawD) {
         // Derive the contiguous-span cycle from min/max of the user-picked days.
         // Auto-rest gap days (any unpicked day between first and last) are filled here so
@@ -2716,11 +2718,7 @@ export default function SummaryPage() {
           setDays(span)
         }
       }
-      if (rawP) {
-        const parsedPlan = JSON.parse(rawP)
-        setDailyPlan(parsedPlan)
-        setTargets(Array.from(new Set(Object.values(parsedPlan).flat().filter(Boolean))))
-      }
+      if (rawP) setDailyPlan(JSON.parse(rawP))
     } catch (_) {}
   }, [])
 

@@ -1486,6 +1486,18 @@ function ExercisePanel({ muscleId, dayIso, originRect, onClose, cycleId, onAddMo
   const weightKey    = pk(`wt-${cycleId}-${dayIso}-${muscleId}`)
   const setCountKey  = pk(`setcounts-${muscleId}`)
 
+  // Honed muscles (those checked on the targets/Goku page for this cycle)
+  // default to 3 sets instead of 2.
+  const defaultSetCount = useMemo(() => {
+    if (typeof window === 'undefined') return 2
+    try {
+      const raw = localStorage.getItem(pk('cycles'))
+      const cycles = raw ? JSON.parse(raw) : []
+      const cycle = cycles.find((c) => c.id === cycleId)
+      return (cycle?.targets || []).includes(muscleId) ? 3 : 2
+    } catch (_) { return 2 }
+  }, [cycleId, muscleId])
+
   const originX = originRect ? `${originRect.left + originRect.width / 2}px` : '50vw'
   const originY = originRect ? `${originRect.top + originRect.height / 2}px` : '50vh'
 
@@ -1825,22 +1837,22 @@ function ExercisePanel({ muscleId, dayIso, originRect, onClose, cycleId, onAddMo
               key={name}
               name={name}
               index={i}
-              sets={Array.from({ length: setCounts[name] ?? 2 }, (_, si) => ({
+              sets={Array.from({ length: setCounts[name] ?? defaultSetCount }, (_, si) => ({
                 reps: (reps[name] || [])[si] ?? 0,
                 weight: (weights[name] || [])[si] ?? 0,
               }))}
-              ghostSets={Array.from({ length: setCounts[name] ?? 2 }, (_, si) => ({
+              ghostSets={Array.from({ length: setCounts[name] ?? defaultSetCount }, (_, si) => ({
                 weight: (priorData[name]?.weight || [])[si] ?? 0,
                 reps:   (priorData[name]?.reps   || [])[si] ?? 0,
               }))}
               onOpen={(rect, setIndex) => openExercise(name, rect, setIndex)}
               onAddSet={() => setSetCounts((prev) => {
-                const next = { ...prev, [name]: (prev[name] ?? 2) + 1 }
+                const next = { ...prev, [name]: (prev[name] ?? defaultSetCount) + 1 }
                 try { localStorage.setItem(setCountKey, JSON.stringify(next)) } catch (_) {}
                 return next
               })}
               onDeleteSet={() => {
-                const current = setCounts[name] ?? 2
+                const current = setCounts[name] ?? defaultSetCount
                 if (current <= 1) return
                 const next = current - 1
                 setSetCounts((prev) => {
