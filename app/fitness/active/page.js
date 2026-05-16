@@ -26,7 +26,7 @@ import {
   getTierCount,
   getTier,
 } from '../../../lib/exp'
-import { consumePrefire, setInAnimation, disarmChain, subscribeStaged, registerChainStep, clearChainTransient } from '../../../lib/predictiveTap'
+import { consumePrefire, setInAnimation, disarmChain, subscribeStaged, registerChainStep, clearChainTransient, isPendingChainHead } from '../../../lib/predictiveTap'
 import TierUpFlourish from '../../../components/exp/TierUpFlourish'
 // Day-hop and BEGIN HERE muscle-hop now navigate to /fitness/active/[iso]
 // (Stage 1 of App Router refactor) so HeistTransition fires naturally and
@@ -2982,17 +2982,20 @@ export default function ActiveCyclePage() {
     router.push('/fitness/active/' + fireDayHopRef.current)
   }), [router])
 
-  // Predictive-tap chain — open the 'today' window IMMEDIATELY on mount,
-  // before the ready-gated consume below fires. Without this, currentStep
-  // stays at the prior page's 'activate' for the duration of the
-  // localStorage-load gap (typically 20-150ms). A fast 5th tap landing in
-  // that gap would compute nextHopAfter('activate') = 'today' and re-stage
-  // 'today' instead of 'muscle' — silently breaking the final chain hop.
-  // Setting currentStep='today' eagerly closes that gap so any tap during
-  // mount stages 'muscle' correctly. The ready-gated consume below still
-  // runs the actual handleDayHop once cycles + days are loaded.
+  // Predictive-tap chain — open the 'today' window IMMEDIATELY on mount
+  // (before the ready-gated consume below fires) ONLY when a 'today'
+  // intent is already queued. Without the queue gate this fired on every
+  // cold visit to /fitness/active, pre-arming the page for predictive
+  // staging — one manual tap on the TODAY card then staged 'muscle'
+  // (because pointerdown saw inAnim=true, currentStep='today') AND fired
+  // today HT via onClick, cascading TWO hops from one user tap.
+  //
+  // With the gate, eager-open fires only when we're truly mid-chain
+  // (queue head is 'today'). Cold visits leave the page idle.
   useEffect(() => {
-    setInAnimation('today', true)
+    if (isPendingChainHead('today')) {
+      setInAnimation('today', true)
+    }
   }, [])
 
   // Predictive-tap consume: when the page is ready, check for a 'today'
