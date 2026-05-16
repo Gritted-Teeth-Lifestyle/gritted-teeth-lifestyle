@@ -1675,14 +1675,16 @@ export default function GhostActivePage() {
     try {
       const cid  = localStorage.getItem(pk('active-cycle-id'))
       const name = localStorage.getItem(pk('cycle-name'))
-      const rawT = localStorage.getItem(pk('muscle-targets'))
       const rawD = localStorage.getItem(pk('training-days'))
       const rawP = localStorage.getItem(pk('daily-plan'))
       if (cid)  setCycleId(cid)
       if (name) setCycleName(name)
-      if (rawT) setTargets(JSON.parse(rawT))
       if (rawD) setDays(JSON.parse(rawD).sort())
-      if (rawP) setDailyPlan(JSON.parse(rawP))
+      if (rawP) {
+        const parsedPlan = JSON.parse(rawP)
+        setDailyPlan(parsedPlan)
+        setTargets(Array.from(new Set(Object.values(parsedPlan).flat().filter(Boolean))))
+      }
       const { xp, totalDays } = computeTotalXP()
       setBarXP(xp)
       setAllCyclesDays(totalDays)
