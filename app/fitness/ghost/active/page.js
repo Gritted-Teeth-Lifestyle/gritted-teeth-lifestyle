@@ -12,7 +12,6 @@ import Link from 'next/link'
 import { useSound } from '../../../../lib/useSound'
 import { useProfileGuard } from '../../../../lib/useProfileGuard'
 import { pk } from '../../../../lib/storage'
-import FireFadeIn from '../../../../components/FireFadeIn'
 import RetreatButton from '../../../../components/RetreatButton'
 
 const MUSCLE_LABELS = {
@@ -1601,15 +1600,17 @@ function StatBlock({ number, label }) {
   )
 }
 
+const MAX_LEVEL = 100
 function getLevelInfo(totalXP) {
   let level = 0
   let xpUsed = 0
-  while (true) {
-    const threshold = 15000 + level * 1000
+  while (level < MAX_LEVEL) {
+    const threshold = 150 + level * 35
     if (xpUsed + threshold > totalXP) return { level, progress: totalXP - xpUsed, threshold }
     xpUsed += threshold
     level++
   }
+  return { level: MAX_LEVEL, progress: 1, threshold: 1 }
 }
 
 function computeTotalXP() {
@@ -1674,14 +1675,16 @@ export default function GhostActivePage() {
     try {
       const cid  = localStorage.getItem(pk('active-cycle-id'))
       const name = localStorage.getItem(pk('cycle-name'))
-      const rawT = localStorage.getItem(pk('muscle-targets'))
       const rawD = localStorage.getItem(pk('training-days'))
       const rawP = localStorage.getItem(pk('daily-plan'))
       if (cid)  setCycleId(cid)
       if (name) setCycleName(name)
-      if (rawT) setTargets(JSON.parse(rawT))
       if (rawD) setDays(JSON.parse(rawD).sort())
-      if (rawP) setDailyPlan(JSON.parse(rawP))
+      if (rawP) {
+        const parsedPlan = JSON.parse(rawP)
+        setDailyPlan(parsedPlan)
+        setTargets(Array.from(new Set(Object.values(parsedPlan).flat().filter(Boolean))))
+      }
       const { xp, totalDays } = computeTotalXP()
       setBarXP(xp)
       setAllCyclesDays(totalDays)
@@ -1833,7 +1836,6 @@ export default function GhostActivePage() {
         />
       )}
 
-      <FireFadeIn duration={900} />
     </main>
   )
 }

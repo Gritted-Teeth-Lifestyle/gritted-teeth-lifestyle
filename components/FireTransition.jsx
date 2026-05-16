@@ -68,11 +68,14 @@ export default function FireTransition({ active, onComplete }) {
     }
     setArmed(true)
 
-    // Sound choreography
+    // Sound choreography. NOT held in cleanup — sound clones play
+    // independently of the component lifecycle, so when a tap-skip unmounts
+    // this component, the remaining stamp/mega-transition still fire and
+    // ride out their natural duration. Visual is gone, audio plays through.
     play('brand-confirm')
-    const s1 = setTimeout(() => play('stamp'), 200)
-    const s2 = setTimeout(() => play('mega-transition'), 700)
-    const s3 = setTimeout(() => play('stamp'), 1000)
+    setTimeout(() => play('stamp'), 200)
+    setTimeout(() => play('mega-transition'), 700)
+    setTimeout(() => play('stamp'), 1000)
 
     // Navigate at peak
     const t = setTimeout(() => {
@@ -82,7 +85,6 @@ export default function FireTransition({ active, onComplete }) {
     const cleanup = setTimeout(() => setArmed(false), 1500)
 
     return () => {
-      clearTimeout(s1); clearTimeout(s2); clearTimeout(s3)
       clearTimeout(t); clearTimeout(cleanup)
     }
   }, [active, onComplete, play])

@@ -9,17 +9,51 @@
  */
 import { useState, useEffect, useRef, useCallback } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { useSound } from '../../../lib/useSound'
 import { useProfileGuard } from '../../../lib/useProfileGuard'
 import { pk } from '../../../lib/storage'
-import FireFadeIn from '../../../components/FireFadeIn'
 import RetreatButton from '../../../components/RetreatButton'
+import HeistTransition from '../../../components/HeistTransition'
+import PickerSheet from '../../../components/attune/PickerSheet'
+import { chipsForDay, addChip } from '../../../lib/attunement'
+import {
+  computeProfileTotalXP,
+  dayXPWithFallback,
+  computeDailyReckoning,
+  replaceConsistencyCredit,
+  tickTier,
+  getTierCount,
+  getTier,
+} from '../../../lib/exp'
+import { consumePrefire, setInAnimation, disarmChain, subscribeStaged, registerChainStep, clearChainTransient, isPendingChainHead } from '../../../lib/predictiveTap'
+import TierUpFlourish from '../../../components/exp/TierUpFlourish'
+// Day-hop and BEGIN HERE muscle-hop now navigate to /fitness/active/[iso]
+// (Stage 1 of App Router refactor) so HeistTransition fires naturally and
+// plays transition-slash — matching the sound profile of the chain's first
+// three hops (profile → LOAD CYCLE → ACTIVATE).
 
 const MUSCLE_LABELS = {
   chest: 'CHEST', back: 'BACK', shoulders: 'SHOULDERS',
   biceps: 'BICEPS', triceps: 'TRICEPS', forearms: 'FOREARMS',
   abs: 'ABS', glutes: 'GLUTES', quads: 'QUADS',
   hamstrings: 'HAMSTRINGS', calves: 'CALVES',
+}
+// Canonical kanji-per-muscle map. Mirrors app/fitness/new/branded/page.js
+// SHEET_MUSCLES list verbatim (11 muscles). Used by the rolodex DayButton
+// to render glyph-only on non-TODAY cards.
+const MUSCLE_KANJI = {
+  chest:      '胸',
+  shoulders:  '肩',
+  back:       '背',
+  forearms:   '腕',
+  quads:      '腿',
+  hamstrings: '裏',
+  calves:     '脛',
+  biceps:     '二',
+  triceps:    '三',
+  glutes:     '尻',
+  abs:        '腹',
 }
 const DAY_FULL   = ['SUNDAY','MONDAY','TUESDAY','WEDNESDAY','THURSDAY','FRIDAY','SATURDAY']
 const DAY_SHORT  = ['SUN','MON','TUE','WED','THU','FRI','SAT']
@@ -65,6 +99,87 @@ function MuscleChip({ id, index, total }) {
         {MUSCLE_LABELS[id] || id.toUpperCase()}
       </div>
     </div>
+  )
+}
+
+/* ── Day button — matches the TODAY hero's red-clip-path style. Used in the
+ *  vertical rolodex to make every day visually consistent with the hero
+ *  button. Done days dim to a dark surface bg with a strikethrough date so
+ *  they read as past-completed without standing out as much as live days.
+ */
+function DayButton({ iso, muscles, todayIso, onClick, doneKey, cycleId }) {
+  const { play } = useSound()
+  const [done, setDone] = useState(false)
+
+  useEffect(() => {
+    try { setDone(localStorage.getItem(pk(`done-${cycleId}-${iso}`)) === 'true') } catch {}
+  }, [iso, doneKey, cycleId])
+
+  const date    = parseDate(iso)
+  const dayName = DAY_SHORT[date.getDay()]
+  const dayNum  = date.getDate()
+  const mon     = MONTH_SHORT[date.getMonth()]
+
+  const isToday = iso === todayIso
+  const isPast  = iso < todayIso
+  const label   = isToday ? 'TODAY' : done ? 'DONE' : isPast ? 'MISSED' : 'UPCOMING'
+
+  return (
+    <button
+      type="button"
+      // Predictive-tap chain marker: ONLY the TODAY card carries this
+      // attribute (other days in the rolodex are not the chain target).
+      // Aligns with the y=479 ACTIVE_TOP_Y pinning that mirrors ACTIVATE's
+      // screen rect on /fitness/load — predictive-tap module reads bbox
+      // from this element to match the chain hop.
+      data-predictive-tap-target={isToday ? 'today' : undefined}
+      onClick={() => {
+        // Predictive-tap chain step 4 — onClick stages the day hop. The
+        // parent kicks off HeistTransition (transition-slash sound) and
+        // pushes /fitness/active/[iso] on completion. No rect needed —
+        // the new route mounts DayFocus full-screen, so no zoom-from-rect
+        // animation. Card-confirm sound is replaced by HT's slash sound.
+        onClick(iso)
+      }}
+      className="relative block w-full outline-none active:scale-[0.98] transition-transform"
+      style={{ touchAction: 'pan-y' }}
+      aria-label={`${label} — ${DAY_FULL[date.getDay()]} ${dayNum} ${MONTH_FULL[date.getMonth()]}`}
+    >
+      <div
+        className={`absolute inset-0 transition-colors ${done ? 'bg-gtl-surface' : 'bg-gtl-red'}`}
+        style={{
+          // Match the ACTIVATE button's clip-path slash exactly.
+          clipPath: 'polygon(3% 0%, 100% 0%, 97% 100%, 0% 100%)',
+          // Match the ACTIVATE button's offset-block shadow (4px 4px sharp
+          // black) instead of the soft red glow we had before.
+          boxShadow: done
+            ? '2px 2px 0 #070708'
+            : '4px 4px 0 #070708',
+          border: done ? '1px solid #2a2a30' : 'none',
+        }}
+        aria-hidden="true"
+      />
+      <div className="relative flex items-center justify-between px-6 py-5 gap-3 min-h-[56px]">
+        {/* Single-line date — matches canonical chain-button content shape
+            (one line of text-3xl). Status label + small muscle text removed
+            so TODAY card height equals ACTIVATE / ProfileChip / MUSCLE
+            (~70px); the centered active line is what tells the user this
+            is today, no separate label needed. */}
+        <span className={`font-display text-3xl leading-none whitespace-nowrap shrink-0 tracking-tight
+          ${done ? 'text-gtl-chalk' : 'text-gtl-paper'}`}
+          style={done ? { textDecoration: 'line-through', textDecorationColor: '#7a0e14' } : undefined}>
+          {dayName} · {mon} {dayNum}
+        </span>
+        {/* Right side: REST pill only on no-muscles days. Kanji rendering
+            removed for now — was overflowing and pushing the date off-screen. */}
+        {muscles.length === 0 && (
+          <span className={`font-mono text-[10px] tracking-[0.3em] uppercase shrink-0 leading-none
+            ${done ? 'text-gtl-smoke/60' : 'text-gtl-paper/50'}`}>
+            REST
+          </span>
+        )}
+      </div>
+    </button>
   )
 }
 
@@ -131,9 +246,9 @@ function DayCard({ iso, muscles, index, onClick, doneKey, cycleId }) {
   const isLandscape = cardW / cardH > 1.4
 
   const handleClick = () => {
-    play('option-select')
-    const rect = cardRef.current?.getBoundingClientRect() ?? null
-    onClick(iso, rect)
+    // Day-hop now goes via /fitness/active/[iso] — HT slash plays in the
+    // parent on navigation. See DayButton for the same pattern.
+    onClick(iso)
   }
 
   return (
@@ -342,6 +457,18 @@ function RepsPopup({ exerciseName, initialReps, rowRect, onClose, onSave }) {
   const [numDir, setNumDir]       = useState('up')
   const [slamming, setSlamming]   = useState(false)
   const [setPressed, setSetPressed] = useState(false)
+  // Entrance skip — first tap snaps the popup zoom-in to settled.
+  const [entranceSkipped, setEntranceSkipped] = useState(false)
+  useEffect(() => {
+    if (entranceSkipped || slamming) return
+    const handler = () => setEntranceSkipped(true)
+    window.addEventListener('pointerdown', handler, { capture: true })
+    window.addEventListener('touchstart',  handler, { capture: true, passive: true })
+    return () => {
+      window.removeEventListener('pointerdown', handler, { capture: true })
+      window.removeEventListener('touchstart',  handler, { capture: true })
+    }
+  }, [entranceSkipped, slamming])
 
   const POPUP_WIDTH  = 380
   const POPUP_HEIGHT = 560 // estimated
@@ -377,12 +504,27 @@ function RepsPopup({ exerciseName, initialReps, rowRect, onClose, onSave }) {
     setNumKey((k) => k + 1)
   }
 
+  const slamTimerRef = useRef(null)
   const handleSetReps = () => {
     play('stamp')
     onSave(reps)
     setSlamming(true)
-    setTimeout(onClose, 550)
+    slamTimerRef.current = setTimeout(onClose, 550)
   }
+  // Tap during slam-exit → close immediately, clear the auto-close timer.
+  useEffect(() => {
+    if (!slamming) return
+    const handler = () => {
+      if (slamTimerRef.current) clearTimeout(slamTimerRef.current)
+      onClose()
+    }
+    window.addEventListener('pointerdown', handler, { capture: true })
+    window.addEventListener('touchstart',  handler, { capture: true, passive: true })
+    return () => {
+      window.removeEventListener('pointerdown', handler, { capture: true })
+      window.removeEventListener('touchstart',  handler, { capture: true })
+    }
+  }, [slamming, onClose])
 
   useEffect(() => {
     const handler = (e) => {
@@ -441,6 +583,17 @@ function RepsPopup({ exerciseName, initialReps, rowRect, onClose, onSave }) {
         }
       `}</style>
 
+      {/* Skip the reps-in entrance animation on first tap — collapses
+          animation duration/delay so reps-in snaps to settled. */}
+      {entranceSkipped && !slamming && (
+        <style>{`
+          [data-reps-popup-skip-target], [data-reps-popup-skip-target] * {
+            animation-duration: 1ms !important;
+            animation-delay: 0ms !important;
+          }
+        `}</style>
+      )}
+
       {/* Backdrop */}
       <div
         className="fixed inset-0 z-[9999]"
@@ -450,6 +603,7 @@ function RepsPopup({ exerciseName, initialReps, rowRect, onClose, onSave }) {
 
       {/* Outer — position only, zero animation so centering never shifts */}
       <div
+        data-reps-popup-skip-target
         className="fixed z-[10000]"
         style={{
           width: '380px',
@@ -711,6 +865,18 @@ function WeightPopup({ exerciseName, initialWeight, rowRect, onClose, onSave }) 
   const [slamming, setSlamming]     = useState(false)
   const [setPressed, setSetPressed] = useState(false)
   const [flashChip, setFlashChip]   = useState(null)
+  // Entrance skip — first tap snaps the popup zoom-in to settled.
+  const [entranceSkipped, setEntranceSkipped] = useState(false)
+  useEffect(() => {
+    if (entranceSkipped || slamming) return
+    const handler = () => setEntranceSkipped(true)
+    window.addEventListener('pointerdown', handler, { capture: true })
+    window.addEventListener('touchstart',  handler, { capture: true, passive: true })
+    return () => {
+      window.removeEventListener('pointerdown', handler, { capture: true })
+      window.removeEventListener('touchstart',  handler, { capture: true })
+    }
+  }, [entranceSkipped, slamming])
 
   const POPUP_WIDTH  = 380
   // Chips moved to a side rail — main column is back to its original ~560 height.
@@ -779,12 +945,27 @@ function WeightPopup({ exerciseName, initialWeight, rowRect, onClose, onSave }) 
     setTimeout(() => setFlashChip(null), 220)
   }
 
+  const slamTimerRef = useRef(null)
   const handleSetWeight = () => {
     play('stamp')
     onSave(weight)
     setSlamming(true)
-    setTimeout(onClose, 550)
+    slamTimerRef.current = setTimeout(onClose, 550)
   }
+  // Tap during slam-exit → close immediately, clear the auto-close timer.
+  useEffect(() => {
+    if (!slamming) return
+    const handler = () => {
+      if (slamTimerRef.current) clearTimeout(slamTimerRef.current)
+      onClose()
+    }
+    window.addEventListener('pointerdown', handler, { capture: true })
+    window.addEventListener('touchstart',  handler, { capture: true, passive: true })
+    return () => {
+      window.removeEventListener('pointerdown', handler, { capture: true })
+      window.removeEventListener('touchstart',  handler, { capture: true })
+    }
+  }, [slamming, onClose])
 
   useEffect(() => {
     const handler = (e) => {
@@ -813,17 +994,27 @@ function WeightPopup({ exerciseName, initialWeight, rowRect, onClose, onSave }) 
         }
       `}</style>
 
+      {/* Skip the weight-popup zoom entrance on first tap. */}
+      {entranceSkipped && !slamming && (
+        <style>{`
+          [data-weight-popup-skip-target], [data-weight-popup-skip-target] * {
+            animation-duration: 1ms !important;
+            animation-delay: 0ms !important;
+          }
+        `}</style>
+      )}
+
       <div className="fixed inset-0 z-[9999]"
         style={{ background: 'rgba(7,7,8,0.80)', backdropFilter: 'blur(3px)' }}
         onClick={() => { onSave(weight); onClose() }}
       />
 
-      <div className="fixed z-[10000]"
+      <div data-weight-popup-skip-target className="fixed z-[10000]"
         style={{ width: '380px', left: '50%', marginLeft: '-190px', top: `${popupTop}px` }}
         onClick={(e) => e.stopPropagation()}
       >
         <div style={{ animation: slamming ? 'weight-slam-exit 500ms cubic-bezier(0.4,0,1,1) forwards' : 'weight-in 500ms cubic-bezier(0.18,1.2,0.35,1) forwards' }}>
-        <div className="relative w-full flex flex-col items-center pl-12 pr-20 py-10 bg-gtl-ink"
+        <div className="relative w-full flex flex-col items-center pl-12 pr-24 py-10 bg-gtl-ink"
           style={{ clipPath: 'polygon(3% 0%, 100% 0%, 97% 100%, 0% 100%)' }}>
           <div className="absolute inset-0 gtl-noise pointer-events-none opacity-60" />
           <div className="absolute inset-0 bg-gtl-red-deep -z-10"
@@ -838,12 +1029,12 @@ function WeightPopup({ exerciseName, initialWeight, rowRect, onClose, onSave }) 
           <div
             style={{
               position: 'absolute',
-              right: '10px',
+              right: '8px',
               top: '50%',
               transform: 'translateY(-50%)',
               display: 'flex',
               flexDirection: 'column-reverse',
-              gap: '8px',
+              gap: '10px',
               zIndex: 10,
             }}
           >
@@ -857,16 +1048,16 @@ function WeightPopup({ exerciseName, initialWeight, rowRect, onClose, onSave }) 
                   style={{ touchAction: 'manipulation' }}
                   aria-label={`Set weight to ${w} pounds`}>
                   <div className="absolute inset-0 bg-gtl-red-deep"
-                    style={{ clipPath: 'polygon(12% 0%, 100% 0%, 88% 100%, 0% 100%)', transform: 'translate(2px, 2px)' }}
+                    style={{ clipPath: 'polygon(12% 0%, 100% 0%, 88% 100%, 0% 100%)', transform: 'translate(3px, 3px)' }}
                     aria-hidden="true" />
                   <div
-                    className="relative font-display tracking-tight px-2 py-1 text-base leading-none transition-all duration-100"
+                    className="relative font-display tracking-tight px-3 py-2 text-xl leading-none transition-all duration-100"
                     style={{
                       clipPath: 'polygon(12% 0%, 100% 0%, 88% 100%, 0% 100%)',
                       background: flashing ? '#ff2a36' : active ? '#d4181f' : '#1a1a1e',
                       color: active || flashing ? '#ffffff' : '#c8c8c8',
                       border: '1px solid ' + (active ? '#ff2a36' : '#3a3a42'),
-                      minWidth: '3rem',
+                      minWidth: '4rem',
                       textAlign: 'center',
                     }}
                   >
@@ -1255,6 +1446,21 @@ function CustomMoveInput({ value, onChange, onConfirm, onCancel, onCharAdded }) 
 function ExercisePanel({ muscleId, dayIso, originRect, onClose, cycleId }) {
   const { play } = useSound()
   const [closing, setClosing]           = useState(false)
+  // Entrance skip — first tap snaps the panel zoom-in + cascade to settled.
+  const [entranceSkipped, setEntranceSkipped] = useState(false)
+  useEffect(() => {
+    if (entranceSkipped || closing) return
+    const handler = (e) => {
+      if (e.target?.closest?.('[data-retreat]')) return
+      setEntranceSkipped(true)
+    }
+    window.addEventListener('pointerdown', handler, { capture: true })
+    window.addEventListener('touchstart',  handler, { capture: true, passive: true })
+    return () => {
+      window.removeEventListener('pointerdown', handler, { capture: true })
+      window.removeEventListener('touchstart',  handler, { capture: true })
+    }
+  }, [entranceSkipped, closing])
   const [reps, setReps]                 = useState({})
   const [weights, setWeights]           = useState({})
   const [setCounts, setSetCounts]       = useState({}) // exerciseName → number of sets (default 2)
@@ -1404,7 +1610,18 @@ function ExercisePanel({ muscleId, dayIso, originRect, onClose, cycleId }) {
   }, [handleClose])
 
   return (
+    <>
+    {/* Skip ExercisePanel entrance cascade on first tap. */}
+    {entranceSkipped && !closing && (
+      <style>{`
+        [data-exercise-panel-skip-target], [data-exercise-panel-skip-target] * {
+          animation-duration: 1ms !important;
+          animation-delay: 0ms !important;
+        }
+      `}</style>
+    )}
     <div
+      data-exercise-panel-skip-target
       className="fixed inset-0 z-[9995] bg-gtl-void overflow-hidden"
       style={{
         transformOrigin: `${originX} ${originY}`,
@@ -1679,6 +1896,7 @@ function ExercisePanel({ muscleId, dayIso, originRect, onClose, cycleId }) {
       </div>
     </div>
     </div>
+    </>
   )
 }
 
@@ -1688,12 +1906,76 @@ function DayFocus({ iso, muscles, isLastDay, originRect, onClose, cycleId }) {
   const [closing, setClosing]           = useState(false)
   const [focusMuscle, setFocusMuscle]   = useState(null)
   const [focusMuscleRect, setFocusMuscleRect] = useState(null)
+  // R17/R18 — empty-day picker. When the user lands on a workout day with
+  // zero attuned chips AND at least one assigned muscle, surface the
+  // in-the-moment picker so they can pick an exercise on the spot. If the
+  // day has no muscles, fall through to the existing empty-state UI (don't
+  // open). If the user dismisses without picking, don't re-summon on the
+  // same visit (component-local flag); navigating away + back gets a fresh
+  // re-evaluation since DayFocus remounts.
+  const [pickerOpen, setPickerOpen]           = useState(false)
+  const [pickerDismissed, setPickerDismissed] = useState(false)
+  // Entrance skip: first pointerdown/touchstart anywhere during the open
+  // animation snaps the day-focus + all child animations to settled state.
+  // The injected <style> block re-targets every running animation on the
+  // panel to 1ms duration / 0ms delay via a scoped attribute selector.
+  const [entranceSkipped, setEntranceSkipped] = useState(false)
+  useEffect(() => {
+    if (entranceSkipped || closing) return
+    const handler = (e) => {
+      if (e.target?.closest?.('[data-retreat]')) return
+      setEntranceSkipped(true)
+    }
+    window.addEventListener('pointerdown', handler, { capture: true })
+    window.addEventListener('touchstart',  handler, { capture: true, passive: true })
+    return () => {
+      window.removeEventListener('pointerdown', handler, { capture: true })
+      window.removeEventListener('touchstart',  handler, { capture: true })
+    }
+  }, [entranceSkipped, closing])
   const date    = parseDate(iso)
   const dayName = DAY_FULL[date.getDay()]
   const dayNum  = date.getDate()
   const month   = MONTH_FULL[date.getMonth()]
   const year    = date.getFullYear()
   const hasWork = muscles.length > 0
+
+  // R17/R18 mount-check: open the in-the-moment picker if this day has
+  // muscles assigned but no chips attuned yet. Skipped if the user
+  // already dismissed the picker on this visit, or if the day has no
+  // muscles (fall back to existing empty-state UI), or if chips already
+  // exist for this day.
+  useEffect(() => {
+    if (pickerDismissed) return
+    if (!hasWork) return
+    if (chipsForDay(cycleId, iso).length > 0) return
+    setPickerOpen(true)
+  }, [cycleId, iso, hasWork, pickerDismissed])
+
+  // Predictive-tap chain — final hop. The 'muscle' intent gets staged
+  // DURING the day-focus zoom-in animation, which begins as DayFocus
+  // mounts. So the user's hit-zone tap usually lands AFTER this
+  // component is already on screen. Try consume immediately (in case
+  // the intent was already staged) AND subscribe to staging events so
+  // a tap mid-animation re-attempts consume.
+  useEffect(() => {
+    if (!hasWork) return
+    if (focusMuscle) return
+    const tryConsume = () => {
+      if (focusMuscle) return
+      const intent = consumePrefire('muscle')
+      if (intent && muscles[0]) {
+        play('card-confirm')
+        setFocusMuscle(muscles[0])
+        disarmChain('muscle-fired')
+      }
+    }
+    tryConsume()
+    return subscribeStaged((stepName) => {
+      if (stepName === 'muscle') tryConsume()
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasWork, focusMuscle])
 
   const [allReps, setAllReps]       = useState({})
   const [allWeights, setAllWeights] = useState({})
@@ -1703,13 +1985,65 @@ function DayFocus({ iso, muscles, isLastDay, originRect, onClose, cycleId }) {
     try { return localStorage.getItem(pk(`done-${cycleId}-${iso}`)) === 'true' } catch { return false }
   })
 
+  const handleClose = useCallback(() => {
+    play('menu-close')
+    setClosing(true)
+    setTimeout(onClose, 350)
+  }, [onClose, play])
+
+  const stampCloseTimerRef = useRef(null)
+  // `justStamped` only flips on this session's handleStamp call — separate
+  // from `stamped` (which initializes true for already-completed days from
+  // localStorage). Without this, the post-stamp skip listener would install
+  // on mount for any already-done day and close DayFocus on the user's first
+  // tap (e.g. tapping a muscle to open ExercisePanel).
+  const [justStamped, setJustStamped] = useState(false)
   const handleStamp = () => {
     if (stamped) return
     play('option-select')
     try { localStorage.setItem(pk(`done-${cycleId}-${iso}`), 'true') } catch (_) {}
+    // R8 / R8a + R7 trigger — same wiring as the canonical handleStamp at
+    // /fitness/active/[iso]/page.js. See that file for full annotation.
+    try {
+      const reckoning = computeDailyReckoning(cycleId, iso, { [iso]: muscles })
+      replaceConsistencyCredit(cycleId, iso, {
+        type: 'consistency-credit',
+        ts: Date.now(),
+        value: reckoning.consistency_credit,
+        completion_pct: reckoning.completion_pct,
+        sets_planned: reckoning.sets_planned,
+        sets_logged: reckoning.sets_logged,
+      })
+      if (reckoning.shouldTick) {
+        const before = getTier(getTierCount())
+        tickTier()
+        const after = getTier(getTierCount())
+        if (after !== before) {
+          try {
+            localStorage.setItem(pk('tier-cross-pending'), after)
+            localStorage.setItem(pk('last-seen-tier'), after)
+          } catch (_) {}
+        }
+      }
+    } catch (_) {}
     setStamped(true)
-    setTimeout(() => handleClose(), 900)
+    setJustStamped(true)
+    stampCloseTimerRef.current = setTimeout(() => handleClose(), 900)
   }
+  // Tap during THIS session's post-stamp 900ms wait → close immediately.
+  useEffect(() => {
+    if (!justStamped || closing) return
+    const handler = () => {
+      if (stampCloseTimerRef.current) clearTimeout(stampCloseTimerRef.current)
+      handleClose()
+    }
+    window.addEventListener('pointerdown', handler, { capture: true })
+    window.addEventListener('touchstart',  handler, { capture: true, passive: true })
+    return () => {
+      window.removeEventListener('pointerdown', handler, { capture: true })
+      window.removeEventListener('touchstart',  handler, { capture: true })
+    }
+  }, [justStamped, closing, handleClose])
 
   const handleUnlogMuscle = (muscleId) => {
     play('menu-close')
@@ -1747,12 +2081,6 @@ function DayFocus({ iso, muscles, isLastDay, originRect, onClose, cycleId }) {
   const originY = originRect
     ? `${originRect.top + originRect.height / 2}px`
     : '50vh'
-
-  const handleClose = useCallback(() => {
-    play('menu-close')
-    setClosing(true)
-    setTimeout(onClose, 350)
-  }, [onClose, play])
 
   // Deep-launch: continue the auto-progression chain from /fitness/load ACTIVATE.
   // After zoom-in lands, auto-open the first muscle's exercise panel — which
@@ -1828,7 +2156,20 @@ function DayFocus({ iso, muscles, isLastDay, originRect, onClose, cycleId }) {
         }
       `}</style>
 
+      {/* When the user taps to skip the entrance, this stylesheet collapses
+          every running animation inside the day-focus panel to ~instant so
+          everything snaps to its settled state. Targeted at the wrapper via
+          data-day-focus-skip-target so it only affects this tree. */}
+      {entranceSkipped && (
+        <style>{`
+          [data-day-focus-skip-target], [data-day-focus-skip-target] * {
+            animation-duration: 1ms !important;
+            animation-delay: 0ms !important;
+          }
+        `}</style>
+      )}
       <div
+        data-day-focus-skip-target
         className="fixed inset-0 z-[9990] bg-gtl-void overflow-hidden"
         style={{
           transformOrigin: `${originX} ${originY}`,
@@ -2030,7 +2371,7 @@ function DayFocus({ iso, muscles, isLastDay, originRect, onClose, cycleId }) {
                       id={id}
                       rot={rot}
                       delay={320 + i * 60}
-                      onClick={(rect) => { console.log('[GTL] slab clicked:', id, 'focusMuscle before:', focusMuscle); play('option-select'); setFocusMuscle(id); setFocusMuscleRect(rect) }}
+                      onClick={(rect) => { console.log('[GTL] slab clicked:', id, 'focusMuscle before:', focusMuscle); play('card-confirm'); setFocusMuscle(id); setFocusMuscleRect(rect) }}
                     />
                   )
                 })}
@@ -2085,7 +2426,7 @@ function DayFocus({ iso, muscles, isLastDay, originRect, onClose, cycleId }) {
                               type="button"
                               onClick={(e) => {
                                 const rect = e.currentTarget.getBoundingClientRect()
-                                play('option-select')
+                                play('card-confirm')
                                 setFocusMuscle(muscleId)
                                 setFocusMuscleRect(rect)
                               }}
@@ -2226,45 +2567,52 @@ function DayFocus({ iso, muscles, isLastDay, originRect, onClose, cycleId }) {
           </div>
         </div>
 
-        {/* Quick-nav FIRST MUSCLE hero — sits at y=466 to continue the muscle-memory
-            chain from the day grid. Tap = open the first muscle's exercise panel.
-            Hidden once a muscle is focused (so it doesn't overlay the next zoom). */}
+        {/* Quick-nav BEGIN HERE muscle — chain step 5. Same canonical
+            geometry as ProfileChip / ActivatePopup so the predictive-tap
+            chain can use one shared hit-zone (px-24 py-5 min-h-[56px],
+            polygon(3%/97%) clipPath, 4px offset corner shadow, text-3xl).
+            Hidden once a muscle is focused (so it doesn't overlay the
+            next zoom). */}
         {hasWork && !focusMuscle && (
           <button
             type="button"
+            data-predictive-tap-target="muscle"
             onClick={(e) => {
               const rect = e.currentTarget.getBoundingClientRect()
-              play('option-select')
+              // BEGIN HERE muscle is chain step 5 — committal sound to
+              // match ACTIVATE (chain step 3) and TODAY (chain step 4).
+              play('card-confirm')
               setFocusMuscle(muscles[0])
               setFocusMuscleRect(rect)
+              // Chain ends here — disarm so subsequent taps (like a
+              // non-today day card) don't accidentally stage 'muscle'
+              // because currentStep got stuck at 'today' from this run.
+              // User re-arms by tapping a profile chip on /fitness.
+              disarmChain('muscle-fired')
             }}
-            className="fixed z-[9991] block outline-none active:scale-[0.98] transition-transform"
+            className={`
+              fixed z-[9991] flex items-center justify-center
+              font-display tracking-[0.25em] uppercase overflow-visible
+              px-24 py-5 min-h-[56px]
+              text-3xl text-gtl-paper
+              transition-all duration-200 ease-out
+              [@media(hover:hover)]:hover:scale-[1.04] active:scale-[0.98]
+              bg-gtl-red [@media(hover:hover)]:hover:bg-gtl-red-bright
+              shadow-[4px_4px_0_#070708]
+              [@media(hover:hover)]:hover:shadow-[6px_6px_0_#070708]
+              active:shadow-[2px_2px_0_#070708]
+            `}
             style={{
               top: '466px',
-              left: '32px',
-              right: '32px',
+              left: '12px',
+              right: '12px',
+              clipPath: 'polygon(3% 0%, 100% 0%, 97% 100%, 0% 100%)',
               animation: 'activate-popup-rise 320ms cubic-bezier(0.18, 1, 0.36, 1) 380ms both',
             }}
           >
-            <div
-              className="absolute inset-0 bg-gtl-red transition-colors group-active:bg-gtl-red-bright"
-              style={{
-                clipPath: 'polygon(4% 0%, 100% 0%, 96% 100%, 0% 100%)',
-                boxShadow: '0 4px 28px rgba(212, 24, 31, 0.55)',
-              }}
-              aria-hidden="true"
-            />
-            <div className="relative flex items-center justify-between px-6 py-3 gap-3">
-              <div className="flex flex-col items-start min-w-0">
-                <span className="font-mono text-[9px] tracking-[0.3em] uppercase text-gtl-paper/80 leading-none">
-                  BEGIN HERE
-                </span>
-                <span className="font-display text-2xl text-gtl-paper leading-none mt-1 truncate">
-                  {MUSCLE_LABELS[muscles[0]] || muscles[0].toUpperCase()}
-                </span>
-              </div>
-              <span className="font-display text-2xl text-gtl-paper leading-none shrink-0">➤︎</span>
-            </div>
+            <span className="relative inline-block leading-none tracking-tight">
+              {MUSCLE_LABELS[muscles[0]] || muscles[0].toUpperCase()}
+            </span>
           </button>
         )}
 
@@ -2277,6 +2625,28 @@ function DayFocus({ iso, muscles, isLastDay, originRect, onClose, cycleId }) {
             originRect={focusMuscleRect}
             cycleId={cycleId}
             onClose={() => { setFocusMuscle(null); setFocusMuscleRect(null); setRefreshKey(k => k + 1) }}
+          />
+        )}
+
+        {/* R17/R18 — empty-day in-the-moment picker. Opens automatically on
+            mount when the day has muscles assigned but zero attuned chips.
+            Picking confirms a single chip via attunementStore.addChip and
+            closes; dismissing without picking sets the visit-local flag so
+            it doesn't re-summon. Read-only consumer of attunementStore +
+            PickerSheet — neither module is modified here. */}
+        {pickerOpen && (
+          <PickerSheet
+            sourceDayId={iso}
+            mode="in-the-moment"
+            cycle={{ id: cycleId, dailyPlan: { [iso]: muscles } }}
+            onConfirm={(_targetDayIds, exerciseId) => {
+              addChip(cycleId, iso, exerciseId)
+              setPickerOpen(false)
+            }}
+            onClose={() => {
+              setPickerDismissed(true)
+              setPickerOpen(false)
+            }}
           />
         )}
       </div>
@@ -2315,62 +2685,30 @@ function StatMini({ number, label }) {
   )
 }
 
+const MAX_LEVEL = 100
 function getLevelInfo(totalXP) {
   let level = 0
   let xpUsed = 0
-  while (true) {
-    const threshold = 15000 + level * 1000
+  while (level < MAX_LEVEL) {
+    const threshold = 150 + level * 35
     if (xpUsed + threshold > totalXP) {
       return { level, progress: totalXP - xpUsed, threshold }
     }
     xpUsed += threshold
     level++
   }
+  return { level: MAX_LEVEL, progress: 1, threshold: 1 }
 }
 
-function repMult(r) {
-  if (r >= 5 && r <= 15) return 1.0
-  if (r < 5)  return Math.exp(-Math.pow(r - 5,  2) / 8)
-  return              Math.exp(-Math.pow(r - 15, 2) / 32)
-}
-
+// Sums setLog snapshots when populated per day; falls back to legacy
+// raw-reps recompute for days without snapshots.
 function computeTotalXP() {
-  try {
-    const raw = localStorage.getItem(pk('cycles'))
-    if (!raw) return { xp: 0, totalDays: 0 }
-    const allCycles = JSON.parse(raw)
-    let xp = 0
-    let totalDays = 0
-    for (const cycle of allCycles) {
-      if (!cycle.days || !cycle.dailyPlan) continue
-      totalDays += cycle.days.length
-      for (const iso of cycle.days) {
-        if (localStorage.getItem(pk(`done-${cycle.id}-${iso}`)) !== 'true') continue
-        for (const muscleId of (cycle.dailyPlan[iso] || [])) {
-          const rRaw = localStorage.getItem(pk(`ex-${cycle.id}-${iso}-${muscleId}`))
-          const wRaw = localStorage.getItem(pk(`wt-${cycle.id}-${iso}-${muscleId}`))
-          const rData = rRaw ? JSON.parse(rRaw) : {}
-          const wData = wRaw ? JSON.parse(wRaw) : {}
-          for (const name of Object.keys(rData)) {
-            const rArr = Array.isArray(rData[name]) ? rData[name] : [rData[name]]
-            const wArr = Array.isArray(wData[name]) ? wData[name] : [wData[name] || 0]
-            for (let i = 0; i < rArr.length; i++) {
-              const reps = rArr[i] || 0
-              const weight = wArr[i] || 0
-              if (reps === 0) continue
-              const mult = repMult(reps)
-              xp += weight > 0 ? weight * mult * reps : reps * mult
-            }
-          }
-        }
-      }
-    }
-    return { xp, totalDays }
-  } catch (_) { return { xp: 0, totalDays: 0 } }
+  return computeProfileTotalXP()
 }
 
 export default function ActiveCyclePage() {
   useProfileGuard()
+  const router = useRouter()
   const { play } = useSound()
 
   const [cycleId,    setCycleId]    = useState('')
@@ -2379,8 +2717,19 @@ export default function ActiveCyclePage() {
   const [days,       setDays]       = useState([])
   const [dailyPlan,  setDailyPlan]  = useState({})
   const [ready,      setReady]      = useState(false)
-  const [focusDay,   setFocusDay]   = useState(null)   // ISO string | null
-  const [focusRect,  setFocusRect]  = useState(null)   // DOMRect | null
+  // Day-hop transition: holds the target ISO while HeistTransition runs.
+  // null = idle. When set, <HeistTransition active onComplete=push> mounts;
+  // on cover phase, router.push('/fitness/active/' + iso) navigates.
+  const [fireDayHop, setFireDayHop] = useState(null)
+  // Synchronous skip flag — first pointer/touch during the day-hop slash
+  // routes immediately, mirroring the fast-forward behavior on /fitness/load.
+  const fireDayHopRef = useRef(null)
+  const skippedDayHopRef = useRef(false)
+  // iOS-leaked-click eat stamp (150ms grace). Mirror pattern from
+  // /fitness/hub and /fitness/load — onClick-sourced handleDayHop
+  // calls within 150ms of mount are rejected. The consume's setTimeout
+  // bypasses via { fromTimer: true }.
+  const mountTimeRef = useRef(0)
   const [cardRefreshKey, setCardRefreshKey] = useState(0)
   const [completedDays, setCompletedDays]   = useState(0)
   const [barXP, setBarXP]                   = useState(0)
@@ -2389,32 +2738,183 @@ export default function ActiveCyclePage() {
   const [levelUpAnim, setLevelUpAnim]       = useState(null) // null | { phase, newLevel, sparkles, barRect }
   const xpBarRef                            = useRef(null)
   const barXPRef                            = useRef(0)
+  const rolodexRef                          = useRef(null)
 
   useEffect(() => { barXPRef.current = barXP }, [barXP])
+  useEffect(() => { mountTimeRef.current = performance.now() }, [])
+
+  // Predictive-tap chain: clear stale transient state from any prior hop
+  // on every mount. Manual TODAY tap's onClick handler sets currentStep
+  // correctly via setInAnimation('today', true). Chain arrivals consume
+  // the prefire below and eagerly open inAnim there.
+  useEffect(() => {
+    clearChainTransient('active-mount', 'today')
+  }, [])
 
   useEffect(() => {
+    // Page-level scroll lock — prevents iOS PWA viewport-pan in any direction.
+    // overflow alone isn't enough on WKWebView; position:fixed + inset:0 +
+    // touch-action:none on the body makes the body a non-scrollable surface.
+    // Children (the rolodex) opt back in via data-scroll-passthrough.
+    const prevHtml = {
+      overflow: document.documentElement.style.overflow,
+    }
+    const prevBody = {
+      overflow: document.body.style.overflow,
+      position: document.body.style.position,
+      inset: document.body.style.inset,
+      width: document.body.style.width,
+      height: document.body.style.height,
+      touchAction: document.body.style.touchAction,
+    }
+    document.documentElement.style.overflow = 'hidden'
     document.body.style.overflow = 'hidden'
-    return () => { document.body.style.overflow = '' }
+    document.body.style.position = 'fixed'
+    document.body.style.inset = '0'
+    document.body.style.width = '100%'
+    document.body.style.height = '100%'
+    document.body.style.touchAction = 'none'
+    return () => {
+      document.documentElement.style.overflow = prevHtml.overflow
+      document.body.style.overflow = prevBody.overflow
+      document.body.style.position = prevBody.position
+      document.body.style.inset = prevBody.inset
+      document.body.style.width = prevBody.width
+      document.body.style.height = prevBody.height
+      document.body.style.touchAction = prevBody.touchAction
+    }
   }, [])
 
   useEffect(() => {
     try {
       const cid  = localStorage.getItem(pk('active-cycle-id'))
       const name = localStorage.getItem(pk('cycle-name'))
-      const rawT = localStorage.getItem(pk('muscle-targets'))
       const rawD = localStorage.getItem(pk('training-days'))
       const rawP = localStorage.getItem(pk('daily-plan'))
       if (cid)  setCycleId(cid)
       if (name) setCycleName(name)
-      if (rawT) setTargets(JSON.parse(rawT))
       if (rawD) setDays(JSON.parse(rawD).sort())
-      if (rawP) setDailyPlan(JSON.parse(rawP))
+      if (rawP) {
+        const parsedPlan = JSON.parse(rawP)
+        setDailyPlan(parsedPlan)
+        setTargets(Array.from(new Set(Object.values(parsedPlan).flat().filter(Boolean))))
+      }
       const { xp, totalDays } = computeTotalXP()
       setBarXP(xp)
       setAllCyclesDays(totalDays)
     } catch (_) {}
     setReady(true)
   }, [])
+
+  // ── Rolodex: scroll-driven prominence + auto-scroll today to y=479 ──
+  // The "active line" matches the ACTIVATE button's exact top position
+  // (top:479 on /fitness/load). Today's card lands in the same screen
+  // slot ACTIVATE occupies — same x, same y, same width/height. Each
+  // card carries --rolodex-t (1 at the active line, 0 at the edges).
+  // Tracked by the card's TOP edge so prominence is stable across
+  // varying card heights (TODAY card is taller than non-TODAY).
+  const ACTIVE_TOP_Y = 479
+  useEffect(() => {
+    if (!ready) return
+    const container = rolodexRef.current
+    if (!container) return
+
+    const update = () => {
+      const cards = container.querySelectorAll('[data-rolodex-iso]')
+      cards.forEach((card) => {
+        const rect = card.getBoundingClientRect()
+        // Distance from the card's top edge to the active y=479 line.
+        const dist = Math.abs(rect.top - ACTIVE_TOP_Y)
+        // Tight falloff — within 4px of active line = full prominence,
+        // 100px out = dim, beyond that pegged at zero. Sharp dropoff so
+        // neighbor cards dim quickly and only ONE card reads as centered.
+        const t = Math.max(0, Math.min(1, 1 - Math.max(0, dist - 4) / 96))
+        card.style.setProperty('--rolodex-t', String(t))
+        // Centered window is now ~6px wide (t >= 0.94 ≈ within 10px of
+        // active line). No more ambiguous "two cards both highlighted".
+        if (t >= 0.94) card.setAttribute('data-rolodex-centered', '')
+        else card.removeAttribute('data-rolodex-centered')
+      })
+    }
+    // Snap-on-scroll-end: after the user stops scrolling, snap the
+    // closest card precisely to y=479. Aggressive snap so the rolodex
+    // never settles between cards. 80ms debounce — long enough for
+    // momentum to subside, short enough to feel snappy.
+    let snapTimer = null
+    const snapToNearest = () => {
+      const cards = container.querySelectorAll('[data-rolodex-iso]')
+      let bestNode = null
+      let bestDist = Infinity
+      cards.forEach((card) => {
+        const dist = Math.abs(card.getBoundingClientRect().top - ACTIVE_TOP_Y)
+        if (dist < bestDist) { bestDist = dist; bestNode = card }
+      })
+      if (!bestNode) return
+      const delta = bestNode.getBoundingClientRect().top - ACTIVE_TOP_Y
+      if (Math.abs(delta) < 1) return
+      container.scrollTo({ top: container.scrollTop + delta, behavior: 'smooth' })
+    }
+    const onScroll = () => {
+      update()
+      if (snapTimer) clearTimeout(snapTimer)
+      snapTimer = setTimeout(snapToNearest, 80)
+    }
+    update()
+    container.addEventListener('scroll', onScroll, { passive: true })
+    const ro = new ResizeObserver(update)
+    ro.observe(container)
+    return () => {
+      container.removeEventListener('scroll', onScroll)
+      ro.disconnect()
+      if (snapTimer) clearTimeout(snapTimer)
+    }
+  }, [ready, days])
+
+  useEffect(() => {
+    // Re-center on every "page open" — initial mount, plus every remount
+    // after a router.back() from /fitness/active/[iso]. The day-focus is
+    // a separate route now, so we don't need to gate on a focusDay flag.
+    if (!ready) return
+    const container = rolodexRef.current
+    if (!container || days.length === 0) return
+    const todayD = new Date()
+    const m = String(todayD.getMonth() + 1).padStart(2, '0')
+    const dd = String(todayD.getDate()).padStart(2, '0')
+    const todayStr = `${todayD.getFullYear()}-${m}-${dd}`
+    const target = days.reduce((closest, iso) => {
+      const dC = Math.abs(parseDate(closest) - parseDate(todayStr))
+      const dI = Math.abs(parseDate(iso) - parseDate(todayStr))
+      return dI < dC ? iso : closest
+    }, days[0])
+    // Land today's TOP edge at viewport y=479 — the same y ACTIVATE uses.
+    // Direct scrollTop assignment instead of scrollBy: iOS PWA WebKit
+    // intermittently no-ops scrollBy on a flex+overflow container, and
+    // scrollTop= is the only reliable cross-engine path.
+    // Retries on a short cadence cover the common iOS PWA case where the
+    // first frame measures before paddingTop:60vh has laid out fully.
+    let cancelled = false
+    const place = () => {
+      if (cancelled) return false
+      const node = container.querySelector(`[data-rolodex-iso="${target}"]`)
+      if (!node) return false
+      const rect = node.getBoundingClientRect()
+      const delta = rect.top - ACTIVE_TOP_Y
+      if (Math.abs(delta) < 1) return true
+      container.scrollTop = container.scrollTop + delta
+      return true
+    }
+    const handles = []
+    handles.push(requestAnimationFrame(() => {
+      handles.push(requestAnimationFrame(place))
+    }))
+    handles.push(setTimeout(place, 60))
+    handles.push(setTimeout(place, 160))
+    handles.push(setTimeout(place, 320))
+    return () => {
+      cancelled = true
+      handles.forEach(h => { try { cancelAnimationFrame(h) } catch (_) {} ; try { clearTimeout(h) } catch (_) {} })
+    }
+  }, [ready, days])
 
   useEffect(() => {
     if (!days.length) return
@@ -2426,16 +2926,15 @@ export default function ActiveCyclePage() {
   }, [days, cardRefreshKey])
 
   // Deep-launch: when the user came from ACTIVATE on /fitness/load, skip the
-  // schedule view and jump straight into today's day-focus. DayFocus then
-  // continues the auto-progression into ExercisePanel, which auto-opens the
-  // first set's weight popup. Flag is consumed in DayFocus (so it survives the
-  // mount chain).
+  // schedule view and jump straight into today's day-focus route. DayFocus
+  // then continues the auto-progression into ExercisePanel, which auto-opens
+  // the first set's weight popup. The 'gtl-deep-launch' flag is consumed
+  // inside DayFocus (so it survives the cross-page hop).
   useEffect(() => {
     if (!days.length) return
     let isDeepLaunch = false
     try { isDeepLaunch = localStorage.getItem('gtl-deep-launch') === '1' } catch (_) {}
     if (!isDeepLaunch) return
-    // Compute hero day inline (heroIso identifier is defined later in render).
     const todayD = new Date()
     const todayStr = `${todayD.getFullYear()}-${String(todayD.getMonth()+1).padStart(2,'0')}-${String(todayD.getDate()).padStart(2,'0')}`
     const target = days.reduce((closest, iso) => {
@@ -2443,24 +2942,91 @@ export default function ActiveCyclePage() {
       const dI = Math.abs(parseDate(iso) - parseDate(todayStr))
       return dI < dC ? iso : closest
     }, days[0])
-    // Center-of-viewport synthetic rect for the zoom-in origin.
-    const syntheticRect = {
-      left: window.innerWidth / 2 - 100, top: 466,
-      width: 200, height: 60,
-      right: window.innerWidth / 2 + 100, bottom: 526,
-    }
     const t = setTimeout(() => {
-      setFocusRect(syntheticRect)
-      setFocusDay(target)
+      router.push('/fitness/active/' + target)
     }, 100)
     return () => clearTimeout(t)
-  }, [days])
+  }, [days, router])
 
 
-  const handleDayClick = (iso, rect) => {
-    setFocusRect(rect)
-    setFocusDay(iso)
+  // Day-hop dispatch: fires HeistTransition then router.push to the day
+  // route. Mirrors handleActivate on /fitness/load — synchronous skip flag
+  // so a fast follow-up tap routes immediately rather than waiting for HT
+  // to complete. setInAnimation('today', true) opens the chain window so a
+  // predictive tap during the slash stages 'muscle' for DayFocus to consume
+  // on mount.
+  const handleDayHop = (iso, { fromTimer = false } = {}) => {
+    // iOS-leaked-click eat — see mountTimeRef comment above.
+    if (!fromTimer && performance.now() - mountTimeRef.current < 150) return
+    if (skippedDayHopRef.current) return
+    if (fireDayHopRef.current) {
+      // Already firing → user wants to skip the slash. Route now.
+      skippedDayHopRef.current = true
+      router.push('/fitness/active/' + fireDayHopRef.current)
+      return
+    }
+    fireDayHopRef.current = iso
+    setInAnimation('today', true)
+    setFireDayHop(iso)
   }
+
+  // Register skip-route for the 'today' chain step. Module-level listener
+  // in lib/predictiveTap.js calls this when a tap arrives past
+  // SKIP_GRACE_MS during the today HT. Retreat-button exclusion + leaked-
+  // tap absorption are handled centrally (the grace replaces the old
+  // per-page 150ms armedAt window).
+  useEffect(() => registerChainStep('today', () => {
+    if (skippedDayHopRef.current) return
+    if (!fireDayHopRef.current) return
+    skippedDayHopRef.current = true
+    router.push('/fitness/active/' + fireDayHopRef.current)
+  }), [router])
+
+  // Predictive-tap chain — open the 'today' window IMMEDIATELY on mount
+  // (before the ready-gated consume below fires) ONLY when a 'today'
+  // intent is already queued. Without the queue gate this fired on every
+  // cold visit to /fitness/active, pre-arming the page for predictive
+  // staging — one manual tap on the TODAY card then staged 'muscle'
+  // (because pointerdown saw inAnim=true, currentStep='today') AND fired
+  // today HT via onClick, cascading TWO hops from one user tap.
+  //
+  // With the gate, eager-open fires only when we're truly mid-chain
+  // (queue head is 'today'). Cold visits leave the page idle.
+  useEffect(() => {
+    if (isPendingChainHead('today')) {
+      setInAnimation('today', true)
+    }
+  }, [])
+
+  // Predictive-tap consume: when the page is ready, check for a 'today'
+  // prefire intent staged on the prior page's HT (e.g., user tapped during
+  // ACTIVATE's slash). If matched, auto-fire handleDayHop(target) as if the
+  // user tapped the TODAY card. Falls back to the closest-day hero if
+  // today isn't in the cycle's training days.
+  useEffect(() => {
+    if (!ready) return
+    if (!days || days.length === 0) return
+    if (fireDayHop) return
+    const target = days.includes(todayIsoStr)
+      ? todayIsoStr
+      : days.reduce((closest, iso) => {
+          const dC = Math.abs(parseDate(closest) - parseDate(todayIsoStr))
+          const dI = Math.abs(parseDate(iso) - parseDate(todayIsoStr))
+          return dI < dC ? iso : closest
+        }, days[0])
+    // Mount-time consume only — catches the cross-page hop where the
+    // user predictive-tapped 'today' during the previous page's HT
+    // (intent staged before this page mounted). Direct taps on the
+    // TODAY card are handled by DayButton's onClick → handleDayHop.
+    // No subscribeStaged or polling: those caught direct-tap pointerdowns
+    // and double-fired with the click event for the same physical tap.
+    const intent = consumePrefire('today')
+    if (intent) {
+      setInAnimation('today', true)
+      setTimeout(() => handleDayHop(target, { fromTimer: true }), 50)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ready, days, fireDayHop])
 
   const triggerXPAnimation = useCallback((closingDay) => {
     // Build particles: one per completed day, positioned at each card
@@ -2472,27 +3038,7 @@ export default function ActiveCyclePage() {
         if (localStorage.getItem(pk(`done-${cycleId}-${iso}`)) !== 'true') continue
         const el = document.querySelector(`[data-day-iso="${iso}"]`)
         const rect = el?.getBoundingClientRect()
-        const dailyMuscles = dailyPlan[iso] || []
-        let dayVolume = 0
-        for (const muscleId of dailyMuscles) {
-          const rRaw = localStorage.getItem(pk(`ex-${cycleId}-${iso}-${muscleId}`))
-          const wRaw = localStorage.getItem(pk(`wt-${cycleId}-${iso}-${muscleId}`))
-          const rData = rRaw ? JSON.parse(rRaw) : {}
-          const wData = wRaw ? JSON.parse(wRaw) : {}
-          for (const name of Object.keys(rData)) {
-            const rArr = Array.isArray(rData[name]) ? rData[name] : [rData[name]]
-            const wArr = Array.isArray(wData[name]) ? wData[name] : [wData[name] || 0]
-            for (let i = 0; i < rArr.length; i++) {
-              const reps   = rArr[i] || 0
-              const weight = wArr[i] || 0
-              if (reps === 0) continue
-              const mult = repMult(reps)
-              dayVolume += weight > 0
-                ? weight * mult * reps
-                : reps * mult
-            }
-          }
-        }
+        const dayVolume = dayXPWithFallback({ id: cycleId, dailyPlan }, iso)
         if (dayVolume > 0 && rect) {
           particles.push({ x: rect.left + rect.width / 2, y: rect.top + rect.height / 2, value: dayVolume })
           total += dayVolume
@@ -2540,20 +3086,11 @@ export default function ActiveCyclePage() {
     setTimeout(() => setXpAnim(null), 5000)
   }, [days, dailyPlan, play])
 
-  const handleCloseFocus = () => {
-    const lastDay = days.length > 0 ? [...days].sort()[days.length - 1] : null
-    const wasLastDay = focusDay === lastDay
-    setFocusDay(null)
-    setFocusRect(null)
-    setCardRefreshKey((k) => k + 1)
-    if (wasLastDay) {
-      try {
-        if (localStorage.getItem(pk(`done-${cycleId}-${lastDay}`)) === 'true') {
-          setTimeout(() => triggerXPAnimation(lastDay), 500)
-        }
-      } catch (_) {}
-    }
-  }
+  // handleCloseFocus removed — DayFocus is now its own route, so closing
+  // it is router.back() rather than a state reset on this page. The
+  // last-day XP-celebration animation is deferred to Stage 2 (needs to be
+  // triggered on /fitness/active mount when localStorage shows the last
+  // day was just completed).
 
   const plannedSessions = days.filter((iso) => (dailyPlan[iso] || []).length > 0).length
 
@@ -2630,8 +3167,11 @@ export default function ActiveCyclePage() {
         </div>
       </div>
 
-      {/* Content wrapper — atmospheric layers paint full-bleed (incl. safe area). */}
-      <div className="relative z-10 flex-1 flex flex-col">
+      {/* Content wrapper — atmospheric layers paint full-bleed (incl. safe area).
+          min-h-0 is critical: without it, flex-1's min-height: auto sizes the
+          wrapper to its content (~1689px), overflowing main and breaking the
+          flex chain that the rolodex depends on. */}
+      <div className="relative z-10 flex-1 min-h-0 flex flex-col">
       {/* Nav */}
       <nav
         className="relative shrink-0 flex items-center gap-4 pl-28 pr-8 pb-3"
@@ -2700,10 +3240,25 @@ export default function ActiveCyclePage() {
       <div className="relative z-10 mx-8 mb-1 h-[2px] bg-gtl-red shrink-0"
            style={{ transform: 'skewX(-6deg)', transformOrigin: 'left center' }} />
 
-      {/* ── DAY GRID ── */}
-      <section className="relative z-10 flex-1 min-h-0 overflow-hidden flex flex-col px-8 pb-2">
+      {/* ── DAY ROLODEX ──
+          Vertical free-scroll list of all non-hero days. TODAY hero stays
+          where it is above (rendered separately); this section gives the
+          past + future days room to breathe without cramming them into a
+          packed grid. No scroll-snap — user free-scrolls and taps any
+          card to enter that day. */}
+      <section
+        className="relative z-10 px-3 pb-2"
+        style={{
+          flex: '1 1 0%',
+          minHeight: 0,
+          height: '100%',
+          display: 'flex',
+          flexDirection: 'column',
+          overflow: 'hidden',
+        }}
+      >
 
-        <div className="font-mono text-[9px] tracking-[0.4em] uppercase text-gtl-ash mb-3 flex items-center gap-4">
+        <div className="shrink-0 font-mono text-[9px] tracking-[0.4em] uppercase text-gtl-ash mb-3 flex items-center gap-4">
           <span>BATTLE SCHEDULE</span>
           <div className="h-px flex-1 bg-gtl-edge" />
           <span className="text-gtl-red">{days.length} DAY{days.length !== 1 ? 'S' : ''}</span>
@@ -2715,44 +3270,95 @@ export default function ActiveCyclePage() {
           </div>
         ) : (
           <div
-            className="grid gap-2 flex-1 min-h-0"
+            ref={rolodexRef}
+            data-rolodex-container
+            data-scroll-passthrough
             style={{
-              gridTemplateColumns: `repeat(${Math.min(cols, Math.max(1, gridCount))}, 1fr)`,
-              gridTemplateRows: `repeat(${rows}, minmax(0, 1fr))`,
+              flex: '1 1 0%',
+              minHeight: 0,
+              height: '100%',
+              overflowY: 'auto',
+              overflowX: 'hidden',
+              WebkitOverflowScrolling: 'touch',
+              overscrollBehaviorY: 'contain',
+              touchAction: 'pan-y',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '12px',
+              // Phantom space above + below so the first/last card can be
+              // scrolled to the active line.
+              // Bumped 40vh -> 60vh: with the rolodex container starting
+              // ~82px below viewport top (after nav + battle-schedule
+              // header), 40vh of phantom = ~337px = card naturally lands
+              // at ~420 with scrollTop=0, can't scroll BACK to reach
+              // y=479. 60vh gives enough phantom room for the auto-center
+              // scrollBy(top: rect.top - ACTIVE_TOP_Y) to actually
+              // resolve at every common viewport.
+              paddingTop: '60vh',
+              paddingBottom: '60vh',
+              // Snap removed: 'y mandatory' + 'center' was re-aligning
+              // today's card to the SCROLLPORT center independently of
+              // the auto-center math. The prominence listener already
+              // handles "what counts as centered" via the
+              // data-rolodex-centered attribute (within 47px of
+              // ACTIVE_TOP_Y), so snap was redundant.
             }}
           >
-            {days.filter((iso) => iso !== heroIso).map((iso, i) => (
-              <DayCard
+            {days.map((iso) => (
+              <div
                 key={iso}
-                iso={iso}
-                muscles={dailyPlan[iso] || []}
-                index={i}
-                onClick={handleDayClick}
-                doneKey={cardRefreshKey}
-                cycleId={cycleId}
-              />
+                data-rolodex-iso={iso}
+                onClickCapture={(e) => {
+                  // Tap-to-select-then-open behavior:
+                  //   centered card → click bubbles → DayButton.onClick fires
+                  //   non-centered card → block, scroll to center it
+                  const wrapper = e.currentTarget
+                  if (!wrapper.hasAttribute('data-rolodex-centered')) {
+                    e.preventDefault()
+                    e.stopPropagation()
+                    wrapper.scrollIntoView({ behavior: 'smooth', block: 'center' })
+                  }
+                }}
+                style={{
+                  flexShrink: 0,
+                  // Match ACTIVATE's min-h-[56px]. The button's interior py-5
+                  // adds 40px so total minimum is ~70px, which matches the
+                  // ACTIVATE button's rendered height.
+                  minHeight: '56px',
+                  // --rolodex-t is updated by the scroll listener.
+                  // 1 at the active line, 0.7 floor at the edges. Bumped
+                  // from 0.45 -> 0.7 so dates on far cards stay legible
+                  // (kanji is text-3xl + serif and reads through low
+                  // opacity, but the date text was getting hard to read).
+                  opacity: 'calc(0.7 + 0.3 * var(--rolodex-t, 0))',
+                  transition: 'opacity 100ms linear',
+                }}
+              >
+                <DayButton
+                  iso={iso}
+                  muscles={dailyPlan[iso] || []}
+                  todayIso={todayIsoStr}
+                  onClick={handleDayHop}
+                  doneKey={cardRefreshKey}
+                  cycleId={cycleId}
+                />
+              </div>
             ))}
           </div>
         )}
       </section>
 
-      {/* ── DAY FOCUS OVERLAY ── */}
-      {focusDay && (
-        <DayFocus
-          key={focusDay}
-          iso={focusDay}
-          muscles={dailyPlan[focusDay] || []}
-          cycleId={cycleId}
-          isLastDay={(() => {
-            const undoneDays = days.filter(d => {
-              try { return localStorage.getItem(pk(`done-${cycleId}-${d}`)) !== 'true' } catch { return true }
-            })
-            return undoneDays.length === 1 && undoneDays[0] === focusDay
-          })()}
-          originRect={focusRect}
-          onClose={handleCloseFocus}
-        />
-      )}
+      {/* Day-hop transition — fires on TODAY/day-card tap. HT plays
+          transition-slash, then router.push lands on /fitness/active/[iso]
+          which mounts DayFocus on its own route. */}
+      <HeistTransition
+        active={!!fireDayHop}
+        title="THOSE"
+        onComplete={() => {
+          if (skippedDayHopRef.current) return
+          if (fireDayHopRef.current) router.push('/fitness/active/' + fireDayHopRef.current)
+        }}
+      />
 
       {/* ── XP ANIMATION OVERLAY ── */}
       {xpAnim && (() => {
@@ -3018,62 +3624,11 @@ export default function ActiveCyclePage() {
 
       </div>
 
-      {/* Quick-nav TODAY hero — sits at y=466 to continue the tap-tap-tap muscle
-          memory chain (profile chip → LOAD CYCLE card → ACTIVATE popup → TODAY).
-          Whichever day is closest to today's date gets surfaced here. The full
-          day grid below remains as the contextual map. Tap = open day-focus zoom. */}
-      {heroIso && !focusDay && (<>
-        <style>{`
-          @keyframes activate-popup-rise {
-            0%   { opacity: 0; transform: translateY(60px) scale(0.96); }
-            60%  { opacity: 1; transform: translateY(-4px) scale(1.02); }
-            100% { opacity: 1; transform: translateY(0)    scale(1); }
-          }
-        `}</style>
-        <button
-          key={`hero-${heroIso}`}
-          type="button"
-          onClick={(e) => {
-            const rect = e.currentTarget.getBoundingClientRect()
-            play('option-select')
-            handleDayClick(heroIso, rect)
-          }}
-          className="fixed z-30 group block outline-none active:scale-[0.98] transition-transform"
-          style={{
-            top: '466px',
-            left: '32px',
-            right: '32px',
-            animation: 'activate-popup-rise 320ms cubic-bezier(0.18, 1, 0.36, 1) both',
-          }}
-        >
-          <div
-            className="absolute inset-0 bg-gtl-red transition-colors group-active:bg-gtl-red-bright"
-            style={{
-              clipPath: 'polygon(4% 0%, 100% 0%, 96% 100%, 0% 100%)',
-              boxShadow: '0 4px 28px rgba(212, 24, 31, 0.55)',
-            }}
-            aria-hidden="true"
-          />
-          <div className="relative flex items-center justify-between px-6 py-3 gap-3">
-            <div className="flex flex-col items-start min-w-0">
-              <span className="font-mono text-[9px] tracking-[0.3em] uppercase text-gtl-paper/80 leading-none">
-                {heroLabel}
-              </span>
-              <span className="font-display text-2xl text-gtl-paper leading-none mt-1 truncate">
-                {heroDayName} · {heroMon} {heroDayNum}
-              </span>
-              {heroMuscles.length > 0 && (
-                <span className="font-mono text-[9px] tracking-[0.2em] uppercase text-gtl-paper/70 leading-none mt-1 truncate">
-                  {heroMuscles.map(m => MUSCLE_LABELS[m] || m).join(' · ')}
-                </span>
-              )}
-            </div>
-            <span className="font-display text-2xl text-gtl-paper leading-none shrink-0">➤︎</span>
-          </div>
-        </button>
-      </>)}
+      {/* Floating TODAY hero retired — every day now lives inside the rolodex
+          and the visually-centered card at y=466 is the "active" one (see
+          scroll-driven --rolodex-t logic in the rolodex section above). */}
 
-      <FireFadeIn duration={900} />
+      <TierUpFlourish />
     </main>
   )
 }

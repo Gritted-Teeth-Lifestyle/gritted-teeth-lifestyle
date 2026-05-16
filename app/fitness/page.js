@@ -5,108 +5,214 @@ import Link from 'next/link'
 import { useSound } from '../../lib/useSound'
 import HeistTransition from '../../components/HeistTransition'
 import RetreatButton from '../../components/RetreatButton'
+import { LogoStencil, LogoTarget } from '../../components/LogoHalf'
+import { armChain, setInAnimation, registerChainStep } from '../../lib/predictiveTap'
+import { pk } from '../../lib/storage'
+import BodyweightStep from '../../components/onboarding/BodyweightStep'
+import DateOfBirthStep from '../../components/onboarding/DateOfBirthStep'
 
 function ProfileChip({ name, onSelect, onSwipeSelect }) {
   const { play } = useSound()
-  // Pointer-tracking refs for swipe-vs-tap discrimination. The decision is
-  // made at pointerUp based on the FINAL dx — not a sticky armed flag — so
-  // pulling back below the threshold cancels the swipe and falls through to
-  // a normal tap.
+  // Pointer-tracking refs for swipe-vs-tap discrimination. Signed dx —
+  // positive = right swipe, negative = left swipe. Either direction at
+  // full traversal triggers swipe-select.
   const startRef = useRef(null)
   const dxRef = useRef(0)
   const swipeFiredRef = useRef(false)
+  const velocityTrackerRef = useRef([])
+  const VELOCITY_WINDOW_MS = 100
+  const FLICK_VELOCITY = 0.4    // px/ms
+  const FLICK_MIN_DISTANCE = 40 // px
   const [dragX, setDragX] = useState(0)
-  const SWIPE_THRESHOLD = 60
+  const [ringKey, setRingKey] = useState(0)
+  const [ringSide, setRingSide] = useState('right')
+  const [entranceDone, setEntranceDone] = useState(false)
+  useEffect(() => {
+    const t = setTimeout(() => setEntranceDone(true), 1300)
+    return () => clearTimeout(t)
+  }, [])
+  // Full traversal — gap between bead centers = 2 * (175 - 28) = 294px,
+  // beads pinned via calc(50% - 175px). Matches ActivatePopup spacing.
+  const SWIPE_THRESHOLD = 294
 
   const handlePointerDown = (e) => {
     startRef.current = { x: e.clientX, y: e.clientY }
     dxRef.current = 0
     swipeFiredRef.current = false
+    velocityTrackerRef.current = [{ t: e.timeStamp, x: e.clientX }]
     setDragX(0)
   }
   const handlePointerMove = (e) => {
     if (!startRef.current) return
     const dx = e.clientX - startRef.current.x
     const dy = e.clientY - startRef.current.y
-    // Only follow horizontal-dominant motion. dx clamped to [0, threshold*1.5]
-    // so visual progress reflects pullback (release below threshold = cancel).
     if (Math.abs(dx) > Math.abs(dy)) {
-      const clamped = Math.max(0, Math.min(dx, SWIPE_THRESHOLD * 1.5))
+      const clamped = Math.max(-SWIPE_THRESHOLD, Math.min(dx, SWIPE_THRESHOLD))
       dxRef.current = clamped
       setDragX(clamped)
     }
+    const tracker = velocityTrackerRef.current
+    tracker.push({ t: e.timeStamp, x: e.clientX })
+    const cutoff = e.timeStamp - VELOCITY_WINDOW_MS
+    while (tracker.length > 0 && tracker[0].t < cutoff) tracker.shift()
   }
   const handlePointerUp = () => {
-    const completed = dxRef.current > SWIPE_THRESHOLD
-    if (completed && onSwipeSelect) {
+    const tracker = velocityTrackerRef.current
+    let velocity = 0
+    if (tracker.length >= 2) {
+      const oldest = tracker[0]
+      const newest = tracker[tracker.length - 1]
+      const dt = newest.t - oldest.t
+      if (dt > 0) velocity = (newest.x - oldest.x) / dt
+    }
+    const distance = Math.abs(dxRef.current)
+    const dirMatches = dxRef.current === 0 || Math.sign(velocity) === Math.sign(dxRef.current)
+    const fired =
+      distance >= SWIPE_THRESHOLD ||
+      (Math.abs(velocity) >= FLICK_VELOCITY && distance >= FLICK_MIN_DISTANCE && dirMatches)
+
+    if (fired && onSwipeSelect) {
       swipeFiredRef.current = true
+      setRingSide(dxRef.current > 0 ? 'right' : 'left')
+      setRingKey((k) => k + 1)
       play('card-confirm')
       onSwipeSelect(name)
     }
     startRef.current = null
     dxRef.current = 0
+    velocityTrackerRef.current = []
     setDragX(0)
   }
   const handleClick = (e) => {
-    // Suppress click only when the gesture actually resolved as a full swipe.
     if (swipeFiredRef.current) {
       e.preventDefault(); e.stopPropagation()
       swipeFiredRef.current = false
       return
     }
-    play('option-select')
+    play('card-confirm')
     onSelect(name)
   }
-  const swipeProgress = Math.min(1, dragX / SWIPE_THRESHOLD)
+  const swipeProgress = Math.min(1, Math.abs(dragX) / SWIPE_THRESHOLD)
 
   return (
+    /* Wrapper hosts the button + the shockwave ring. Wrapper has no
+       clip-path, so the ring (rendered as a sibling of the button) can scale
+       outward freely instead of being cropped to the button's parallelogram
+       silhouette. Wrapper carries the -mx-5 + width:calc(100%+40px) layout
+       so its bounding box matches the button's, keeping the ring's
+       calc(50% - 175px) positioning aligned with the bead positions. */
+    <div className="relative block w-full -mx-5" style={{ width: 'calc(100% + 40px)' }}>
     <button
       type="button"
+      data-predictive-tap-target="profile"
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
-      onPointerCancel={() => { startRef.current = null; dxRef.current = 0; swipeFiredRef.current = false; setDragX(0) }}
+      onPointerCancel={() => { startRef.current = null; dxRef.current = 0; swipeFiredRef.current = false; velocityTrackerRef.current = []; setDragX(0) }}
       onClick={handleClick}
-      className="relative group outline-none text-left overflow-hidden"
-      style={{ touchAction: 'pan-y' }}
+      className={`
+        relative group flex items-center justify-center
+        font-display tracking-[0.25em] uppercase overflow-visible
+        px-24 py-5 min-h-[56px] block w-full
+        text-3xl text-gtl-chalk [@media(hover:hover)]:hover:text-gtl-paper
+        transition-all duration-200 ease-out
+        [@media(hover:hover)]:hover:scale-[1.04] active:scale-[0.98]
+        bg-gtl-surface border border-gtl-edge
+        [@media(hover:hover)]:hover:bg-gtl-red [@media(hover:hover)]:hover:border-transparent
+        shadow-[4px_4px_0_#070708]
+        [@media(hover:hover)]:hover:shadow-[6px_6px_0_#070708]
+        active:shadow-[2px_2px_0_#070708]
+      `}
+      style={{
+        clipPath: 'polygon(3% 0%, 100% 0%, 97% 100%, 0% 100%)',
+        touchAction: 'pan-y',
+        userSelect: 'none',
+        WebkitUserSelect: 'none',
+        WebkitTouchCallout: 'none',
+      }}
     >
-      {/* Hover effects gated on (hover: hover) so iOS doesn't sticky-hover on first tap. */}
+      <span
+        className="relative inline-block leading-none tracking-tight"
+        style={{ userSelect: 'none', WebkitUserSelect: 'none', WebkitTouchCallout: 'none' }}
+      >
+        {name.toUpperCase()}
+      </span>
+      {/* Stencil + target on opposite sides. Whichever side gets pulled rolls
+          (wheel-style, no slipping) all the way to the other side and docks. */}
+      {(() => {
+        // One full rotation across a full swipe — lands upright at fusion.
+        const rollFactor = 360 / SWIPE_THRESHOLD
+        const stencilTx = Math.max(0, dragX)
+        const targetTx  = Math.min(0, dragX)
+        return (
+          <>
+          <div
+            className="absolute pointer-events-none"
+            style={{
+              left: 'calc(50% - 175px)',
+              top: '50%',
+              width: '56px',
+              height: '56px',
+              marginTop: '-28px',
+              transform: `translateX(${stencilTx}px) rotate(${stencilTx * rollFactor}deg)`,
+              opacity: 0.85 + swipeProgress * 0.15,
+              transition: dragX === 0 ? 'transform 220ms cubic-bezier(0.2,0.8,0.3,1), opacity 200ms' : 'opacity 100ms',
+              animation: !entranceDone
+                ? 'logo-roll-in-profile 1300ms cubic-bezier(0.85, 0, 0.15, 1) forwards'
+                : (dragX === 0 ? 'yy-pulse-left 1.5s ease-in-out infinite' : 'none'),
+              zIndex: 2,
+            }}
+            aria-hidden="true"
+          >
+            <LogoStencil size={56} paused={!entranceDone || dragX !== 0}/>
+          </div>
+          <div
+            className="absolute pointer-events-none"
+            style={{
+              right: 'calc(50% - 175px)',
+              top: '50%',
+              width: '56px',
+              height: '56px',
+              marginTop: '-28px',
+              transform: `translateX(${targetTx}px) rotate(${targetTx * rollFactor}deg)`,
+              opacity: 0.85 + swipeProgress * 0.15,
+              transition: dragX === 0 ? 'transform 220ms cubic-bezier(0.2,0.8,0.3,1), opacity 200ms' : 'opacity 100ms',
+              // Gated on entranceDone too so it stays in phase with the stencil pulse.
+              animation: (entranceDone && dragX === 0) ? 'yy-pulse-right 1.5s ease-in-out infinite' : 'none',
+              zIndex: 1,
+            }}
+            aria-hidden="true"
+          >
+            <LogoTarget size={56}/>
+          </div>
+          </>
+        )
+      })()}
+    </button>
+    {/* Shockwave ring on successful swipe — sibling of the button so the
+        button's clip-path doesn't crop the expanding ring. Uses the global
+        @keyframes shockwave (matches the muscle-target ALL button). */}
+    {ringKey > 0 && (
       <div
-        className="absolute inset-0 pointer-events-none transition-all duration-200 bg-gtl-surface border border-gtl-edge [@media(hover:hover)]:group-hover:bg-gtl-red [@media(hover:hover)]:group-hover:border-transparent"
-        style={{ clipPath: 'polygon(6% 0%, 100% 0%, 94% 100%, 0% 100%)' }}
-        aria-hidden="true"
-      />
-      {/* Swipe-progress fill — slides in from left as the user drags right. Reaches
-          full red at the threshold to telegraph that the swipe is armed. */}
-      <div
-        className="absolute inset-0 pointer-events-none bg-gtl-red"
+        key={ringKey}
+        className="absolute pointer-events-none rounded-full"
         style={{
-          clipPath: 'polygon(6% 0%, 100% 0%, 94% 100%, 0% 100%)',
-          opacity: swipeProgress * 0.85,
-          transform: `scaleX(${swipeProgress})`,
-          transformOrigin: 'left center',
-          transition: dragX === 0 ? 'opacity 200ms, transform 200ms' : 'none',
+          top: '50%',
+          marginTop: '-28px',
+          ...(ringSide === 'right'
+            ? { right: 'calc(50% - 175px)' }
+            : { left:  'calc(50% - 175px)' }),
+          width: '56px',
+          height: '56px',
+          borderStyle: 'solid',
+          borderColor: '#d4181f',
+          animation: 'shockwave 900ms cubic-bezier(0.2, 0.8, 0.3, 1) forwards',
+          zIndex: 3,
         }}
         aria-hidden="true"
       />
-      <div
-        className="relative px-7 py-5 flex items-center gap-3"
-        style={{ transform: `translateX(${dragX * 0.3}px)`, transition: dragX === 0 ? 'transform 200ms' : 'none' }}
-      >
-        <span className="font-display text-3xl leading-none transition-colors duration-200 text-gtl-chalk [@media(hover:hover)]:group-hover:text-gtl-paper">
-          {name.toUpperCase()}
-        </span>
-        <span className="font-display text-xl leading-none transition-all duration-200 text-gtl-red [@media(hover:hover)]:group-hover:text-gtl-paper [@media(hover:hover)]:group-hover:translate-x-1">➤︎</span>
-        {/* Swipe hint — appears on the right, fades in as user drags */}
-        <span
-          className="ml-auto font-mono text-[8px] tracking-[0.3em] uppercase text-gtl-paper leading-none whitespace-nowrap pointer-events-none"
-          style={{ opacity: swipeProgress }}
-          aria-hidden="true"
-        >
-          SKIP →
-        </span>
-      </div>
-    </button>
+    )}
+    </div>
   )
 }
 
@@ -119,6 +225,11 @@ export default function ProfilePage() {
   const [input, setInput] = useState('')
   const [ready, setReady] = useState(false)
   const [transitioning, setTransitioning] = useState(false)
+  // Onboarding BW step — captured for new warriors before routing to hub.
+  const [pendingNewName, setPendingNewName] = useState(null)
+  // Onboarding DOB step — runs after BW step; skippable (R16 birthday is
+  // optional). Holds the new warrior's name until DOB capture or skip.
+  const [pendingDOBName, setPendingDOBName] = useState(null)
   const inputRef = useRef(null)
   // Latches once skipAll fires so HeistTransition.onComplete won't double-route.
   const skippedRef = useRef(false)
@@ -139,27 +250,19 @@ export default function ProfilePage() {
   const skipNow = () => {
     if (skippedRef.current) return
     skippedRef.current = true
+    // Don't close the predictive-tap inAnim window — the next page's
+    // consumePrefire will re-assert it with the new currentStep.
+    // Closing here creates a ~30-60ms gap between hops where rapid
+    // taps would silently fall through to reactive-skip-only.
     router.push(HUB_TARGET)
   }
 
-  // Skip-the-transition: once HeistTransition is active, the next pointer/touch
-  // input anywhere on the screen routes to the hub immediately. Listen for
-  // both pointerdown AND touchstart in case iOS PWA suppresses pointerdown
-  // events during rapid-tap sequences. Taps on RetreatButton (data-retreat)
-  // are excluded so retreat navigates back instead of fast-forwarding.
-  useEffect(() => {
-    if (!transitioning) return
-    const handler = (e) => {
-      if (e.target?.closest?.('[data-retreat]')) return
-      skipNow()
-    }
-    window.addEventListener('pointerdown', handler, { capture: true })
-    window.addEventListener('touchstart',  handler, { capture: true, passive: true })
-    return () => {
-      window.removeEventListener('pointerdown', handler, { capture: true })
-      window.removeEventListener('touchstart',  handler, { capture: true })
-    }
-  }, [transitioning])
+  // Register skip-route for the 'profile' chain step. The module-level
+  // listener in lib/predictiveTap.js calls this when a tap arrives past
+  // SKIP_GRACE_MS during the profile HT, replacing the per-page window
+  // pointerdown listener pattern. Retreat-button exclusion is handled
+  // centrally.
+  useEffect(() => registerChainStep('profile', () => skipNow()), [])
 
   const selectProfile = (name) => {
     // Already transitioning → this rapid second tap is a skip.
@@ -168,6 +271,12 @@ export default function ProfilePage() {
     try {
       localStorage.setItem('gtl-active-profile', name)
     } catch (_) {}
+    // Arm the predictive-tap chain. The next 4 taps inside the shared
+    // hit-zone (during transition animations) prefire forward.
+    armChain()
+    // The HeistTransition is about to play — flag the chain in-animation
+    // so a hit-zone tap during the wipe stages a 'hub-load' prefire.
+    setInAnimation('profile', true)
     setTransitioning(true)
   }
 
@@ -185,6 +294,8 @@ export default function ProfilePage() {
   }
 
   const handleTransitionComplete = () => {
+    // inAnim stays open across the hop — next page's consumePrefire
+    // re-asserts it. See skipNow comment above.
     if (skippedRef.current) return
     router.push(HUB_TARGET)
   }
@@ -193,15 +304,54 @@ export default function ProfilePage() {
     e.preventDefault()
     const name = input.trim()
     if (!name) return
+    let createdNew = false
     try {
       const existing = JSON.parse(localStorage.getItem('gtl-profiles') || '[]')
       if (!existing.includes(name)) {
         const updated = [name, ...existing]
         localStorage.setItem('gtl-profiles', JSON.stringify(updated))
         setProfiles(updated)
+        createdNew = true
       }
     } catch (_) {}
-    play('option-select')
+    play('card-confirm')
+    if (createdNew) {
+      // Set active profile early so pk('user-bodyweight') writes to the
+      // correct profile scope. Then mount the BW capture step before
+      // routing — R1a requires bodyweight before any BW-coefficient set.
+      try { localStorage.setItem('gtl-active-profile', name) } catch (_) {}
+      setPendingNewName(name)
+      return
+    }
+    selectProfile(name)
+  }
+
+  const handleBodyweightConfirm = (bw) => {
+    if (!pendingNewName) return
+    try { localStorage.setItem(pk('user-bodyweight'), String(bw)) } catch (_) {}
+    const name = pendingNewName
+    setPendingNewName(null)
+    play('card-confirm')
+    // Hand off to the (skippable) DOB step before routing to hub.
+    setPendingDOBName(name)
+  }
+
+  const handleDOBConfirm = (iso) => {
+    if (!pendingDOBName) return
+    if (/^\d{4}-\d{2}-\d{2}$/.test(iso)) {
+      try { localStorage.setItem(pk('user-dob'), iso) } catch (_) {}
+    }
+    const name = pendingDOBName
+    setPendingDOBName(null)
+    play('card-confirm')
+    selectProfile(name)
+  }
+
+  const handleDOBSkip = () => {
+    if (!pendingDOBName) return
+    const name = pendingDOBName
+    setPendingDOBName(null)
+    play('menu-close')
     selectProfile(name)
   }
 
@@ -211,6 +361,22 @@ export default function ProfilePage() {
 
   return (
     <>
+    <style>{`
+      @keyframes yy-pulse-left {
+        0%, 100% { transform: translateX(0)   scale(1); }
+        50%      { transform: translateX(7px) scale(1.06); }
+      }
+      @keyframes yy-pulse-right {
+        0%, 100% { transform: translateX(0)    scale(1); }
+        50%      { transform: translateX(-7px) scale(1.06); }
+      }
+      /* Onboarding: stencil rolls off the target on mount. translateX
+         matches SWIPE_THRESHOLD (294px). */
+      @keyframes logo-roll-in-profile {
+        0%   { transform: translateX(294px) rotate(360deg); }
+        100% { transform: translateX(0)     rotate(0deg);   }
+      }
+    `}</style>
     <main className="relative min-h-screen bg-gtl-void flex flex-col overflow-hidden">
       <div className="absolute inset-0 gtl-noise pointer-events-none" />
       <div
@@ -366,8 +532,33 @@ export default function ProfilePage() {
 
     <HeistTransition
       active={transitioning}
+      title="LET'S SEE"
       onComplete={handleTransitionComplete}
     />
+
+    {pendingNewName && (
+      <div
+        className="fixed inset-0 z-[10000] flex items-center justify-center px-6"
+        style={{ background: 'rgba(8,8,12,0.78)', backdropFilter: 'blur(4px)' }}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Enter body weight"
+      >
+        <BodyweightStep onConfirm={handleBodyweightConfirm} />
+      </div>
+    )}
+
+    {pendingDOBName && (
+      <div
+        className="fixed inset-0 z-[10000] flex items-center justify-center px-6"
+        style={{ background: 'rgba(8,8,12,0.78)', backdropFilter: 'blur(4px)' }}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Enter birthday"
+      >
+        <DateOfBirthStep onConfirm={handleDOBConfirm} onSkip={handleDOBSkip} />
+      </div>
+    )}
     </>
   )
 }

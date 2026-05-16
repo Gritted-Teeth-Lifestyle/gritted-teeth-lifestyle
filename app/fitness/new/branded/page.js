@@ -13,7 +13,6 @@ import { useRouter } from 'next/navigation'
 import { useSound } from '../../../../lib/useSound'
 import { useProfileGuard } from '../../../../lib/useProfileGuard'
 import { pk } from '../../../../lib/storage'
-import FireFadeIn from '../../../../components/FireFadeIn'
 import FireTransition from '../../../../components/FireTransition'
 import SlashWipe from '../../../../components/SlashWipe'
 import SpeedLines from '../../../../components/SpeedLines'
@@ -148,6 +147,374 @@ function CarveContent({ enabled }) {
   )
 }
 
+/**
+ * AttuneMovementsButton — entry point to the Attune Movements page.
+ * Visually mirrors SheetCarveButton's gold-on-dim P5/Gurren palette and
+ * skewed clip-path slash. Day-selection-gated (CARVE-button parity) but
+ * does NOT require muscle assignments — the user discovers the empty
+ * state inside the Attune page if they entered without muscles.
+ *
+ * No slash-cut animation here — this is a navigation entry, not the
+ * commit/forge moment that SheetCarveButton's blade-swing earns.
+ */
+// Single SVG-text spec shared by the visible button text and the
+// AttuneFlameLayer mask. Centralizing here means both elements use
+// identical font/size/position/stroke — pixel-perfect alignment
+// between the visible letters and the flame windows.
+const ATTUNE_TEXT_FONT = '"Yuji Syuku", "Shippori Mincho", serif'
+const ATTUNE_TEXT_SIZE = '0.85rem'
+const ATTUNE_TEXT_WEIGHT = 400
+const ATTUNE_TEXT_LETTER_SPACING = '0.04em'
+// Y position of each row's text-anchor point (dominantBaseline=central),
+// expressed as a fraction of the button's height. Matches where the
+// flexbox-equivalent layout would center the rows.
+const ATTUNE_Y_FRAC = 0.40
+const MOVEMENTS_Y_FRAC = 0.60
+// Homescreen GateScreen palette — copied so the button reads as a
+// mini-homescreen tile.
+const GTL_BG_BLACK   = '#070708'
+const GTL_RED        = '#d4181f'
+const GTL_RED_BRIGHT = '#ff2a36'
+const GTL_RED_DEEP   = '#7a0e14'
+const GTL_PAPER      = '#f1eee5'
+// Red text + mix-blend-mode: difference (applied at the text SVG)
+// gives the same negative-photo flip the homescreen uses on its
+// "GRITTED TEETH LIFESTYLE" / "PRESS START" labels — red on the
+// black base, flipping to black where it crosses the red bands.
+const ATTUNE_TEXT_COLOR  = GTL_RED
+
+// Renders both ATTUNE and MOVEMENTS as SVG <text> at percentage-based
+// (50% x) positions. Reused by the visible button text (fill=red,
+// stroke=red for fake-bold) and the flame mask (fill=white,
+// stroke=white). Same element type + coords in both places guarantees
+// alignment.
+function AttuneTextRows({ fill, strokeColor, strokeWidth = 0.5 }) {
+  const sharedProps = {
+    textAnchor: 'middle',
+    dominantBaseline: 'central',
+    style: {
+      fontFamily: ATTUNE_TEXT_FONT,
+      fontSize: ATTUNE_TEXT_SIZE,
+      fontWeight: ATTUNE_TEXT_WEIGHT,
+      letterSpacing: ATTUNE_TEXT_LETTER_SPACING,
+      fill,
+      stroke: strokeColor,
+      strokeWidth,
+      paintOrder: 'stroke fill',
+    },
+  }
+  return (
+    <>
+      <text x="50%" y={`${ATTUNE_Y_FRAC * 100}%`} {...sharedProps}>ATTUNE</text>
+      <text x="50%" y={`${MOVEMENTS_Y_FRAC * 100}%`} {...sharedProps}>MOVEMENTS</text>
+    </>
+  )
+}
+
+function AttuneMovementsButton({ enabled, monthKanji = '', onTap, onHover }) {
+  // CRITICAL: no transform, no opacity, no z-index on the button itself.
+  // Each of those creates a stacking context that isolates the text's
+  // mix-blend-mode from the kanji backdrop. The wrapper around this
+  // component (in the grid render) must also avoid stacking context
+  // creators for the same reason.
+  //
+  // Border + text color stay constant regardless of `enabled`. The
+  // flame layer is the only visual indicator that a day is selected
+  // — the button itself doesn't shift between dim/bright.
+  //
+  // Visible text is rendered as SVG <text> (not HTML span) so it
+  // shares the AttuneFlameLayer mask's coordinate system exactly,
+  // eliminating any HTML-vs-SVG layout drift between the visible
+  // letters and the flame windows.
+  return (
+    <button
+      type="button"
+      aria-label="Attune Movements"
+      onClick={enabled ? onTap : undefined}
+      onMouseEnter={enabled ? onHover : undefined}
+      disabled={!enabled}
+      className={`relative ${enabled ? 'cursor-pointer' : 'cursor-not-allowed'} w-full h-full block`}
+      style={{
+        background: 'transparent',
+        border: 'none',
+        WebkitTapHighlightColor: 'transparent',
+        outline: 'none',
+        padding: 0,
+      }}
+    >
+      {/* Homescreen-palette background — black base + radial red bloom +
+          two skewed diagonal red bands + noise grain. Mirrors GateScreen's
+          atmospheric stack so the button reads as a mini-homescreen tile.
+          overflow:hidden contains the band overflow within the button
+          rect (the wrapper's slash clipPath handles the slash silhouette
+          itself).
+          Dark base = #280609 (the same dark-red-tinted shade the
+          page main bg uses). Reads as 'reddish black' to match the
+          rest of the button + page chrome instead of pure-cold-black. */}
+      <div
+        className="absolute inset-0 overflow-hidden pointer-events-none"
+        style={{ background: '#280609' }}
+        aria-hidden="true"
+      >
+        {/* Bands at alpha 0.9 — letters/kanji still flip to near-black
+            via mix-blend-difference (close enough to pure black to read
+            as black) but a faint amount of the underlying calendar +
+            cell kanji bleeds through the band, so the entire button
+            doesn't read as a fully opaque tile. */}
+        <div
+          className="absolute"
+          style={{
+            top: '-25%', bottom: '-25%', left: '-15%', width: '32%',
+            background: 'rgba(212, 24, 31, 0.85)',
+            transform: 'skewX(-12deg)',
+          }}
+        />
+        <div
+          className="absolute"
+          style={{
+            top: '-25%', bottom: '-25%', right: '-10%', width: '55%',
+            background: 'rgba(212, 24, 31, 0.9)',
+            transform: 'skewX(-12deg)',
+          }}
+        />
+        {/* Noise grain — same gtl-noise texture the homescreen uses */}
+        <div className="absolute inset-0 gtl-noise" />
+      </div>
+      <svg
+        viewBox="0 0 100 100"
+        preserveAspectRatio="none"
+        width="100%"
+        height="100%"
+        className="absolute inset-0 pointer-events-none"
+        aria-hidden="true"
+        style={{ filter: 'drop-shadow(0 0 1.5px rgba(212,24,31,0.45))' }}
+      >
+        {/* Softened slash border: semi-transparent red + drop-shadow
+            outer glow so the edge fades into the bg instead of sitting
+            as a hard line. */}
+        <polygon
+          points="4,0 100,0 96,100 0,100"
+          fill="none"
+          stroke="rgba(212,24,31,0.55)"
+          strokeWidth="1"
+          vectorEffect="non-scaling-stroke"
+        />
+      </svg>
+      {/* Kanji watermark INSIDE the button — same negative-photo
+          treatment as the ATTUNE/MOVEMENTS text. Lets the month
+          kanji read through the solid red bands as black silhouette
+          (red - red = 0,0,0) and as red over the dark center gap
+          (red - dark = red). The original cell-rendered kanji sits
+          underneath but gets covered by the bands; this in-button
+          copy is the visible one. */}
+      {monthKanji && (
+        <div
+          className="absolute inset-0 flex items-center justify-center pointer-events-none select-none"
+          style={{ mixBlendMode: 'difference' }}
+          aria-hidden="true"
+        >
+          <span
+            style={{
+              fontFamily: '"Noto Serif JP", "Yu Mincho", serif',
+              fontSize: '3rem',
+              fontWeight: 700,
+              lineHeight: 1,
+              letterSpacing: '-0.02em',
+              color: GTL_RED,
+            }}
+          >
+            {monthKanji}
+          </span>
+        </div>
+      )}
+      <svg
+        width="100%"
+        height="100%"
+        className="absolute inset-0 pointer-events-none"
+        style={{ mixBlendMode: 'difference' }}
+        aria-hidden="true"
+      >
+        <AttuneTextRows
+          fill={ATTUNE_TEXT_COLOR}
+          strokeColor={ATTUNE_TEXT_COLOR}
+        />
+      </svg>
+    </button>
+  )
+}
+
+// Yakiire flame engulf overlay for the Attune button. Sibling layer to
+// the mix-blend wrapper (NOT mix-blended itself) so flames render in
+// their natural orange color over the kanji + button. Particles are
+// clipped to ATTUNE/MOVEMENTS letter silhouettes via SVG mask — the
+// same pattern as weekday-flame-engulf on /fitness/new/summary.
+//
+// Mounts whenever the button is enabled (any day selected); unmounts
+// when all days deselected. Animation loops infinitely; the flames
+// keep burning until the user navigates away (CARVE press cuts to the
+// next page) or clears their selection.
+function AttuneFlameLayer({ rect }) {
+  if (!rect) return null
+  const W = rect.width
+  const H = rect.height
+
+  // Deterministic per-particle pseudorandom: sin-fract hash means
+  // adjacent seeds produce uncorrelated values without server/client
+  // mismatch. Same seed → same value across SSR → CSR.
+  const hash01 = (n) => {
+    const x = Math.sin(n * 12.9898 + 78.233) * 43758.5453
+    return x - Math.floor(x)
+  }
+
+  // Y positions match the HTML flex-col layout: container H, two
+  // 0.85rem rows (~13.6px each) with leading-none + 2px gap, centered
+  // → row centers land at ~H*0.40 and H*0.60 (was 0.36/0.64, which
+  // pushed the flame mask further from center than the visible text
+  // and caused a vertical misalignment between the windows and the
+  // letters).
+  const ATTUNE_Y = H * 0.40
+  const MOVEMENTS_Y = H * 0.60
+  // Approx text widths so particle spawn x's stay within the letter
+  // band (mask clips the rest, but tighter spread = fewer wasted
+  // particles). MOVEMENTS is ~1.5× the ATTUNE width.
+  const ATTUNE_HALF_W = W * 0.32
+  const MOVEMENTS_HALF_W = W * 0.45
+
+  // Per-letter particle distribution. Each row's letter band is
+  // divided into N_LETTERS evenly-spaced slots, and PARTS_PER_LETTER
+  // particles spawn within each slot's x-range (with jitter). The
+  // mask clips final positions to actual glyph shapes — slot widths
+  // are an approximation of glyph advance, so every letter gets ≥1
+  // particle landing inside its silhouette regardless of glyph
+  // width variation. Avoids the previous random-uniform distribution
+  // where some letters lucked into 0-1 particles by chance.
+  const PARTS_PER_LETTER = 4
+  const ROWS = [
+    { letters: 6, baseY: ATTUNE_Y,    halfW: ATTUNE_HALF_W,    seedBase: 0 },
+    { letters: 9, baseY: MOVEMENTS_Y, halfW: MOVEMENTS_HALF_W, seedBase: 100 },
+  ]
+  const particles = []
+  let pkey = 0
+  for (const row of ROWS) {
+    const slotWidth = (row.halfW * 2) / row.letters
+    for (let L = 0; L < row.letters; L++) {
+      const slotCenterX = (W / 2) - row.halfW + (L + 0.5) * slotWidth
+      for (let i = 0; i < PARTS_PER_LETTER; i++) {
+        const k = row.seedBase + L * 11 + i + 1
+        const rX      = hash01(k * 1)
+        const rDly    = hash01(k * 3 + 11)
+        const rDur    = hash01(k * 5 + 17)
+        const rRise   = hash01(k * 7 + 19)
+        const rSize   = hash01(k * 11 + 23)
+        const rPeak   = hash01(k * 13 + 29)
+        const rDrft   = hash01(k * 17 + 31)
+        const rStartJ = hash01(k * 19 + 37)
+        const rEndR   = hash01(k * 23 + 41)
+
+        // Spawn x: anywhere within the slot, slight expansion so
+        // particles can spill into neighbouring slot edges (mask
+        // clips to actual letter shape regardless).
+        const cx     = slotCenterX + (rX - 0.5) * slotWidth * 1.15
+        const delay  = (rDly * 540 + row.seedBase) % 600
+        const dur    = 130 + rDur * 150                     // 130-280ms
+        const rise   = 9 + rRise * 7                        // 9-16
+        const size   = 2.2 + rSize * 3.5                    // 2.2-5.7
+        const peakA  = 0.5 + rPeak * 0.5                    // 0.5-1.0
+        const driftX = (rDrft - 0.5) * 8                    // ±4
+        const startY = 6 + (rStartJ - 0.5) * 5              // ±2.5
+        const endR   = 0.5 + rEndR * 1.0                    // 0.5-1.5
+
+        particles.push({
+          cx,
+          cy: row.baseY + startY,
+          r: size,
+          endR, dur, delay, peakA, driftX, rise,
+          key: pkey++,
+        })
+      }
+    }
+  }
+
+  return (
+    <svg
+      style={{
+        position: 'absolute',
+        top: `${rect.top}px`,
+        left: `${rect.left}px`,
+        width: `${W}px`,
+        height: `${H}px`,
+        pointerEvents: 'none',
+        overflow: 'visible',
+        animation: 'attune-flame-flicker 1100ms ease-in-out infinite',
+      }}
+      viewBox={`0 0 ${W} ${H}`}
+      preserveAspectRatio="none"
+      aria-hidden="true"
+    >
+      <defs>
+        {/* Mask shares its <text> coords with the visible button text
+            via AttuneTextRows. White on black = reveal only inside
+            letter shapes. */}
+        <mask id="attune-flame-mask" maskUnits="userSpaceOnUse" x="0" y="0" width={W} height={H}>
+          <rect x="0" y="0" width={W} height={H} fill="black" />
+          <AttuneTextRows fill="white" strokeColor="white" />
+        </mask>
+      </defs>
+      {/* Masked group — letters become "windows into the void with
+          flames behind." Mirror of /fitness/new/summary's inscription
+          pattern:
+            1. Dark underlay rect fills each letter silhouette with
+               near-black void, hiding the red HTML text underneath.
+            2. Orange particles flow upward inside the same mask,
+               clipped to letter shape — flames visible through the
+               letter-shaped windows.
+          Outside the mask, the flame layer is transparent: the
+          underlying button content (red ATTUNE/MOVEMENTS text + slash
+          outline) shows through, kanji watermark still visible. */}
+      <g mask="url(#attune-flame-mask)">
+        <rect x="0" y="0" width={W} height={H} fill="#0a0a0a" />
+        {particles.map(p => (
+          <circle
+            key={p.key}
+            cx={p.cx}
+            cy={p.cy}
+            r={p.r}
+            fill="#ff5000"
+            opacity={0}
+          >
+            {/* 3-point translate path — curved rise, not straight up. */}
+            <animateTransform
+              attributeName="transform"
+              type="translate"
+              values={`0 0; ${(p.driftX * 0.4).toFixed(2)} -${(p.rise * 0.5).toFixed(2)}; ${p.driftX.toFixed(2)} -${p.rise.toFixed(2)}`}
+              dur={`${p.dur.toFixed(0)}ms`}
+              begin={`${p.delay.toFixed(0)}ms`}
+              repeatCount="indefinite"
+            />
+            {/* Trapezoidal opacity: ignite in 4%, hold peak till 75%, fade. */}
+            <animate
+              attributeName="opacity"
+              values={`0; ${p.peakA.toFixed(2)}; ${p.peakA.toFixed(2)}; 0`}
+              keyTimes="0; 0.04; 0.75; 1"
+              dur={`${p.dur.toFixed(0)}ms`}
+              begin={`${p.delay.toFixed(0)}ms`}
+              repeatCount="indefinite"
+            />
+            {/* r holds at full size for first half, shrinks to a wisp by end. */}
+            <animate
+              attributeName="r"
+              values={`${p.r.toFixed(2)}; ${p.r.toFixed(2)}; ${p.endR.toFixed(2)}`}
+              dur={`${p.dur.toFixed(0)}ms`}
+              begin={`${p.delay.toFixed(0)}ms`}
+              repeatCount="indefinite"
+            />
+          </circle>
+        ))}
+      </g>
+    </svg>
+  )
+}
+
 function SheetCarveButton({ count, enabled, onFire, onHover, onSlash }) {
   // 0=idle, 1=slash-sweep, 2=slash-fade, 3=render-halves, 4=separate
   const [phase, setPhase] = useState(0)
@@ -170,14 +537,35 @@ function SheetCarveButton({ count, enabled, onFire, onHover, onSlash }) {
   //   228ms    phase 3  halves render at initial position (50ms gap after slash gone)
   //   ~244ms   phase 4  halves start separating (via 16ms setTimeout)
   //   ~660ms            navigate
+  const timersRef = useRef([])
+  const firedRef = useRef(false)
   const fire = () => {
     if (!enabled || phase > 0) return
     setPhase(1)
     if (onSlash) onSlash()
-    setTimeout(() => { if (mountedRef.current) setPhase(2) }, 108)   // slash fade
-    setTimeout(() => { if (mountedRef.current) setPhase(3) }, 228)   // render halves
-    setTimeout(() => { if (mountedRef.current) onFire() }, 530)      // navigate
+    timersRef.current.push(setTimeout(() => { if (mountedRef.current) setPhase(2) }, 108))
+    timersRef.current.push(setTimeout(() => { if (mountedRef.current) setPhase(3) }, 228))
+    timersRef.current.push(setTimeout(() => {
+      if (mountedRef.current && !firedRef.current) { firedRef.current = true; onFire() }
+    }, 530))
   }
+  // Tap during the slash sequence → clear all pending timers and navigate
+  // immediately. Once phase > 0 we're committed; a follow-up tap should not
+  // re-fire — just collapse the visual tail.
+  useEffect(() => {
+    if (phase === 0) return
+    const handler = () => {
+      timersRef.current.forEach(clearTimeout)
+      timersRef.current = []
+      if (!firedRef.current) { firedRef.current = true; onFire() }
+    }
+    window.addEventListener('pointerdown', handler, { capture: true })
+    window.addEventListener('touchstart',  handler, { capture: true, passive: true })
+    return () => {
+      window.removeEventListener('pointerdown', handler, { capture: true })
+      window.removeEventListener('touchstart',  handler, { capture: true })
+    }
+  }, [phase, onFire])
 
   const goldBg = enabled ? '#e4b022' : '#3a2f12'
   const active = phase > 0
@@ -276,7 +664,10 @@ export default function SchedulePage() {
   const router = useRouter()
   const { play } = useSound()
   let backHref = '/fitness/new/muscles'
-  try { if (localStorage.getItem('gtl-back-to-edit') === '1') backHref = '/fitness/edit' } catch (_) {}
+  try {
+    if (localStorage.getItem('gtl-back-to-edit') === '1') backHref = '/fitness/edit'
+    else if (localStorage.getItem('gtl-quick-forge') === '1') backHref = '/fitness/new'
+  } catch (_) {}
 
   const [today] = useState(() => new Date())
   const [displayDate, setDisplayDate] = useState(() => {
@@ -287,11 +678,79 @@ export default function SchedulePage() {
 
   const [selectedDays, setSelectedDays] = useState(new Set())
   const [assignments,  setAssignments]  = useState({})
+
+  // Hydrate from the cycle's persisted state when entering via the edit
+  // hub. /fitness/load's handleReview wrote training-days + daily-plan +
+  // editing-cycle-id before routing here. Without this hydration, the
+  // schedule starts blank and any user edits never line up with the
+  // cycle being edited. Read-only; new-cycle flow (no editing-cycle-id)
+  // continues to start blank.
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    let editing = false
+    try { editing = localStorage.getItem(pk('editing-cycle-id')) != null } catch (_) {}
+    if (!editing) return
+
+    try {
+      const rawDays = localStorage.getItem(pk('training-days'))
+      const rawPlan = localStorage.getItem(pk('daily-plan'))
+      if (rawDays) {
+        const arr = JSON.parse(rawDays)
+        if (Array.isArray(arr) && arr.length > 0) {
+          setSelectedDays(new Set(arr))
+          // Position the displayed month so the cycle's first day is
+          // visible on mount instead of whatever month "today" lands in.
+          const first = arr[0]
+          if (typeof first === 'string') {
+            const [y, m] = first.split('-').map(Number)
+            if (y && m) setDisplayDate(new Date(y, m - 1, 1))
+          }
+        }
+      }
+      if (rawPlan) {
+        const plan = JSON.parse(rawPlan)
+        if (plan && typeof plan === 'object') {
+          const next = {}
+          for (const [iso, arr] of Object.entries(plan)) {
+            if (Array.isArray(arr)) next[iso] = new Set(arr)
+          }
+          setAssignments(next)
+        }
+      }
+    } catch (_) {}
+  }, [])
+
   const [fireActive,   setFireActive]   = useState(false)
   const [quickHeistActive, setQuickHeistActive] = useState(false)
   const [quickForgeRunning, setQuickForgeRunning] = useState(false)
+  // Measured rect (top/left/width/height) for the Attune Movements button
+  // overlay. Computed from the kanji cells' DOMRect so the button sits
+  // exactly over the watermark without claiming any grid track space.
+  const [attuneRect, setAttuneRect] = useState(null)
   const dragRef = useRef(false) // true during swipe-select
   const gridRef = useRef(null)
+  const NEXT_TARGET = '/fitness/new/summary'
+  const skippedRef = useRef(false)
+  const skipNow = () => {
+    if (skippedRef.current) return
+    skippedRef.current = true
+    router.push(NEXT_TARGET)
+  }
+  // Window pointerdown+touchstart listener while transitions are active —
+  // tap anywhere routes immediately. data-retreat excluded for back nav.
+  useEffect(() => {
+    if (!fireActive && !quickHeistActive) return
+    const handler = (e) => {
+      if (e.target?.closest?.('[data-retreat]')) return
+      skipNow()
+    }
+    window.addEventListener('pointerdown', handler, { capture: true })
+    window.addEventListener('touchstart',  handler, { capture: true, passive: true })
+    return () => {
+      window.removeEventListener('pointerdown', handler, { capture: true })
+      window.removeEventListener('touchstart',  handler, { capture: true })
+    }
+  }, [fireActive, quickHeistActive])
 
   // Enter-key nav for edit mode
   useEffect(() => {
@@ -304,11 +763,21 @@ export default function SchedulePage() {
     return () => window.removeEventListener('keydown', handleKey)
   }, [router])
 
-  // Stamp sound on first sheet open
+  // Stamp sound + Attune button yakiire ignite on first sheet open.
+  // attuneIgniteKey bumps each time we transition from 0→positive days
+  // selected so the button's per-letter cascade restarts cleanly. Resets
+  // back to 0 once all days are deselected so the next first-pick fires
+  // a fresh ignite instead of re-running the same key.
   const prevOpenRef = useRef(false)
+  const [attuneIgniteKey, setAttuneIgniteKey] = useState(0)
   useEffect(() => {
     const open = selectedDays.size > 0
-    if (open && !prevOpenRef.current) play('stamp')
+    if (open && !prevOpenRef.current) {
+      play('stamp')
+      setAttuneIgniteKey((k) => k + 1)
+    } else if (!open && prevOpenRef.current) {
+      setAttuneIgniteKey(0)
+    }
     prevOpenRef.current = open
   }, [selectedDays.size, play])
 
@@ -475,7 +944,11 @@ export default function SchedulePage() {
   }
   const firstWrapDay = wrapActive ? Math.min(...wrappedDays) : null
   const daysWithMuscles = Object.values(assignments).filter((s) => s.size > 0).length
-  const carveEnabled = daysWithMuscles > 0
+  // CARVE activates on any day selection — muscle assignment is no longer
+  // a prerequisite. (Used to require daysWithMuscles > 0; now mirrors the
+  // Attune button's gating so both light up together when at least one
+  // day is picked.)
+  const carveEnabled = selectedDays.size > 0
   // Total cycle days = contiguous span from first to last user-pick (inclusive of any
   // auto-rest gap days). What the carve button surfaces — "5 DAYS" of cycle, not "3
   // muscle-assigned days". 0 when no picks.
@@ -529,22 +1002,82 @@ export default function SchedulePage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  // Serialize current selection state to the draft keys. Returns the
+  // serialized payload so callers can reuse it for the active-cycle sync.
+  const serializeSchedule = () => {
+    const trainingDays = [...selectedDays].sort()
+    const dailyPlan = {}
+    Object.entries(assignments).forEach(([iso, set]) => {
+      if (set.size > 0) dailyPlan[iso] = [...set]
+    })
+    return { trainingDays, dailyPlan }
+  }
+
+  // Auto-rest gap fill: span from min..max of user-picked days, inclusive.
+  // Mirrors the contiguous-span derivation in /fitness/new/summary so the
+  // shape Attune renders matches what Summary would commit.
+  const contiguousSpan = (trainingDays) => {
+    if (!trainingDays.length) return []
+    const first = trainingDays[0]
+    const last  = trainingDays[trainingDays.length - 1]
+    const out = []
+    let cur = new Date(first + 'T00:00:00Z')
+    const end = new Date(last + 'T00:00:00Z')
+    while (cur <= end) {
+      out.push(cur.toISOString().slice(0, 10))
+      cur.setUTCDate(cur.getUTCDate() + 1)
+    }
+    return out
+  }
+
+  const persistScheduleDraft = () => {
+    try {
+      const { trainingDays, dailyPlan } = serializeSchedule()
+      localStorage.setItem(pk('training-days'), JSON.stringify(trainingDays))
+      localStorage.setItem(pk('daily-plan'),    JSON.stringify(dailyPlan))
+      return { trainingDays, dailyPlan }
+    } catch (_) {
+      return { trainingDays: [], dailyPlan: {} }
+    }
+  }
+
+  // Side-load the active cycle's days + dailyPlan so the next consumer
+  // (Attune) sees the picks the user just made. Without this, Attune
+  // reads pk('cycles')[active-cycle-id].days, which only the Summary
+  // commit path writes — bypassing it (e.g. tapping ATTUNE before
+  // CARVE) leaves Attune rendering the previous commit's days.
+  const syncActiveCycle = (trainingDays, dailyPlan) => {
+    try {
+      const cycleId = localStorage.getItem(pk('active-cycle-id'))
+                   || localStorage.getItem(pk('editing-cycle-id'))
+      if (!cycleId) return
+      const raw = localStorage.getItem(pk('cycles'))
+      if (!raw) return
+      const cycles = JSON.parse(raw)
+      if (!Array.isArray(cycles)) return
+      const span = contiguousSpan(trainingDays)
+      const next = cycles.map((c) =>
+        c.id === cycleId ? { ...c, days: span, dailyPlan } : c
+      )
+      localStorage.setItem(pk('cycles'), JSON.stringify(next))
+    } catch (_) {}
+  }
+
   const handleCarve = () => {
     if (!carveEnabled) return
     play('card-confirm')
-    try {
-      // Persist all user-picked days (including intentional-rest days with no muscles).
-      // Auto-rest gap days are NOT saved — they're derived at render time on summary
-      // from min/max of the persisted picks. P1 design.
-      const trainingDays = [...selectedDays].sort()
-      localStorage.setItem(pk('training-days'), JSON.stringify(trainingDays))
-      const serialized = {}
-      Object.entries(assignments).forEach(([iso, set]) => {
-        if (set.size > 0) serialized[iso] = [...set]
-      })
-      localStorage.setItem(pk('daily-plan'), JSON.stringify(serialized))
-    } catch (_) {}
+    persistScheduleDraft()
     setFireActive(true)
+  }
+
+  // ATTUNE MOVEMENTS bypasses the CARVE → Summary commit. Persist
+  // everything Attune needs to read fresh values: the draft keys AND
+  // the active cycle's snapshot in pk('cycles').
+  const handleAttuneHandoff = () => {
+    play('option-select')
+    const { trainingDays, dailyPlan } = persistScheduleDraft()
+    syncActiveCycle(trainingDays, dailyPlan)
+    router.push('/attune')
   }
 
   const batchMuscleState = (muscleId) => {
@@ -565,12 +1098,59 @@ export default function SchedulePage() {
   const targetSlots = row1Empty.length >= 2 ? row1Empty : row5Empty
   const startOffset = Math.max(0, Math.floor((targetSlots.length - monthChars.length) / 2))
   const emptyKanji = {}
+  // The cell indices where the month kanji renders. The Attune Movements
+  // button is positioned absolutely over these same cells (out of grid
+  // flow, so calendar cells lay out exactly as production).
+  const kanjiCells = []
   monthChars.forEach((ch, ci) => {
     const slotIdx = startOffset + ci
     if (slotIdx < targetSlots.length) {
       emptyKanji[targetSlots[slotIdx]] = ch
+      kanjiCells.push(targetSlots[slotIdx])
     }
   })
+  // Stable cache key so the measurement effect only re-runs on month change.
+  const kanjiCellsKey = kanjiCells.join(',')
+
+  // Measure the kanji cells' bounding box and write the result to
+  // `attuneRect`. Position-absolute overlay below reads this; keeps the
+  // Attune button out of the CSS grid's auto-placement so the calendar
+  // cells lay out exactly as if no button existed.
+  useEffect(() => {
+    const grid = gridRef.current
+    if (!grid || kanjiCells.length === 0) {
+      setAttuneRect(null)
+      return
+    }
+    const measure = () => {
+      const cellEls = grid.children
+      const firstIdx = Math.min(...kanjiCells)
+      const lastIdx = Math.max(...kanjiCells)
+      const firstEl = cellEls[firstIdx]
+      const lastEl = cellEls[lastIdx]
+      if (!firstEl || !lastEl) {
+        setAttuneRect(null)
+        return
+      }
+      const gridRect = grid.getBoundingClientRect()
+      const firstCellRect = firstEl.getBoundingClientRect()
+      const lastCellRect = lastEl.getBoundingClientRect()
+      setAttuneRect({
+        top: firstCellRect.top - gridRect.top,
+        left: firstCellRect.left - gridRect.left,
+        width: lastCellRect.right - firstCellRect.left,
+        height: firstCellRect.height,
+      })
+    }
+    measure()
+    const ro = new ResizeObserver(measure)
+    ro.observe(grid)
+    window.addEventListener('resize', measure)
+    return () => {
+      ro.disconnect()
+      window.removeEventListener('resize', measure)
+    }
+  }, [kanjiCellsKey])
 
   // ── Render ──────────────────────────────────────────────────────────────
   return (
@@ -596,9 +1176,9 @@ export default function SchedulePage() {
           50%      { box-shadow: 0 0 20px rgba(228,176,34,0.8), 0 0 40px rgba(228,176,34,0.3); }
         }
         @keyframes wrap-continuity-pulse {
-          0%   { box-shadow: inset 0 0 0 0 rgba(228, 176, 34, 0); }
-          20%  { box-shadow: inset 0 0 0 3px rgba(228, 176, 34, 0.85); }
-          100% { box-shadow: inset 0 0 0 0 rgba(228, 176, 34, 0); }
+          0%   { box-shadow: inset 0 0 0 0 rgba(212, 24, 31, 0); }
+          20%  { box-shadow: inset 0 0 0 3px rgba(212, 24, 31, 0.85); }
+          100% { box-shadow: inset 0 0 0 0 rgba(212, 24, 31, 0); }
         }
         .wrap-continuity-pulse { animation: wrap-continuity-pulse 1000ms ease-out 200ms both; }
       `}</style>
@@ -644,11 +1224,15 @@ export default function SchedulePage() {
           ))}
         </div>
 
-        {/* 5-row day grid — fixed 99px rows */}
+        {/* 5-row day grid — fixed 75px rows. relative positioning context
+            for the Attune Movements absolute overlay rendered below.
+            isolation:isolate scopes the Attune button's mix-blend-difference
+            to this subtree (kanji backdrop + Attune text), which Safari/iOS
+            WebKit needs to apply the blend correctly. */}
         <div
           ref={gridRef}
-          className="grid grid-cols-7 grid-rows-5 gap-1"
-          style={{ height: `${ROW_H * 5 + 4 * 4}px` }}
+          className="relative grid grid-cols-7 grid-rows-5 gap-1"
+          style={{ height: `${ROW_H * 5 + 4 * 4}px`, isolation: 'isolate' }}
           onTouchStart={handleTouchStart}
           onTouchMove={handleTouchMove}
           onTouchEnd={handleTouchEnd}
@@ -658,20 +1242,12 @@ export default function SchedulePage() {
               const ch = emptyKanji[i]
               return (
                 <div key={`pad-${i}`} className="relative overflow-hidden border border-transparent" style={{ clipPath: CELL_CLIP, height: `${ROW_H}px` }}>
-                  {ch && (
-                    <span
-                      className="absolute inset-0 flex items-center justify-center select-none pointer-events-none"
-                      style={{
-                        fontFamily: '"Noto Serif JP", "Yu Mincho", serif',
-                        fontSize: '4rem',
-                        color: 'rgba(212, 24, 31, 0.7)',
-                        fontWeight: 700,
-                      }}
-                      aria-hidden="true"
-                    >
-                      {ch}
-                    </span>
-                  )}
+                  {/* Cell-rendered kanji intentionally omitted — the
+                      AttuneMovementsButton overlay renders its own
+                      mix-blend-difference copy of the month kanji.
+                      Letting both render produced a doubled image
+                      visible through the wrapper's semi-transparent
+                      background. */}
                 </div>
               )
             }
@@ -716,24 +1292,26 @@ export default function SchedulePage() {
                   <div className="absolute top-0 left-0 right-0 h-0.5 bg-gtl-gold" aria-hidden="true" />
                 )}
 
-                {/* Wrap-continuity cues — only on the paired flow-end / wrapped cells. */}
+                {/* Wrap-continuity cues — only on the paired flow-end / wrapped cells.
+                    GTL red (#d4181f) so they read with the rest of the palette
+                    instead of fighting today's gold border. */}
                 {isFlowEnd && (
                   <>
                     <div className="absolute top-0 right-0 bottom-0 w-[2px] pointer-events-none"
-                         style={{ background: '#e4b022', boxShadow: '0 0 6px rgba(228,176,34,0.7)' }}
+                         style={{ background: '#d4181f', boxShadow: '0 0 6px rgba(212,24,31,0.7)' }}
                          aria-hidden="true" />
                     <span className="absolute top-1 right-1 font-mono text-[12px] font-semibold leading-none pointer-events-none select-none"
-                          style={{ color: '#e4b022' }}
+                          style={{ color: '#d4181f' }}
                           aria-hidden="true">↗</span>
                   </>
                 )}
                 {isFirstWrap && (
                   <>
                     <div className="absolute top-0 left-0 bottom-0 w-[2px] pointer-events-none"
-                         style={{ background: '#e4b022', boxShadow: '0 0 6px rgba(228,176,34,0.7)' }}
+                         style={{ background: '#d4181f', boxShadow: '0 0 6px rgba(212,24,31,0.7)' }}
                          aria-hidden="true" />
                     <span className="absolute bottom-1 left-1 font-mono text-[12px] font-semibold leading-none pointer-events-none select-none"
-                          style={{ color: '#e4b022' }}
+                          style={{ color: '#d4181f' }}
                           aria-hidden="true">↙</span>
                   </>
                 )}
@@ -806,6 +1384,42 @@ export default function SchedulePage() {
               </button>
             )
           })}
+
+          {/* Attune Movements entry — absolute overlay measured to the
+              kanji cells' bounding box (see attuneRect useEffect above).
+              Out of grid flow → does not displace calendar auto-placement.
+              Always rendered when the kanji has a position; activates the
+              moment any day is selected. */}
+          {attuneRect && (
+            <div
+              style={{
+                position: 'absolute',
+                top: `${attuneRect.top}px`,
+                left: `${attuneRect.left}px`,
+                width: `${attuneRect.width}px`,
+                height: `${attuneRect.height}px`,
+                // clipPath restricts the click area to the slash silhouette,
+                // so taps in the wrapper's bounding-box corners pass through
+                // to underlying day cells. Also clips the homescreen-style
+                // background inside the button to the slash shape.
+                clipPath: 'polygon(4% 0%, 100% 0%, 96% 100%, 0% 100%)',
+              }}
+            >
+              <AttuneMovementsButton
+                enabled={selectedDays.size > 0}
+                monthKanji={MONTH_KANJI[month]}
+                onTap={handleAttuneHandoff}
+                onHover={() => play('button-hover')}
+              />
+            </div>
+          )}
+          {/* Yakiire flame overlay — sibling of the mix-blend wrapper so
+              flames stay their natural orange (not difference-blended).
+              Mounts whenever any day is selected and burns continuously
+              until the selection is cleared or CARVE navigates away. */}
+          {attuneRect && attuneIgniteKey > 0 && (
+            <AttuneFlameLayer rect={attuneRect} />
+          )}
         </div>
       </section>
 
@@ -850,12 +1464,14 @@ export default function SchedulePage() {
       )}
 
       </div>
-      <FireFadeIn duration={900} />
       <FireTransition
         active={fireActive}
-        onComplete={() => router.push('/fitness/new/summary')}
+        onComplete={() => { if (!skippedRef.current) router.push(NEXT_TARGET) }}
       />
-      <SlashWipe active={quickHeistActive} onComplete={() => router.push('/fitness/new/summary')} />
+      <SlashWipe
+        active={quickHeistActive}
+        onComplete={() => { if (!skippedRef.current) router.push(NEXT_TARGET) }}
+      />
       <SpeedLines active={quickForgeRunning} />
     </main>
   )

@@ -5,6 +5,13 @@ import CallingCard from '../components/CallingCard'
 import HeistTransition from '../components/HeistTransition'
 import GateScreen from '../components/GateScreen'
 import { useSound } from '../lib/useSound'
+import {
+  BGM_TRACKS,
+  getCurrentBgmTrack,
+  getBgmTargetVol,
+  getRandomTrackId,
+  setBgmMediaSession,
+} from '../lib/bgmTracks'
 
 // Pre-create the Audio element at module load with preload='auto' so it's ready
 // when the user gestures. iOS PWA standalone mode rejects audio.play() if the
@@ -17,20 +24,46 @@ import { useSound } from '../lib/useSound'
 const bgMusicAudio = (() => {
   if (typeof window === 'undefined') return null
   if (window.__gtlBgMusic) return window.__gtlBgMusic
-  const a = new Audio('/sounds/chrono-cut-1.wav')
+  const track = getCurrentBgmTrack()
+  const a = new Audio(track.src)
   a.loop = true
   a.preload = 'auto'
   a.volume = 0
   window.__gtlBgMusic = a
+  window.__gtlBgMusicTrackId = track.id
+  // Seed Media Session metadata at creation so the lockscreen has the
+  // current track name/artwork ready the moment audio first plays.
+  setBgmMediaSession(track)
   return a
 })()
 
-// Pause + reset on page hide/unload so a backgrounded PWA tab doesn't leave a
-// zombie audio playing while a refresh creates a second instance.
+// Pause + reset on real page teardown so a refresh doesn't leave a zombie
+// audio playing while the new module evaluation creates a second instance.
+// Gate on `event.persisted === false` so bfcache transitions — including
+// iOS lock/unlock — DON'T pause; the lockscreen-continuity code below
+// depends on the audio element staying live across hidden/visible.
 if (typeof window !== 'undefined' && bgMusicAudio && !window.__gtlBgMusicHideHook) {
   window.__gtlBgMusicHideHook = true
-  window.addEventListener('pagehide', () => {
+  window.addEventListener('pagehide', (event) => {
+    if (event.persisted) return
     try { bgMusicAudio.pause(); bgMusicAudio.currentTime = 0 } catch {}
+  })
+}
+
+// Lockscreen continuity: keep mediaSession.playbackState in sync with
+// the audio element's actual state on visibility changes so the
+// lockscreen card reflects reality. The audio session category itself
+// stays in "media playback" because we no longer route through Web
+// Audio (see lib/bgmTracks.js getBgmGainNode for the why) — that's
+// what lets playback survive lock. Idempotent: installs once.
+if (typeof window !== 'undefined' && bgMusicAudio && !window.__gtlBgMusicVisHook) {
+  window.__gtlBgMusicVisHook = true
+  document.addEventListener('visibilitychange', () => {
+    try {
+      if (window.__gtlBgMusic && !window.__gtlBgMusic.paused) {
+        navigator.mediaSession.playbackState = 'playing'
+      }
+    } catch {}
   })
 }
 
@@ -39,12 +72,33 @@ if (typeof window !== 'undefined' && bgMusicAudio && !window.__gtlBgMusicHideHoo
 // Audio element stays locked until it's played-once inside a user gesture.
 // Prime it silently on first pointerdown so the actual play() in handleClick
 // succeeds. once:true means it runs exactly once, on the first interaction.
+//
+// IMPORTANT: skip the prime entirely when the user has BGM disabled. iOS
+// WKWebView has a known quirk where `muted = true` set immediately before
+// `play()` doesn't always silence the first ~100-300ms of playback — if the
+// singleton survived a prior session at volume 0.04, that brief window is
+// audible. If BGM is off, settings/toggle-on will handle the unlock at the
+// moment the user re-enables it (that toggle tap is itself a user gesture).
 if (typeof window !== 'undefined' && bgMusicAudio) {
   const primeBgMusic = () => {
+    try {
+      if (window.localStorage.getItem('gtl-bg-music-on') === '0') return
+    } catch {}
+    // Same-tap race guard: if the click that fired this pointerdown also
+    // routes through startBgMusic (it does on the homepage), the start path
+    // owns the playback — skip the prime entirely so we don't fight it.
+    if (window.__gtlBgMusicStarted) return
     bgMusicAudio.muted = true
+    // Belt-and-suspenders: if iOS leaks the muted prime, volume 0 = silent.
+    bgMusicAudio.volume = 0
     const p = bgMusicAudio.play()
     if (p && typeof p.then === 'function') {
       p.then(() => {
+        // Async resolution race: startBgMusic may have run while this
+        // promise was pending. If so, leave the audio alone — pausing or
+        // resetting now would silence the playback startBgMusic just took
+        // over, which is the bug we're guarding against.
+        if (window.__gtlBgMusicStarted) return
         bgMusicAudio.pause()
         bgMusicAudio.currentTime = 0
         bgMusicAudio.muted = false
@@ -60,34 +114,52 @@ if (typeof window !== 'undefined' && bgMusicAudio) {
 
 function startBgMusic() {
   if (!bgMusicAudio) return
-  // Settings toggle — if the user disabled bg music, don't start it.
+  // Settings toggle — if the user disabled bg music, don't start it. Also
+  // backstop any audio that primeBgMusic or another race-y path may have
+  // left playing (iOS PWA muted-prime leak). Force-pause + reset so we
+  // don't leak audible BGM after a fresh launch with the flag off.
   try {
-    if (window.localStorage.getItem('gtl-bg-music-on') === '0') return
+    if (window.localStorage.getItem('gtl-bg-music-on') === '0') {
+      try { bgMusicAudio.pause(); bgMusicAudio.currentTime = 0; bgMusicAudio.volume = 0 } catch {}
+      return
+    }
   } catch {}
-  // Trust the audio element's own state: if it's already playing (because a
-  // previous mount started it and the module-level singleton is still alive),
-  // don't kick another play() and don't re-run the fade interval.
-  if (!bgMusicAudio.paused) return
+  // Already started AND still playing — skip. (Re-mounting the home page
+  // shouldn't re-fade a song mid-loop.) But if we started before and the
+  // audio got paused since (backgrounded tab, etc.), fall through and
+  // restart cleanly.
+  if (window.__gtlBgMusicStarted && !bgMusicAudio.paused) return
 
-  // Kick off play() inside the user-gesture call stack (caller is GateScreen.handleClick
-  // or handleTouchEnd's swipe path — both synchronous to the user tap/swipe).
-  const playPromise = bgMusicAudio.play()
-  if (playPromise && typeof playPromise.catch === 'function') {
-    playPromise.catch(() => {
-      // If iOS rejects (e.g. element wasn't loaded enough), give it a second
-      // chance: load() then retry play() on next tick. NOT inside user gesture
-      // anymore, but iOS has marked the element as "user-activated" by the
-      // first attempt, so the retry usually succeeds.
-      bgMusicAudio.load()
-      bgMusicAudio.play().catch(() => {})
-    })
+  // Latch SYNCHRONOUSLY so primeBgMusic's pending async .then() (same-tap
+  // race) sees the flag and bails out instead of pausing what we're about
+  // to take over.
+  window.__gtlBgMusicStarted = true
+
+  // Restore mute in case prime left it silenced. The prime may still be
+  // mid-flight — its .then() will see the flag above and skip cleanup.
+  bgMusicAudio.muted = false
+  bgMusicAudio.volume = 0
+
+  // Only call play() if paused — if prime is currently playing (muted),
+  // we just unmute and fade up.
+  if (bgMusicAudio.paused) {
+    const playPromise = bgMusicAudio.play()
+    if (playPromise && typeof playPromise.catch === 'function') {
+      playPromise.catch(() => {
+        bgMusicAudio.load()
+        bgMusicAudio.play().catch(() => {})
+      })
+    }
   }
 
-  // Fade in volume to TARGET_VOL over FADE_MS.
-  const TARGET_VOL = 0.04
+  // Fade audio.volume up to the user-configured target. iOS PWA standalone
+  // hardware-locks audio.volume so this is effectively a 0→1 binary on
+  // that platform — but we accept the tradeoff because the audio session
+  // now stays in "media playback" category and survives screen lock.
+  const TARGET_VOL = getBgmTargetVol()
   const FADE_MS = 1500
   const steps = FADE_MS / 50
-  const increment = TARGET_VOL / steps
+  const increment = (TARGET_VOL || 0.0001) / steps
   const interval = setInterval(() => {
     const next = Math.min(TARGET_VOL, bgMusicAudio.volume + increment)
     bgMusicAudio.volume = next
@@ -185,6 +257,42 @@ function CallingCardReveal({ kind }) {
 export default function Home() {
   const router = useRouter()
   const { play } = useSound()
+
+  // bfcache restore re-roll. Browser refresh already re-rolls because the
+  // module re-evaluates and the IIFE picks fresh. But returning to / via
+  // the back button (or any path that hits the bfcache) restores the page
+  // without running scripts, so the singleton sticks with whatever track
+  // was picked on the original load. `pageshow.persisted` is the canonical
+  // signal for that case — when it fires AND random-on-launch is on, swap
+  // the singleton's src to a fresh random track. Listener is scoped to the
+  // home page (registered/cleaned in useEffect) so other routes are
+  // unaffected.
+  useEffect(() => {
+    const onPageShow = (event) => {
+      if (!event.persisted) return
+      try {
+        if (window.localStorage.getItem('gtl-bgm-random-on-launch') !== '1') return
+      } catch { return }
+      if (!window.__gtlBgMusic) return
+      const a = window.__gtlBgMusic
+      const nextId = getRandomTrackId(window.__gtlBgMusicTrackId)
+      const track = BGM_TRACKS.find(t => t.id === nextId)
+      if (!track || track.id === window.__gtlBgMusicTrackId) return
+      if (window.__gtlBgMusicFadeInterval) {
+        clearInterval(window.__gtlBgMusicFadeInterval)
+        window.__gtlBgMusicFadeInterval = null
+      }
+      try { a.pause(); a.currentTime = 0 } catch {}
+      a.src = track.src
+      try { a.load() } catch {}
+      window.__gtlBgMusicTrackId = track.id
+      setBgmMediaSession(track)
+      // Allow startBgMusic to fire fresh on the next gate tap.
+      window.__gtlBgMusicStarted = false
+    }
+    window.addEventListener('pageshow', onPageShow)
+    return () => window.removeEventListener('pageshow', onPageShow)
+  }, [])
 
   // phase: 'gate' (default) → 'flash-fitness' | 'flash-nutrition' → route
   //   or:  'gate' → 'heist' (swipe during entrance: skip flash, play HeistTransition only)

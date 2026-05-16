@@ -13,9 +13,10 @@ import { useRouter } from 'next/navigation'
 import { useSound } from '../../../lib/useSound'
 import { useProfileGuard } from '../../../lib/useProfileGuard'
 import { pk } from '../../../lib/storage'
-import FireFadeIn from '../../../components/FireFadeIn'
-import FireTransition from '../../../components/FireTransition'
+import HeistTransition from '../../../components/HeistTransition'
 import RetreatButton from '../../../components/RetreatButton'
+import { LogoStencil, LogoTarget } from '../../../components/LogoHalf'
+import { consumePrefire, setInAnimation, registerChainStep, clearChainTransient } from '../../../lib/predictiveTap'
 
 const MUSCLE_LABELS = {
   chest: 'CHEST', back: 'BACK', shoulders: 'SHOULDERS',
@@ -250,20 +251,29 @@ function CycleCard({ cycle, index, selected, onSelect }) {
       )}
 
       <div className="px-8 pt-6 pb-8">
-        {/* Cycle name — top of card, dominant. Full width now (deadline stamp
-            moved into flow below). */}
-        <h2
-          className="font-display text-gtl-chalk leading-none mb-3"
-          style={{
-            fontSize: 'clamp(2.5rem, 6vw, 5rem)',
-            textShadow: '3px 3px 0 #070708',
-            transform: 'rotate(-1deg)',
-            transformOrigin: 'left center',
-            wordBreak: 'break-word',
-          }}
+        {/* Cycle name — top of card, dominant. Wrapped in a min-h-[56px]
+            flex strip tagged data-predictive-tap-target="load-cycle" so the
+            upcoming predictive-tap module can target this row's bbox
+            instead of the full card's. The CARD remains the actual click
+            target (whole card selects on tap); this attribute marks the
+            inner strip the predictive-tap-chain hit-zone aligns with. */}
+        <div
+          data-predictive-tap-target="load-cycle"
+          className="min-h-[56px] flex items-center mb-3"
         >
-          {cycle.name}
-        </h2>
+          <h2
+            className="font-display text-gtl-chalk leading-none"
+            style={{
+              fontSize: 'clamp(2.5rem, 6vw, 5rem)',
+              textShadow: '3px 3px 0 #070708',
+              transform: 'rotate(-1deg)',
+              transformOrigin: 'left center',
+              wordBreak: 'break-word',
+            }}
+          >
+            {cycle.name}
+          </h2>
+        </div>
 
         {/* Top-meta row: FORGED date on left, CYCLE / 0X on right. */}
         <div className="flex items-center justify-between mb-3">
@@ -563,18 +573,45 @@ function CycleCard({ cycle, index, selected, onSelect }) {
   )
 }
 
+/* LogoHalf moved to components/LogoHalf.jsx (shared across all swipe buttons). */
+
 /* ── Quick-nav ACTIVATE popup with tap-vs-swipe gesture ── */
 function ActivatePopup({ cycle, onTap, onSwipe }) {
   const startRef = useRef(null)
   const dxRef = useRef(0)
   const swipeFiredRef = useRef(false)
+  // Velocity tracker for flick-detection. Each entry: { t, x } in
+  // (timestamp, clientX). Pruned to a 100ms rolling window on each move.
+  const velocityTrackerRef = useRef([])
+  const VELOCITY_WINDOW_MS = 100
+  const FLICK_VELOCITY = 0.4    // px/ms — minimum speed to count as a flick
+  const FLICK_MIN_DISTANCE = 40 // px — minimum drag before flick can fire
   const [dragX, setDragX] = useState(0)
-  const SWIPE_THRESHOLD = 160
+  // Shockwave ring counter — increments on each successful swipe so the
+  // ring element remounts and re-runs the keyframe. ringSide tracks where
+  // the swipe ended (right swipe → fusion at right bead, etc.) so the
+  // shockwave radiates from the docked logo, not the button center.
+  const [ringKey, setRingKey] = useState(0)
+  const [ringSide, setRingSide] = useState('right')
+  // Entrance: stencil starts fused with target (right slot) and rolls left
+  // to its idle slot, demonstrating to first-time users that the gesture
+  // is the inverse — they need to pull the stencil BACK over the target.
+  const [entranceDone, setEntranceDone] = useState(false)
+  useEffect(() => {
+    const t = setTimeout(() => setEntranceDone(true), 1300)
+    return () => clearTimeout(t)
+  }, [])
+  // Full traversal distance — the swiped bead travels all the way across to
+  // the other side. Gap between bead centers = 2 * (175 - 28) = 294, fixed
+  // by calc(50% - 175px) on each side. Threshold matches the gap so 1:1
+  // finger drag fully docks the bead at the other end.
+  const SWIPE_THRESHOLD = 294
 
   const handlePointerDown = (e) => {
     startRef.current = { x: e.clientX, y: e.clientY }
     dxRef.current = 0
     swipeFiredRef.current = false
+    velocityTrackerRef.current = [{ t: e.timeStamp, x: e.clientX }]
     setDragX(0)
   }
   const handlePointerMove = (e) => {
@@ -582,18 +619,44 @@ function ActivatePopup({ cycle, onTap, onSwipe }) {
     const dx = e.clientX - startRef.current.x
     const dy = e.clientY - startRef.current.y
     if (Math.abs(dx) > Math.abs(dy)) {
-      const clamped = Math.max(0, Math.min(dx, SWIPE_THRESHOLD * 1.5))
+      // SIGNED clamp: positive = right swipe, negative = left swipe.
+      const clamped = Math.max(-SWIPE_THRESHOLD, Math.min(dx, SWIPE_THRESHOLD))
       dxRef.current = clamped
       setDragX(clamped)
     }
+    // Sample for flick detection. Push current sample, prune > 100ms old.
+    const tracker = velocityTrackerRef.current
+    tracker.push({ t: e.timeStamp, x: e.clientX })
+    const cutoff = e.timeStamp - VELOCITY_WINDOW_MS
+    while (tracker.length > 0 && tracker[0].t < cutoff) tracker.shift()
   }
   const handlePointerUp = () => {
-    if (dxRef.current > SWIPE_THRESHOLD && onSwipe) {
+    // Compute velocity (px/ms) from the rolling window.
+    const tracker = velocityTrackerRef.current
+    let velocity = 0
+    if (tracker.length >= 2) {
+      const oldest = tracker[0]
+      const newest = tracker[tracker.length - 1]
+      const dt = newest.t - oldest.t
+      if (dt > 0) velocity = (newest.x - oldest.x) / dt
+    }
+    const distance = Math.abs(dxRef.current)
+    const dirMatches = dxRef.current === 0 || Math.sign(velocity) === Math.sign(dxRef.current)
+    // Fire if EITHER: full traversal, OR flick (high velocity + min distance
+    // in same direction). Slow + short gesture still doesn't fire.
+    const fired =
+      distance >= SWIPE_THRESHOLD ||
+      (Math.abs(velocity) >= FLICK_VELOCITY && distance >= FLICK_MIN_DISTANCE && dirMatches)
+
+    if (fired && onSwipe) {
       swipeFiredRef.current = true
+      setRingSide(dxRef.current > 0 ? 'right' : 'left')
+      setRingKey((k) => k + 1)
       onSwipe(cycle)
     }
     startRef.current = null
     dxRef.current = 0
+    velocityTrackerRef.current = []
     setDragX(0)
   }
   const handleClick = (e) => {
@@ -604,168 +667,161 @@ function ActivatePopup({ cycle, onTap, onSwipe }) {
     }
     onTap(cycle)
   }
-  const swipeProgress = Math.min(1, dragX / SWIPE_THRESHOLD)
+  const swipeProgress = Math.min(1, Math.abs(dragX) / SWIPE_THRESHOLD)
 
   return (
     <>
     <style>{`
-      @keyframes swipe-pulse {
-        0%, 100% { transform: translateX(0); opacity: 0.6; }
-        50%      { transform: translateX(6px); opacity: 1; }
+      @keyframes yy-pulse-left {
+        0%, 100% { transform: translateX(0)   scale(1); }
+        50%      { transform: translateX(7px) scale(1.06); }
       }
-      .animate-swipe-pulse { animation: swipe-pulse 1.2s ease-in-out infinite; display: inline-block; }
+      @keyframes yy-pulse-right {
+        0%, 100% { transform: translateX(0)    scale(1); }
+        50%      { transform: translateX(-7px) scale(1.06); }
+      }
+      /* Onboarding: stencil rolls OFF the target on mount. Starts at the
+         fused position (translateX(294)) and rolls back to idle (0), one
+         full CCW revolution along the way. Teaches the inverse gesture. */
+      @keyframes logo-roll-in {
+        0%   { transform: translateX(294px) rotate(360deg); }
+        100% { transform: translateX(0)     rotate(0deg);   }
+      }
     `}</style>
     <button
       type="button"
+      data-predictive-tap-target="activate"
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
-      onPointerCancel={() => { startRef.current = null; dxRef.current = 0; swipeFiredRef.current = false; setDragX(0) }}
+      onPointerCancel={() => { startRef.current = null; dxRef.current = 0; swipeFiredRef.current = false; velocityTrackerRef.current = []; setDragX(0) }}
       onClick={handleClick}
-      className="fixed z-50 group block outline-none active:scale-[0.98] transition-transform overflow-hidden"
+      className={`
+        fixed z-50 group flex items-center justify-center
+        font-display tracking-[0.25em] uppercase overflow-visible
+        px-24 py-5 min-h-[56px]
+        text-3xl text-gtl-paper
+        transition-all duration-200 ease-out
+        [@media(hover:hover)]:hover:scale-[1.04] active:scale-[0.98]
+        bg-gtl-red [@media(hover:hover)]:hover:bg-gtl-red-bright
+        shadow-[4px_4px_0_#070708]
+        [@media(hover:hover)]:hover:shadow-[6px_6px_0_#070708]
+        active:shadow-[2px_2px_0_#070708]
+      `}
       style={{
         top: '479px',
-        left: '32px',
-        right: '32px',
+        left: '12px',
+        right: '12px',
+        clipPath: 'polygon(3% 0%, 100% 0%, 97% 100%, 0% 100%)',
         touchAction: 'pan-y',
         animation: 'activate-popup-rise 320ms cubic-bezier(0.18, 1, 0.36, 1) both',
       }}
     >
-      {/* Base red fill */}
-      <div
-        className="absolute inset-0 bg-gtl-red transition-colors group-active:bg-gtl-red-bright"
-        style={{
-          clipPath: 'polygon(4% 0%, 100% 0%, 96% 100%, 0% 100%)',
-          boxShadow: '0 4px 28px rgba(212, 24, 31, 0.55)',
-        }}
-        aria-hidden="true"
-      />
-      {/* Swipe-progress brighter fill — slides in from left, tells the user the
-          gesture is armed once it covers the full button. */}
+      {/* Subtle red wash that ramps up as the swipe progresses — supplements
+          the yin-yang fusion as background feedback. */}
       <div
         className="absolute inset-0 pointer-events-none bg-gtl-red-bright"
         style={{
-          clipPath: 'polygon(4% 0%, 100% 0%, 96% 100%, 0% 100%)',
-          opacity: swipeProgress,
-          transform: `scaleX(${swipeProgress})`,
-          transformOrigin: 'left center',
-          transition: dragX === 0 ? 'opacity 200ms, transform 200ms' : 'none',
+          clipPath: 'polygon(3% 0%, 100% 0%, 97% 100%, 0% 100%)',
+          opacity: swipeProgress * 0.45,
+          transition: dragX === 0 ? 'opacity 200ms' : 'none',
         }}
         aria-hidden="true"
       />
-      <div
-        className="relative flex items-center justify-between px-7 py-5 gap-3"
-        style={{ transform: `translateX(${dragX * 0.3}px)`, transition: dragX === 0 ? 'transform 200ms' : 'none' }}
+      <span
+        className="relative inline-block leading-none tracking-tight"
+        style={{ transform: `translateX(${dragX * 0.25}px)`, transition: dragX === 0 ? 'transform 200ms' : 'none' }}
       >
-        {/* Left side: TAP label */}
-        <span
-          className="font-mono text-[8px] tracking-[0.3em] uppercase text-gtl-paper/70 leading-none whitespace-nowrap"
-          style={{ opacity: 1 - swipeProgress }}
-          aria-hidden="true"
-        >
-          TAP
-        </span>
-        {/* Center: action label */}
-        <span className="font-display text-3xl text-gtl-paper leading-none tracking-tight">
-          {swipeProgress >= 1 ? 'LIFT NOW' : 'ACTIVATE'}
-        </span>
-        {/* Right side: SWIPE chevrons (animated at idle, fade as user drags) */}
-        <span
-          className="font-mono text-[8px] tracking-[0.3em] uppercase text-gtl-paper/90 leading-none whitespace-nowrap flex items-center gap-1"
-          style={{ opacity: 1 - swipeProgress * 0.6 }}
-          aria-hidden="true"
-        >
-          SWIPE
-          <span className="animate-swipe-pulse text-base leading-none">»</span>
-        </span>
-      </div>
+        {swipeProgress >= 1 ? 'LIFT NOW' : 'ACTIVATE'}
+      </span>
     </button>
+
+    {/* Red teardrop — pinned 100px left of viewport center. Travels RIGHT
+        on a positive (rightward) swipe, all the way to where the ink half
+        sits. Stays put on a leftward swipe. */}
+    {(() => {
+      // Rolling factor tuned so the bead completes EXACTLY one full rotation
+      // over a full swipe and lands upright at fusion (logo readable at the
+      // dock point). 360° / threshold = deg per px.
+      const rollFactor = 360 / SWIPE_THRESHOLD
+      const stencilTx = Math.max(0, dragX)
+      const targetTx  = Math.min(0, dragX)
+      return (
+        <>
+        <div
+          className="fixed z-[52] pointer-events-none"
+          style={{
+            top: '486px',
+            left: 'calc(50% - 175px)',
+            width: '56px',
+            height: '56px',
+            transform: `translateX(${stencilTx}px) rotate(${stencilTx * rollFactor}deg)`,
+            opacity: 0.85 + swipeProgress * 0.15,
+            transition: dragX === 0 ? 'transform 220ms cubic-bezier(0.2,0.8,0.3,1), opacity 200ms' : 'opacity 100ms',
+            animation: !entranceDone
+              ? 'logo-roll-in 1300ms cubic-bezier(0.85, 0, 0.15, 1) forwards'
+              : (dragX === 0 ? 'yy-pulse-left 1.5s ease-in-out infinite' : 'none'),
+          }}
+          aria-hidden="true"
+        >
+          <LogoStencil size={56} paused={!entranceDone || dragX !== 0} />
+        </div>
+
+        <div
+          className="fixed z-[51] pointer-events-none"
+          style={{
+            top: '486px',
+            right: 'calc(50% - 175px)',
+            width: '56px',
+            height: '56px',
+            transform: `translateX(${targetTx}px) rotate(${targetTx * rollFactor}deg)`,
+            opacity: 0.85 + swipeProgress * 0.15,
+            transition: dragX === 0 ? 'transform 220ms cubic-bezier(0.2,0.8,0.3,1), opacity 200ms' : 'opacity 100ms',
+            // Gated on entranceDone too — without this, the target pulse
+            // starts at mount while the stencil pulse waits 1300ms for the
+            // roll-in to finish. That 1300ms phase difference is what reads
+            // as 'pulses are slightly off.' Both gate on entranceDone now,
+            // so they begin pulsing in the same render and stay in sync.
+            animation: (entranceDone && dragX === 0) ? 'yy-pulse-right 1.5s ease-in-out infinite' : 'none',
+          }}
+          aria-hidden="true"
+        >
+          <LogoTarget size={56} />
+        </div>
+        </>
+      )
+    })()}
+    {/* Shockwave ring — radiates from the docked logo on a successful swipe.
+        Reuses the global @keyframes shockwave (the same one fired by the
+        muscle-target ALL button). Positioned at whichever bead stayed put
+        (right side on a rightward swipe, left side on a leftward swipe). */}
+    {ringKey > 0 && (
+      <div
+        key={ringKey}
+        className="fixed z-[53] pointer-events-none rounded-full"
+        style={{
+          top: '486px',
+          ...(ringSide === 'right'
+            ? { right: 'calc(50% - 175px)' }
+            : { left:  'calc(50% - 175px)' }),
+          width: '56px',
+          height: '56px',
+          borderStyle: 'solid',
+          borderColor: '#d4181f',
+          animation: 'shockwave 900ms cubic-bezier(0.2, 0.8, 0.3, 1) forwards',
+        }}
+        aria-hidden="true"
+      />
+    )}
     </>
   )
 }
 
-/* ── ACTIVATE slab button ── */
-function ActivateButton({ onActivate }) {
-  const [pressed, setPressed] = useState(false)
-  const [hovered, setHovered] = useState(false)
-  return (
-    <button
-      type="button"
-      onMouseDown={() => setPressed(true)}
-      onMouseUp={() => { setPressed(false); onActivate() }}
-      onMouseLeave={() => { setPressed(false); setHovered(false) }}
-      onMouseEnter={() => setHovered(true)}
-      className="relative cursor-pointer select-none outline-none focus-visible:outline-2 focus-visible:outline-gtl-red"
-      style={{ transform: 'rotate(-0.6deg)' }}
-    >
-      <div
-        className="absolute inset-0 bg-gtl-red-deep"
-        style={{
-          clipPath: 'polygon(4% 0%, 100% 0%, 96% 100%, 0% 100%)',
-          transform: pressed ? 'translate(0,0)' : 'translate(5px, 5px)',
-          transition: 'transform 80ms ease-out',
-        }}
-        aria-hidden="true"
-      />
-      <div
-        className="relative px-10 py-4"
-        style={{
-          clipPath: 'polygon(4% 0%, 100% 0%, 96% 100%, 0% 100%)',
-          background: pressed ? '#ff2a36' : hovered ? '#e01e25' : '#d4181f',
-          transform: pressed ? 'translate(5px, 5px)' : 'translate(0,0)',
-          transition: 'transform 80ms ease-out, background 80ms ease-out',
-        }}
-      >
-        <div className="font-display text-2xl text-gtl-paper leading-none tracking-tight">ACTIVATE</div>
-      </div>
-    </button>
-  )
-}
-
-/* ── REVIEW / EDIT secondary button ── */
-function ReviewButton({ onReview }) {
-  const [pressed, setPressed] = useState(false)
-  const [hovered, setHovered] = useState(false)
-  return (
-    <button
-      type="button"
-      onMouseDown={() => setPressed(true)}
-      onMouseUp={() => { setPressed(false); onReview() }}
-      onMouseLeave={() => { setPressed(false); setHovered(false) }}
-      onMouseEnter={() => setHovered(true)}
-      className="relative cursor-pointer select-none outline-none focus-visible:outline-2 focus-visible:outline-gtl-red"
-      style={{ transform: 'rotate(0.5deg)' }}
-    >
-      <div
-        className="absolute inset-0 bg-gtl-edge"
-        style={{
-          clipPath: 'polygon(4% 0%, 100% 0%, 96% 100%, 0% 100%)',
-          transform: pressed ? 'translate(0,0)' : 'translate(5px, 5px)',
-          transition: 'transform 80ms ease-out',
-        }}
-        aria-hidden="true"
-      />
-      <div
-        className="relative px-10 py-4"
-        style={{
-          clipPath: 'polygon(4% 0%, 100% 0%, 96% 100%, 0% 100%)',
-          background: pressed ? '#2a2a30' : hovered ? '#222226' : '#1a1a1e',
-          border: `1px solid ${hovered ? '#d4181f' : '#3a3a42'}`,
-          transform: pressed ? 'translate(5px, 5px)' : 'translate(0,0)',
-          transition: 'transform 80ms ease-out, background 80ms ease-out, border-color 200ms',
-        }}
-      >
-        <div className={`font-display text-2xl leading-none tracking-tight transition-colors duration-200
-          ${hovered ? 'text-gtl-red' : 'text-gtl-ash'}`}>
-          REVIEW / EDIT
-        </div>
-      </div>
-    </button>
-  )
-}
-
-/* ── Sticky bottom action bar ── */
-function BottomBar({ cycle, onActivate, onReview, onDelete }) {
+/* ── Subordinate control band — sits directly below ACTIVATE, matches its
+   width (left/right 12px), and carries the gesture hint + REVIEW + DELETE
+   as a single cohesive panel. ACTIVATE is the hero; this band hosts the
+   secondary controls without competing visually. ── */
+function BottomBar({ cycle, onReview, onDelete }) {
   const { play } = useSound()
   const [deleteStage, setDeleteStage] = useState(0) // 0 idle · 1 first confirm · 2 cancel confirm
 
@@ -776,61 +832,66 @@ function BottomBar({ cycle, onActivate, onReview, onDelete }) {
 
   return (
     <div
-      className="fixed left-0 right-0 z-50"
-      style={{ top: '549px', background: 'rgba(7,7,8,0.97)', borderTop: '2px solid #d4181f' }}
+      className="fixed z-50"
+      style={{
+        top: '549px',
+        left: '12px',
+        right: '12px',
+        background: 'rgba(7,7,8,0.94)',
+        border: '1px solid #d4181f',
+        boxShadow: '0 4px 18px rgba(0,0,0,0.55)',
+      }}
     >
-      {/* Skewed red accent line */}
-      <div className="absolute top-0 left-0 right-0 h-[2px] bg-gtl-red pointer-events-none"
-           style={{ transform: 'skewX(-4deg)', transformOrigin: 'left center' }} />
-
-      <div className="px-8 py-5 flex items-center gap-8 flex-wrap">
-
-        {/* Selected cycle label */}
-        <div className="flex flex-col">
-          <div className="font-mono text-[8px] tracking-[0.4em] uppercase text-gtl-smoke mb-0.5">SELECTED</div>
-          <div className="font-display text-xl text-gtl-chalk leading-none" style={{ transform: 'rotate(-0.5deg)' }}>
-            {cycle.name}
-          </div>
+      <div className="px-7 py-3 flex flex-col gap-2.5">
+        {/* Gesture hint — caption row at the top of the band, explaining the
+            two interactions on the ACTIVATE slab above. */}
+        <div className="flex items-center justify-center gap-3 font-mono text-[8px] tracking-[0.3em] uppercase text-gtl-ash/85">
+          <span>TAP TO ACTIVATE</span>
+          <span className="text-gtl-red">·</span>
+          <span>SWIPE TO LIFT NOW →</span>
         </div>
 
-        {/* Vertical divider */}
-        <div className="w-px h-10 bg-gtl-edge self-center" style={{ transform: 'skewX(-12deg)' }} />
+        {/* Thin red rule separating hint from secondary actions */}
+        <div className="h-px bg-gtl-red/40" aria-hidden="true" />
 
-        {/* ACTIVATE moved to a fixed-position quick-nav popup at y=438 (matches
-            profile-chip slot on /fitness for tap-tap-tap muscle memory). */}
+        {/* Actions row — REVIEW + DELETE, both as text links so they read as
+            a balanced pair instead of "primary slab + danger link." */}
+        <div className="flex items-center justify-between min-h-[24px]">
+          <button
+            type="button"
+            onClick={() => { play('option-select'); onReview(cycle) }}
+            className="font-mono text-[10px] tracking-[0.3em] uppercase text-gtl-paper hover:text-gtl-red transition-colors"
+          >
+            REVIEW / EDIT
+          </button>
 
-        {/* REVIEW / EDIT */}
-        <ReviewButton onReview={() => { play('option-select'); onReview(cycle) }} />
-
-        {/* DELETE flow */}
-        <div className="flex items-center gap-4 ml-auto">
           {deleteStage === 0 && (
             <button
               type="button"
               onClick={() => { play('button-hover'); setDeleteStage(1) }}
-              className="font-mono text-[9px] tracking-[0.3em] uppercase text-gtl-smoke hover:text-gtl-red transition-colors"
+              className="font-mono text-[10px] tracking-[0.3em] uppercase text-gtl-smoke hover:text-gtl-red transition-colors"
             >
               DELETE
             </button>
           )}
 
           {deleteStage === 1 && (
-            <div className="flex flex-col gap-1.5 items-end">
-              <span className="font-mono text-[9px] tracking-[0.25em] uppercase text-gtl-red">
-                ARE YOU SURE YOU WANT TO ERASE THIS CYCLE?
+            <div className="flex flex-col gap-1 items-end">
+              <span className="font-mono text-[8px] tracking-[0.25em] uppercase text-gtl-red">
+                ERASE THIS CYCLE?
               </span>
-              <div className="flex items-center gap-4">
+              <div className="flex items-center gap-3">
                 <button
                   type="button"
                   onClick={() => { play('menu-close'); onDelete(cycle.id) }}
-                  className="font-mono text-[9px] tracking-[0.3em] uppercase text-gtl-red hover:text-gtl-red-bright transition-colors"
+                  className="font-mono text-[10px] tracking-[0.3em] uppercase text-gtl-red hover:text-gtl-red-bright transition-colors"
                 >
-                  YES, ERASE IT
+                  YES, ERASE
                 </button>
                 <button
                   type="button"
                   onClick={() => { play('button-hover'); setDeleteStage(2) }}
-                  className="font-mono text-[9px] tracking-[0.3em] uppercase text-gtl-ash hover:text-gtl-chalk transition-colors"
+                  className="font-mono text-[10px] tracking-[0.3em] uppercase text-gtl-ash hover:text-gtl-chalk transition-colors"
                 >
                   CANCEL
                 </button>
@@ -839,30 +900,29 @@ function BottomBar({ cycle, onActivate, onReview, onDelete }) {
           )}
 
           {deleteStage === 2 && (
-            <div className="flex flex-col gap-1.5 items-end">
-              <span className="font-mono text-[9px] tracking-[0.25em] uppercase text-gtl-smoke">
-                JUST MAKING SURE YOUR THUMB DIDN'T SLIP — DO YOU STILL WANT TO CANCEL?
+            <div className="flex flex-col gap-1 items-end">
+              <span className="font-mono text-[8px] tracking-[0.25em] uppercase text-gtl-smoke">
+                THUMB DIDN'T SLIP?
               </span>
-              <div className="flex items-center gap-4">
+              <div className="flex items-center gap-3">
                 <button
                   type="button"
                   onClick={() => { play('button-hover'); setDeleteStage(0) }}
-                  className="font-mono text-[9px] tracking-[0.3em] uppercase text-gtl-ash hover:text-gtl-chalk transition-colors"
+                  className="font-mono text-[10px] tracking-[0.3em] uppercase text-gtl-ash hover:text-gtl-chalk transition-colors"
                 >
-                  YES, KEEP IT SAFE
+                  KEEP IT
                 </button>
                 <button
                   type="button"
                   onClick={() => { play('menu-close'); onDelete(cycle.id) }}
-                  className="font-mono text-[9px] tracking-[0.3em] uppercase text-gtl-red hover:text-gtl-red-bright transition-colors"
+                  className="font-mono text-[10px] tracking-[0.3em] uppercase text-gtl-red hover:text-gtl-red-bright transition-colors"
                 >
-                  ACTUALLY, DELETE IT
+                  DELETE
                 </button>
               </div>
             </div>
           )}
         </div>
-
       </div>
     </div>
   )
@@ -882,6 +942,14 @@ export default function LoadCyclePage() {
   // Synchronous flag — set on first ACTIVATE/REVIEW so a fast follow-up tap on
   // the same button skips even if React hasn't committed `fireActive` yet.
   const fireActiveRef = useRef(false)
+  // Mount-time stamp for the iOS-leaked-click eat (150ms grace). Same
+  // pattern as /fitness/hub: when the user predictive-taps from the
+  // previous page, iOS can deliver the synthetic click AFTER navigation,
+  // landing on this page's ACTIVATE button. We reject onClick-sourced
+  // handleActivate calls within 150ms of mount; the consume's setTimeout
+  // bypasses via { fromTimer: true }.
+  const mountTimeRef = useRef(0)
+  useEffect(() => { mountTimeRef.current = performance.now() }, [])
   // Stable ref for the destination so the pointerdown listener doesn't have to
   // re-bind each time fireDest changes.
   const fireDestRef = useRef(fireDest)
@@ -890,8 +958,18 @@ export default function LoadCyclePage() {
   const skipNow = () => {
     if (skippedRef.current) return
     skippedRef.current = true
+    // inAnim stays open across the hop — next page's consumePrefire
+    // re-asserts it.
     router.push(fireDestRef.current)
   }
+
+  // Predictive-tap chain: clear stale transient state from any prior hop
+  // on every mount. Manual ACTIVATE tap's onClick handler sets
+  // currentStep correctly via setInAnimation('activate', true). Chain
+  // arrivals consume the prefire below and eagerly open inAnim there.
+  useEffect(() => {
+    clearChainTransient('load-mount', 'activate')
+  }, [])
 
   useEffect(() => {
     try {
@@ -899,38 +977,25 @@ export default function LoadCyclePage() {
       if (raw) {
         const parsed = JSON.parse(raw)
         setCycles(parsed)
-        // Quick-forge landing: auto-select the most-recent cycle (the one the
-        // user just forged) so the ACTIVATE popup appears immediately. Clear
-        // the flag so this only fires once.
-        try {
-          if (localStorage.getItem('gtl-just-forged') === '1' && parsed.length > 0) {
-            setSelectedId(parsed[0].id)
-            localStorage.removeItem('gtl-just-forged')
-          }
-        } catch (_) {}
+        // Auto-select the most-recent cycle on landing so the ACTIVATE popup
+        // appears immediately. "Most recent" = highest createdAt timestamp;
+        // falls back to the first entry if any cycle is missing createdAt.
+        if (parsed.length > 0) {
+          const mostRecent = parsed.reduce((best, c) =>
+            (!best || (c.createdAt || 0) > (best.createdAt || 0)) ? c : best, null)
+          if (mostRecent) setSelectedId(mostRecent.id)
+        }
+        try { localStorage.removeItem('gtl-just-forged') } catch (_) {}
       }
     } catch (_) {}
     setReady(true)
   }, [])
 
-  // Skip-the-fire-transition: once it's running, the next pointer/touch input
-  // anywhere routes to the destination immediately. Listen for both
-  // pointerdown AND touchstart in case iOS PWA suppresses pointerdown events
-  // during rapid-tap sequences. Taps on RetreatButton (data-retreat) are
-  // excluded so retreat navigates back instead of fast-forwarding.
-  useEffect(() => {
-    if (!fireActive) return
-    const handler = (e) => {
-      if (e.target?.closest?.('[data-retreat]')) return
-      skipNow()
-    }
-    window.addEventListener('pointerdown', handler, { capture: true })
-    window.addEventListener('touchstart',  handler, { capture: true, passive: true })
-    return () => {
-      window.removeEventListener('pointerdown', handler, { capture: true })
-      window.removeEventListener('touchstart',  handler, { capture: true })
-    }
-  }, [fireActive])
+  // Register skip-route for the 'activate' chain step. Module-level
+  // listener in lib/predictiveTap.js calls this when a tap arrives past
+  // SKIP_GRACE_MS during the activate HT. Retreat-button exclusion is
+  // handled centrally.
+  useEffect(() => registerChainStep('activate', () => skipNow()), [])
 
   const selectedCycle = cycles.find((c) => c.id === selectedId) ?? null
 
@@ -948,7 +1013,10 @@ export default function LoadCyclePage() {
     } catch (_) {}
   }
 
-  const handleActivate = (cycle, { deepLaunch = false } = {}) => {
+  const handleActivate = (cycle, { deepLaunch = false, fromTimer = false } = {}) => {
+    // iOS-leaked-click eat: reject onClick-sourced calls within 150ms
+    // of mount. fromTimer=true bypasses (consume's setTimeout still fires).
+    if (!fromTimer && performance.now() - mountTimeRef.current < 150) return
     // Already firing → this rapid second tap is a skip.
     if (fireActiveRef.current) { skipNow(); return }
     fireActiveRef.current = true
@@ -962,8 +1030,42 @@ export default function LoadCyclePage() {
     }
     fireDestRef.current = '/fitness/active'  // sync for the listener
     setFireDest('/fitness/active')
+    // Predictive-tap chain: ACTIVATE is the in-animation step that
+    // hands off to TODAY on /fitness/active.
+    setInAnimation('activate', true)
     setFireActive(true)
   }
+
+  // Predictive-tap consume: mount-time only. The 'activate' intent is
+  // always staged on the PRIOR page (/fitness/hub during its HeistTransition
+  // → router.push → /fitness/load mounts → consume reads it). The stage
+  // is therefore always present BEFORE this useEffect runs, so a single
+  // mount-time check is sufficient.
+  //
+  // Do NOT add subscribeStaged or polling here. Both cause a double-fire
+  // bug when the user taps ACTIVATE manually: pointerdown stages
+  // 'activate' → notifyStaged → tryConsume → handleActivate (call 1) →
+  // setFireActive=true → HeistTransition mounts. Click event → onTap →
+  // handleActivate (call 2) → fireActiveRef.current=true → skipNow →
+  // router.push immediately → HT bypassed before it can play.
+  //
+  // Manual taps only need ActivatePopup's own onTap. Predictive taps
+  // are handled by mount-time consume. No third path needed.
+  useEffect(() => {
+    if (!ready) return
+    if (!selectedId) return
+    const cycle = cycles.find((c) => c.id === selectedId)
+    if (!cycle) return
+    const intent = consumePrefire('activate')
+    if (intent) {
+      // Open predictive window immediately (so taps during the wait
+      // stage 'today'); delay the actual HT 500ms so the inbound HT
+      // plays out fully first.
+      setInAnimation('activate', true)
+      setTimeout(() => handleActivate(cycle, { fromTimer: true }), 50)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ready, selectedId])
 
   const handleReview = (cycle) => {
     if (fireActiveRef.current) { skipNow(); return }
@@ -1018,25 +1120,7 @@ export default function LoadCyclePage() {
       >
         <RetreatButton href="/fitness/hub" />      </nav>
 
-      {/* Headline */}
-      <div className="relative z-10 px-8 pb-6">
-        <div className="flex items-center gap-4 mb-2">
-          <div className="h-0.5 w-12 bg-gtl-red" />
-          <span className="font-matisse text-[10px] tracking-[0.4em] uppercase text-gtl-red font-bold">
-            WAR RECORD
-          </span>
-        </div>
-        <h1 className="font-matisse text-5xl text-gtl-chalk leading-none -rotate-1">
-          YOUR
-          <span className="text-gtl-red gtl-headline-shadow-soft inline-block rotate-1 ml-3">CYCLES</span>
-        </h1>
-      </div>
-
-      {/* Red slash divider */}
-      <div
-        className="relative z-10 mx-8 mb-10 h-[2px] bg-gtl-red"
-        style={{ transform: 'skewX(-6deg)', transformOrigin: 'left center' }}
-      />
+      {/* Headline removed — cycle cards now sit just below the nav. */}
 
       {/* Cycle list */}
       <section
@@ -1099,40 +1183,26 @@ export default function LoadCyclePage() {
           <ActivatePopup
             key={selectedCycle.id}
             cycle={selectedCycle}
-            onTap={(c) => { play('card-confirm'); handleActivate(c) }}
-            onSwipe={(c) => { play('card-confirm'); handleActivate(c, { deepLaunch: true }) }}
+            onTap={(c) => handleActivate(c)}
+            onSwipe={(c) => handleActivate(c, { deepLaunch: true })}
           />
-          {/* Gesture hint — sits just below the ACTIVATE popup. */}
-          <div
-            className="fixed z-50 flex items-center gap-3 font-mono text-[8px] tracking-[0.25em] uppercase text-gtl-ash/80 pointer-events-none"
-            style={{
-              top: '530px',
-              left: '32px',
-              right: '32px',
-              justifyContent: 'center',
-              animation: 'activate-popup-rise 320ms 100ms cubic-bezier(0.18, 1, 0.36, 1) both',
-            }}
-            aria-hidden="true"
-          >
-            <span>TAP TO ACTIVATE</span>
-            <span className="text-gtl-red">·</span>
-            <span>SWIPE TO LIFT NOW →</span>
-          </div>
         </>
       )}
 
-      {/* Sticky bottom bar — appears when a cycle is selected (now without ACTIVATE) */}
+      {/* Subordinate control band — sits below ACTIVATE, carries the
+          gesture hint + REVIEW + DELETE in a unified panel. */}
       <BottomBar
         cycle={selectedCycle}
-        onActivate={handleActivate}
         onReview={handleReview}
         onDelete={handleDelete}
       />
 
       </div>
-      <FireFadeIn duration={900} />
-      <FireTransition
+      {/* Outgoing transition on ACTIVATE / REVIEW EDIT — red diagonal slashes
+          (matches the home-page exit cascade) instead of the fire-wall FireTransition. */}
+      <HeistTransition
         active={fireActive}
+        title={fireDest === '/fitness/edit' ? '' : 'GRIT'}
         onComplete={() => {
           if (skippedRef.current) return
           router.push(fireDest)

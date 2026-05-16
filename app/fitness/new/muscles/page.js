@@ -20,7 +20,6 @@ import dynamic from 'next/dynamic'
 import { useSound } from '../../../../lib/useSound'
 import { useProfileGuard } from '../../../../lib/useProfileGuard'
 import { pk } from '../../../../lib/storage'
-import FireFadeIn from '../../../../components/FireFadeIn'
 import FireTransition from '../../../../components/FireTransition'
 import SlashWipe from '../../../../components/SlashWipe'
 import SpeedLines from '../../../../components/SpeedLines'
@@ -39,18 +38,23 @@ const MuscleBody = dynamic(() => import('../../../../components/MuscleBody'), {
   ),
 })
 
+// kanji values match the canonical muscle-glyph set in
+// app/fitness/new/branded/page.js — same symbols appear on the active
+// rolodex day cards, so users see one consistent glyph per muscle
+// throughout the app. Region (UPPER/LOWER/ARMS/CORE) field removed —
+// the kanji is the new at-a-glance identifier.
 const MUSCLE_GROUPS = [
-  { id: 'chest',      label: 'CHEST',      region: 'UPPER' },
-  { id: 'shoulders',  label: 'SHOULDERS',  region: 'UPPER' },
-  { id: 'back',       label: 'BACK',       region: 'UPPER' },
-  { id: 'biceps',     label: 'BICEPS',     region: 'ARMS'  },
-  { id: 'triceps',    label: 'TRICEPS',    region: 'ARMS'  },
-  { id: 'forearms',   label: 'FOREARMS',   region: 'ARMS'  },
-  { id: 'abs',        label: 'ABS',        region: 'CORE'  },
-  { id: 'glutes',     label: 'GLUTES',     region: 'LOWER' },
-  { id: 'quads',      label: 'QUADS',      region: 'LOWER' },
-  { id: 'hamstrings', label: 'HAMSTRINGS', region: 'LOWER' },
-  { id: 'calves',     label: 'CALVES',     region: 'LOWER' },
+  { id: 'chest',      label: 'CHEST',      kanji: '胸' },
+  { id: 'shoulders',  label: 'SHOULDERS',  kanji: '肩' },
+  { id: 'back',       label: 'BACK',       kanji: '背' },
+  { id: 'biceps',     label: 'BICEPS',     kanji: '二' },
+  { id: 'triceps',    label: 'TRICEPS',    kanji: '三' },
+  { id: 'forearms',   label: 'FOREARMS',   kanji: '腕' },
+  { id: 'abs',        label: 'ABS',        kanji: '腹' },
+  { id: 'glutes',     label: 'GLUTES',     kanji: '尻' },
+  { id: 'quads',      label: 'QUADS',      kanji: '腿' },
+  { id: 'hamstrings', label: 'HAMSTRINGS', kanji: '裏' },
+  { id: 'calves',     label: 'CALVES',     kanji: '脛' },
 ]
 
 // Left column: upper body | Right column: core + lower
@@ -214,8 +218,15 @@ function MuscleRow({ group, selected, focusedGroup, onToggle, onFocus, stampRevi
         >
           {group.label}
         </div>
-        <div className="font-mono text-[8px] tracking-[0.3em] uppercase text-gtl-smoke mt-0.5">
-          {group.region}
+        <div
+          className="leading-none mt-0.5 text-gtl-smoke"
+          style={{
+            fontFamily: '"Noto Serif JP", "Yu Mincho", serif',
+            fontSize: '14px',
+          }}
+          aria-hidden="true"
+        >
+          {group.kanji}
         </div>
       </div>
 
@@ -420,8 +431,15 @@ function MobileMusclePill({ group, selected, focusedGroup, onToggle, onFocus, ig
         <div className={`font-display text-sm leading-none tracking-wide ${isSelected ? 'text-white' : 'text-gtl-ash'}`}>
           {group.label}
         </div>
-        <div className={`font-mono text-[7px] tracking-[0.25em] uppercase mt-0.5 ${isSelected ? 'text-white/65' : 'text-gtl-smoke'}`}>
-          {group.region}
+        <div
+          className={`leading-none mt-0.5 ${isSelected ? 'text-white/85' : 'text-gtl-smoke'}`}
+          style={{
+            fontFamily: '"Noto Serif JP", "Yu Mincho", serif',
+            fontSize: '13px',
+          }}
+          aria-hidden="true"
+        >
+          {group.kanji}
         </div>
       </button>
     </div>
@@ -474,7 +492,12 @@ function MobileForgeStamp({ count, onFire }) {
 export default function MusclesPage() {
   useProfileGuard()
   let backHref = '/fitness/new'
-  try { if (localStorage.getItem('gtl-back-to-edit') === '1') backHref = '/fitness/edit' } catch (_) {}
+  try {
+    if (localStorage.getItem('gtl-back-to-edit') === '1') backHref = '/fitness/edit'
+    // Swipe-forge bails the user back to NAME YOUR CYCLE in one tap rather
+    // than walking the chain backward step-by-step.
+    else if (localStorage.getItem('gtl-quick-forge') === '1') backHref = '/fitness/new'
+  } catch (_) {}
   const [selected, setSelected] = useState(() => new Set())
   const [focusedGroup, setFocusedGroup] = useState(null)
   const [modelKey, setModelKey] = useState('goku')
@@ -489,6 +512,28 @@ export default function MusclesPage() {
   const { play } = useSound()
   const mainRef = useRef(null)
   const router = useRouter()
+  const NEXT_TARGET = '/fitness/new/branded'
+  const skippedRef = useRef(false)
+  const skipNow = () => {
+    if (skippedRef.current) return
+    skippedRef.current = true
+    router.push(NEXT_TARGET)
+  }
+  // Window pointerdown+touchstart listener while FireTransition is active —
+  // tap anywhere routes immediately. data-retreat excluded for back nav.
+  useEffect(() => {
+    if (!fireActive && !quickHeistActive) return
+    const handler = (e) => {
+      if (e.target?.closest?.('[data-retreat]')) return
+      skipNow()
+    }
+    window.addEventListener('pointerdown', handler, { capture: true })
+    window.addEventListener('touchstart',  handler, { capture: true, passive: true })
+    return () => {
+      window.removeEventListener('pointerdown', handler, { capture: true })
+      window.removeEventListener('touchstart',  handler, { capture: true })
+    }
+  }, [fireActive, quickHeistActive])
 
   useEffect(() => {
     const mq = window.matchMedia('(max-width: 767px)')
@@ -968,15 +1013,14 @@ export default function MusclesPage() {
       {/* Fire transition — erupts on confirm, navigates on complete */}
       <FireTransition
         active={fireActive}
-        onComplete={() => router.push('/fitness/new/branded')}
+        onComplete={() => { if (!skippedRef.current) router.push(NEXT_TARGET) }}
       />
       {/* Red slash wipe — quick-forge swipe path only (no title text) */}
-      <SlashWipe active={quickHeistActive} onComplete={() => router.push('/fitness/new/branded')} />
+      <SlashWipe
+        active={quickHeistActive}
+        onComplete={() => { if (!skippedRef.current) router.push(NEXT_TARGET) }}
+      />
       <SpeedLines active={quickForgeRunning} />
-
-      {/* Fire fade-in — picks up where FireTransition left off so the
-          source-to-destination cut feels continuous. */}
-      <FireFadeIn duration={900} />
     </main>
   )
 }

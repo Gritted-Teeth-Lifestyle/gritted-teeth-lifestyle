@@ -5,7 +5,7 @@
  */
 
 /* ----- Fonts ----- */
-@import url('https://fonts.googleapis.com/css2?family=Anton&family=Big+Shoulders+Display:wght@700;800;900&family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&family=Shippori+Mincho:wght@400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Anton&family=Big+Shoulders+Display:wght@700;800;900&family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&family=Shippori+Mincho:wght@400;500;600;700;800&family=Yuji+Boku&family=Yuji+Syuku&display=swap');
 
 /* FOT-Matisse Pro EB — locally hosted Japanese display font (Fontworks Inc.).
  * License caveat: this is a commercial typeface acquired via fontsgeek.com
@@ -248,6 +248,22 @@ html, body {
   100% { transform: scale(1)    translate(0,    0);    }
 }
 
+/* Subtle flicker on the Attune flame group — brief opacity dips at
+ * random points sell the "live fire" look, layered with the per-
+ * particle SVG <animate> rises so each particle still cycles
+ * independently. The actual flame motion is driven by SMIL
+ * animations inside the SVG (see app/fitness/new/branded/page.js
+ * AttuneFlameLayer), which mirror /fitness/new/summary's weekday
+ * flame engulf pattern. */
+@keyframes attune-flame-flicker {
+  0%, 100% { opacity: 1; }
+  18%      { opacity: 0.85; }
+  37%      { opacity: 0.95; }
+  55%      { opacity: 0.78; }
+  72%      { opacity: 0.96; }
+  88%      { opacity: 0.86; }
+}
+
 /* Body pulse — radial red bloom that fires once all muscles are lit */
 @keyframes body-pulse {
   0%   { opacity: 0;   transform: scale(0.7); }
@@ -279,7 +295,56 @@ a, button, [role="button"] {
   -webkit-tap-highlight-color: rgba(212, 24, 31, 0.15);
 }
 
+/* Scrollable container exception: buttons inside an opt-in scroll surface
+ * must allow pan gestures to bubble through to the scroll container.
+ * WebKit on iOS PWA sometimes ignores inline `touch-action: pan-y` on
+ * <button> elements (interactive-element special-casing) — a more-specific
+ * CSS rule like this one overrides the manipulation default reliably. Mark
+ * the scroll container with `data-scroll-passthrough` to opt in. */
+[data-scroll-passthrough] a,
+[data-scroll-passthrough] button,
+[data-scroll-passthrough] [role="button"],
+[data-scroll-passthrough] {
+  touch-action: pan-y;
+}
+
 input, textarea {
   -webkit-user-select: text;
   user-select: text;
+}
+
+/* Buttons are commands, not content — labels shouldn't be selectable.
+ * Long-press / drag on a button no longer triggers text selection or the
+ * iOS copy/share callout. Form fields above explicitly opt back in to
+ * text selection so this rule doesn't bleed into inputs. Anchor tags
+ * are NOT included so copyable links still work.
+ *
+ * The descendant selector is required because user-select on iOS Safari
+ * doesn't reliably cascade from a button to inner <span> labels — the
+ * ACTIVATE button's inner "ACTIVATE / LIFT NOW" span was still
+ * highlightable until this rule applied directly to children. */
+button, [role="button"],
+button *, [role="button"] * {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+/* Active rolodex centered-card prominence. The scroll listener sets
+ * data-rolodex-centered on the wrapper when --rolodex-t >= 0.9. This rule
+ * gives the centered card a red glow ring + slightly elevated z-index so it
+ * reads as "the chosen one." Non-centered cards stay flat. */
+[data-rolodex-iso][data-rolodex-centered] {
+  position: relative;
+  z-index: 2;
+  filter: drop-shadow(0 0 12px rgba(212, 24, 31, 0.55))
+          drop-shadow(0 0 28px rgba(212, 24, 31, 0.25));
+}
+
+/* Non-centered cards: fade slightly more so the contrast vs centered is
+ * obvious at a glance. Combined with the calc-based opacity from
+ * --rolodex-t, this gives a clear visual ladder. */
+[data-rolodex-iso]:not([data-rolodex-centered]) {
+  filter: saturate(0.55);
+  transition: filter 120ms linear;
 }

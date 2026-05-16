@@ -138,19 +138,8 @@ export default function HeistTransition({
           transition-opacity duration-150
         `}
       >
-        <div
-          className={`
-            font-display text-gtl-paper -rotate-3 leading-none gtl-headline-shadow text-center
-            ${isMega ? 'text-[14vw]' : 'text-[18vw]'}
-          `}
-        >
-          {isMega ? (
-            <div className="text-[14vw] tracking-[0.2em] text-gtl-paper">
-              PIERCE THROUGH THE HEAVENS
-            </div>
-          ) : (
-            title
-          )}
+        <div className="font-display text-gtl-paper -rotate-3 leading-none gtl-headline-shadow text-center text-[18vw]">
+          {title}
         </div>
       </div>
     </div>

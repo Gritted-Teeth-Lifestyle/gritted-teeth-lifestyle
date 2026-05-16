@@ -12,37 +12,50 @@ import { useProfileGuard } from '../../../lib/useProfileGuard'
 import { pk } from '../../../lib/storage'
 import { useSound } from '../../../lib/useSound'
 import RetreatButton from '../../../components/RetreatButton'
+import {
+  BODY_REGIONS,
+  MUSCLE_TO_REGION,
+  computeProfileStats,
+  getRegionStars,
+  getTier,
+  getTierCount,
+  getNextTierThreshold,
+  getRibbonCount,
+} from '../../../lib/exp'
+import RegionStarPips from '../../../components/stats/RegionStarPips'
+import RibbonRow from '../../../components/profile/RibbonRow'
+import TierUpFlourish from '../../../components/exp/TierUpFlourish'
 
-// 5 body regions — each star point represents one
-const BODY_REGIONS = [
-  { id: 'core',  label: 'CORE',  muscles: ['abs'] },
-  { id: 'arms',  label: 'ARMS',  muscles: ['biceps', 'triceps', 'forearms'] },
-  { id: 'legs',  label: 'LEGS',  muscles: ['quads', 'hamstrings', 'glutes', 'calves'] },
-  { id: 'front', label: 'FRONT', muscles: ['chest', 'shoulders'] },
-  { id: 'back',  label: 'BACK',  muscles: ['back'] },
-]
+const REGION_STARS_LAST_SEEN_KEY = 'region-stars-last-seen'
+const ZERO5 = [0, 0, 0, 0, 0]
+function readRegionStarsLastSeen() {
+  if (typeof window === 'undefined') return [...ZERO5]
+  try {
+    const raw = localStorage.getItem(pk(REGION_STARS_LAST_SEEN_KEY))
+    if (!raw) return [...ZERO5]
+    const parsed = JSON.parse(raw)
+    if (!Array.isArray(parsed) || parsed.length !== 5) return [...ZERO5]
+    return parsed.map((n) => (Number.isFinite(n) && n >= 0) ? n : 0)
+  } catch (_) { return [...ZERO5] }
+}
+function writeRegionStarsLastSeen(stars) {
+  if (typeof window === 'undefined') return
+  try { localStorage.setItem(pk(REGION_STARS_LAST_SEEN_KEY), JSON.stringify(stars)) } catch (_) {}
+}
 
-// Build a lookup: muscleId → regionIndex
-const MUSCLE_TO_REGION = {}
-BODY_REGIONS.forEach((r, i) => r.muscles.forEach(m => { MUSCLE_TO_REGION[m] = i }))
-
+const MAX_LEVEL = 100
 function getLevelInfo(totalXP) {
   let level = 0
   let xpUsed = 0
-  while (true) {
-    const threshold = 15000 + level * 1000
+  while (level < MAX_LEVEL) {
+    const threshold = 150 + level * 35
     if (xpUsed + threshold > totalXP) {
       return { level, progress: totalXP - xpUsed, threshold }
     }
     xpUsed += threshold
     level++
   }
-}
-
-function repMult(r) {
-  if (r >= 5 && r <= 15) return 1.0
-  if (r < 5) return Math.exp(-Math.pow(r - 5, 2) / 8)
-  return Math.exp(-Math.pow(r - 15, 2) / 32)
+  return { level: MAX_LEVEL, progress: 1, threshold: 1 }
 }
 
 const MUSCLE_LABELS = {
@@ -256,81 +269,12 @@ function CombatLogPanel({ onClose }) {
   )
 }
 
+// Sums setLog snapshots when populated per day; falls back to legacy
+// raw-reps recompute for days without snapshots. Region XP: snapshot
+// path uses snapshot.regionWeights; legacy fallback uses 1:1
+// MUSCLE_TO_REGION (R10a dual-semantics map from lib/exp/regions).
 function loadStats() {
-  try {
-    const raw = localStorage.getItem(pk('cycles'))
-    const allCycles = raw ? JSON.parse(raw) : []
-
-    let totalXP = 0
-    let daysScheduled = 0
-    let daysCompleted = 0
-    const regionXP = [0, 0, 0, 0, 0]  // one per BODY_REGIONS entry
-    const cycleStats = []
-
-    for (const cycle of allCycles) {
-      if (!cycle.days || !cycle.dailyPlan) continue
-      daysScheduled += cycle.days.length
-
-      let cycleDone = 0
-      let cycleXP = 0
-
-      for (const iso of cycle.days) {
-        const done = localStorage.getItem(pk(`done-${cycle.id}-${iso}`)) === 'true'
-        if (!done) continue
-        daysCompleted++
-        cycleDone++
-
-        for (const muscleId of (cycle.dailyPlan[iso] || [])) {
-          const rRaw = localStorage.getItem(pk(`ex-${cycle.id}-${iso}-${muscleId}`))
-          const wRaw = localStorage.getItem(pk(`wt-${cycle.id}-${iso}-${muscleId}`))
-          const rData = rRaw ? JSON.parse(rRaw) : {}
-          const wData = wRaw ? JSON.parse(wRaw) : {}
-          for (const name of Object.keys(rData)) {
-            const rArr = Array.isArray(rData[name]) ? rData[name] : [rData[name]]
-            const wArr = Array.isArray(wData[name]) ? wData[name] : [wData[name] || 0]
-            for (let i = 0; i < rArr.length; i++) {
-              const reps = rArr[i] || 0
-              const weight = wArr[i] || 0
-              if (reps === 0) continue
-              const mult = repMult(reps)
-              const earned = weight > 0 ? weight * mult * reps : reps * mult
-              const ri = MUSCLE_TO_REGION[muscleId]
-              if (ri !== undefined) regionXP[ri] += earned
-              cycleXP += earned
-              totalXP += earned
-            }
-          }
-        }
-      }
-
-      cycleStats.push({
-        id:        cycle.id,
-        name:      cycle.name,
-        scheduled: cycle.days.length,
-        completed: cycleDone,
-        xp:        cycleXP,
-        createdAt: cycle.createdAt || null,
-      })
-    }
-
-    return {
-      totalXP,
-      cycles: allCycles.length,
-      daysScheduled,
-      daysCompleted,
-      regionXP,
-      cycleLog: cycleStats,
-    }
-  } catch (_) {
-    return {
-      totalXP: 0,
-      cycles: 0,
-      daysScheduled: 0,
-      daysCompleted: 0,
-      regionXP: [0, 0, 0, 0, 0],
-      cycleLog: [],
-    }
-  }
+  return computeProfileStats(MUSCLE_TO_REGION)
 }
 
 // SVG canvas
@@ -425,7 +369,7 @@ function badgeCSS(i) {
   }
 }
 
-function RegionBadge({ region, xp, isTop }) {
+function RegionBadge({ region, xp, isTop, starCount = 0, newStarCount = 0 }) {
   const level = getRegionLevel(xp)
   const tier = REGION_TIER_LABELS[level - 1] ?? 'VICTIM'
   return (
@@ -443,6 +387,11 @@ function RegionBadge({ region, xp, isTop }) {
           {tier}
         </span>
       </div>
+      {starCount > 0 && (
+        <div className="block">
+          <RegionStarPips count={starCount} newCount={newStarCount} />
+        </div>
+      )}
     </div>
   )
 }
@@ -543,7 +492,7 @@ function TransmutationCircle() {
   )
 }
 
-function BodyStarChart({ regionXP }) {
+function BodyStarChart({ regionXP, regionStars = ZERO5, regionNewStars = ZERO5 }) {
   const starPath  = buildStarPath(regionXP)
   const ghostPath = buildGhostPath()
 
@@ -580,10 +529,99 @@ function BodyStarChart({ regionXP }) {
           className="absolute"
           style={{ ...badgeCSS(i), zIndex: 10 }}
         >
-          <RegionBadge region={region} xp={regionXP[i]} isTop={i === 0} />
+          <RegionBadge
+            region={region}
+            xp={regionXP[i]}
+            isTop={i === 0}
+            starCount={regionStars[i] || 0}
+            newStarCount={regionNewStars[i] || 0}
+          />
         </div>
       ))}
     </div>
+    </div>
+  )
+}
+
+// R20a — tier progress bar (cumulative 100%-sessions toward next tier),
+// cumulative-count StatBox, and ribbon history strip. Reads from gtl1's
+// tierStore via getTierCount + getRibbonCount; the next-tier threshold
+// comes from getNextTierThreshold(count). Mirrors the existing horizontal
+// XP bar visual at active/page.js:3415-3431 for the bar treatment.
+function TierProgress({ tierCount, ribbons }) {
+  const tierName = getTier(tierCount)
+  const nextThreshold = getNextTierThreshold(tierCount)
+  const hasNext = Number.isFinite(nextThreshold)
+  // Find the current tier's threshold so the bar fills proportionally
+  // within the band rather than against absolute zero.
+  // TIER_THRESHOLDS isn't directly imported here to keep the surface
+  // narrow — re-derive via getNextTierThreshold's reverse-lookup.
+  // For RELAXED (count 0), bar starts at 0; for any other tier, the
+  // band-start is the largest threshold ≤ count.
+  let bandStart = 0
+  if (hasNext) {
+    // Walk backwards from nextThreshold-1: bandStart = the threshold
+    // that anchors the current tier. cheap: just use count - (count - bandStart).
+    // We don't have TIER_THRESHOLDS here, so compute as count baseline:
+    // bandStart = nextThreshold - sessionsInThisBand isn't computable
+    // without the table. Approximation: bandStart = the count itself
+    // minus 0 — we just show progress toward nextThreshold from the
+    // current count's standpoint.
+    bandStart = 0  // pragmatic: bar shows count / nextThreshold
+  }
+  const barPct = hasNext
+    ? Math.max(0, Math.min(100, Math.round((tierCount / nextThreshold) * 100)))
+    : 100
+
+  return (
+    <div className="mb-5 md:mb-10">
+      <div className="flex items-center gap-4 mb-3 md:mb-6">
+        <span className="font-mono text-[10px] tracking-[0.4em] uppercase text-gtl-red font-bold">
+          TIER PROGRESS
+        </span>
+        <div className="h-px flex-1 bg-gtl-edge" />
+      </div>
+
+      <div className="flex items-baseline justify-between mb-2">
+        <span className="font-display text-3xl md:text-4xl leading-none text-gtl-chalk">
+          {tierName}
+        </span>
+        <span className="font-mono text-[10px] tracking-[0.3em] uppercase text-gtl-ash">
+          {tierCount} {tierCount === 1 ? 'SESSION' : 'SESSIONS'}
+        </span>
+      </div>
+
+      {/* Horizontal flat bar — mirrors the XP bar treatment. */}
+      <div
+        className="h-2 bg-gtl-ink"
+        style={{ clipPath: 'polygon(0 0, 100% 0, 99% 100%, 1% 100%)' }}
+      >
+        <div
+          className="h-full bg-gtl-red transition-[width] duration-700 ease-out"
+          style={{ width: `${barPct}%` }}
+        />
+      </div>
+
+      <div className="flex items-baseline justify-between mt-2">
+        <span className="font-mono text-[9px] tracking-[0.3em] uppercase text-gtl-red">
+          {hasNext
+            ? `${tierCount} / ${nextThreshold} SESSIONS TO ${getTier(nextThreshold)}`
+            : 'PEAK REACHED'}
+        </span>
+      </div>
+
+      {/* Ribbon history — same RibbonRow at larger size. */}
+      {ribbons > 0 && (
+        <div className="mt-5 md:mt-8">
+          <div className="flex items-center gap-4 mb-3">
+            <span className="font-mono text-[10px] tracking-[0.4em] uppercase text-gtl-red font-bold">
+              RIBBON HISTORY
+            </span>
+            <div className="h-px flex-1 bg-gtl-edge" />
+          </div>
+          <RibbonRow count={ribbons} size={2.0} />
+        </div>
+      )}
     </div>
   )
 }
@@ -610,9 +648,31 @@ export default function StatsPage() {
   const { play } = useSound()
   const [stats, setStats] = useState(null)
   const [logOpen, setLogOpen] = useState(false)
+  // Region stars (R19): read current totals + last-seen snapshot at mount
+  // so the chart can pop-in any new stars earned since last visit. After
+  // a short window (longer than the staggered animation envelope) we
+  // commit current → last-seen so subsequent visits don't re-animate
+  // already-seen stars.
+  const [regionStars, setRegionStars] = useState(ZERO5)
+  const [regionNewStars, setRegionNewStars] = useState(ZERO5)
+  // R20a: tier counter + ribbon count for the progress bar + ribbon history.
+  const [tierCount, setTierCount] = useState(0)
+  const [ribbons, setRibbons] = useState(0)
 
   useEffect(() => {
     setStats(loadStats())
+    const current = getRegionStars()
+    const lastSeen = readRegionStarsLastSeen()
+    const delta = current.map((c, i) => Math.max(0, c - (lastSeen[i] || 0)))
+    setRegionStars(current)
+    setRegionNewStars(delta)
+    setTierCount(getTierCount())
+    setRibbons(getRibbonCount())
+    const t = setTimeout(() => writeRegionStarsLastSeen(current), 1100)
+    return () => {
+      clearTimeout(t)
+      writeRegionStarsLastSeen(current)
+    }
   }, [])
 
   if (!stats) return null
@@ -754,9 +814,16 @@ export default function StatsPage() {
                   <div className="h-px flex-1 bg-gtl-edge" />
                 </div>
 
-                <BodyStarChart regionXP={stats.regionXP} />
+                <BodyStarChart
+                  regionXP={stats.regionXP}
+                  regionStars={regionStars}
+                  regionNewStars={regionNewStars}
+                />
               </div>
             )}
+
+            {/* ── R20a: tier progress + ribbon history ────────────── */}
+            <TierProgress tierCount={tierCount} ribbons={ribbons} />
 
             {/* ── Cycle log ───────────────────────────────────────── */}
             <div>
@@ -832,6 +899,7 @@ export default function StatsPage() {
         </div>
       </section>
       </div>
+      <TierUpFlourish />
     </main>
     </>
   )

@@ -13,7 +13,6 @@ import { useRouter } from 'next/navigation'
 import { useSound } from '../../../lib/useSound'
 import { useProfileGuard } from '../../../lib/useProfileGuard'
 import { pk } from '../../../lib/storage'
-import FireFadeIn from '../../../components/FireFadeIn'
 import FireTransition from '../../../components/FireTransition'
 import RetreatButton from '../../../components/RetreatButton'
 
@@ -734,7 +733,6 @@ export default function GhostCyclePage() {
         onGhostTrain={handleGhostTrain}
       />
 
-      <FireFadeIn duration={900} />
       <FireTransition active={fireActive} onComplete={() => router.push(fireDest)} />
     </main>
   )

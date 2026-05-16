@@ -11,7 +11,6 @@ import Link from 'next/link'
 import { useSound } from '../../../../lib/useSound'
 import { useProfileGuard } from '../../../../lib/useProfileGuard'
 import { pk } from '../../../../lib/storage'
-import FireFadeIn from '../../../../components/FireFadeIn'
 import FireTransition from '../../../../components/FireTransition'
 import RetreatButton from '../../../../components/RetreatButton'
 import SpeedLines from '../../../../components/SpeedLines'
@@ -630,6 +629,12 @@ function CycleBlade({ days, dailyPlan, glowingDays = [], glowIntensity = 'off', 
                                 fontSize: '45px',
                                 fontWeight: 700,
                                 fill: '#ff6600',
+                                /* Override the class's transform-box: fill-box (which
+                                   iOS PWA can't resolve on <text>). Inline transform-box
+                                   + transform-origin in absolute SVG coords pins the
+                                   scale's fixed point to the text anchor. */
+                                transformBox: 'view-box',
+                                transformOrigin: `${x}px ${labelY}px`,
                               }}
                             >
                               {ch}
@@ -2607,7 +2612,10 @@ export default function SummaryPage() {
   const router = useRouter()
   const { play } = useSound()
   let backHref = '/fitness/new/branded'
-  try { if (localStorage.getItem('gtl-back-to-edit') === '1') backHref = '/fitness/edit' } catch (_) {}
+  try {
+    if (localStorage.getItem('gtl-back-to-edit') === '1') backHref = '/fitness/edit'
+    else if (localStorage.getItem('gtl-quick-forge') === '1') backHref = '/fitness/new'
+  } catch (_) {}
   useEffect(() => {
     try { if (localStorage.getItem('gtl-back-to-edit') !== '1') return } catch (_) { return }
     const handleKey = (e) => {
@@ -2623,10 +2631,37 @@ export default function SummaryPage() {
   const [days,        setDays]       = useState([])
   const [dailyPlan,   setDailyPlan]  = useState({})
   const [fireActive,  setFireActive] = useState(false)
+  // Inscription engulf / yakiire cascade is intentionally unskippable on the
+  // tap-ETCH path — the 4-phase yakiire (ignite → zoom → hot-hold → cool-down)
+  // is the cinematic centerpiece. Swipe-forge auto-progresses past summary so
+  // it never sees the cascade either way.
   // FireTransition's onComplete normally routes to /fitness/load. On the
   // quick-forge chain we want /fitness/active so the deep-launch effect
   // there continues to the first set's weight popup.
   const fireDestRef = useRef('/fitness/load')
+  // Skip-the-fire-transition: ONLY on the swipe-forge auto-progression path
+  // (fireDestRef.current === '/fitness/active'). The tap-ETCH path's
+  // FireTransition (yakiire) plays through unskippable.
+  const skippedRef = useRef(false)
+  const skipNow = () => {
+    if (skippedRef.current) return
+    skippedRef.current = true
+    router.push(fireDestRef.current)
+  }
+  useEffect(() => {
+    if (!fireActive) return
+    if (fireDestRef.current !== '/fitness/active') return  // tap-ETCH: no skip listener
+    const handler = (e) => {
+      if (e.target?.closest?.('[data-retreat]')) return
+      skipNow()
+    }
+    window.addEventListener('pointerdown', handler, { capture: true })
+    window.addEventListener('touchstart',  handler, { capture: true, passive: true })
+    return () => {
+      window.removeEventListener('pointerdown', handler, { capture: true })
+      window.removeEventListener('touchstart',  handler, { capture: true })
+    }
+  }, [fireActive])
   const [stampVisible, setStampVisible] = useState(false)
   const [stampLanded,  setStampLanded]  = useState(false)
   // Per-day flame/hot/cooled state arrays — sized to days.length so both CycleBlade
@@ -2927,16 +2962,21 @@ export default function SummaryPage() {
       }
       lastPairCooledAt = 3200 + (colCount - 1) * 500
     } else {
-      // ── Reverse-linear cascade (matches per-anchor cascade order N → 1) ──
-      //   Flame: 50ms per letter, Zoom: 50ms per letter, Cooled: 75ms per letter.
-      //   Within each weekday, letters fire L=2 → L=0 (matching the cluster's
-      //   reverse-everywhere pattern). Anchors fire from N down to 1.
+      // ── Per-letter weekday cascade ──
+      //   Within each weekday, letters fire L=2 → L=0.
+      //   The PER-ANCHOR ORDER is silhouette-dependent:
+      //     - Blade (1-6 days, katana): reverse N → 1 — matches the spine layout
+      //       so the cascade reads tip-to-hilt (the "middle-out" feel).
+      //     - All other silhouettes (Ouroboros, Drill, Infinity): plain 1 → N
+      //       forward — looks correct on circles / spirals / loops where reverse
+      //       reads as "starts from a random side".
+      const isBlade = N >= 1 && N <= 6
       const letterStaggerOffsetFast   = (_dayIdx, L) => (2 - L) * 50
       const letterStaggerOffsetCooled = (_dayIdx, L) => (2 - L) * 75
       const letterStaggerOffsetSlow   = (_dayIdx, L) => (2 - L) * 50
 
       const WEEKDAY_PAIRS = Array.from({ length: N }, (_, step) => ({
-        days: [N - 1 - step],
+        days: [isBlade ? (N - 1 - step) : step],
         flame:  900  + step * 50,
         zoom:   3000 + step * 50,
         cooled: 3650 + step * 75,
@@ -3597,8 +3637,10 @@ export default function SummaryPage() {
         )
       })()}
 
-      <FireFadeIn duration={900} />
-      <FireTransition active={fireActive} onComplete={() => router.push(fireDestRef.current)} />
+      <FireTransition
+        active={fireActive}
+        onComplete={() => { if (!skippedRef.current) router.push(fireDestRef.current) }}
+      />
       <SpeedLines active={quickForgeRunning && !fireActive} />
     </main>
   )

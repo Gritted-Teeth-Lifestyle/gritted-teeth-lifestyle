@@ -23,6 +23,7 @@ import FireTransition from '../../../components/FireTransition'
 import HeistTransition from '../../../components/HeistTransition'
 import SpeedLines from '../../../components/SpeedLines'
 import RetreatButton from '../../../components/RetreatButton'
+import { LogoStencil, LogoTarget } from '../../../components/LogoHalf'
 
 const MAX_LEN = 40
 
@@ -56,14 +57,28 @@ function ForgeButton({ forgeRef, disabled, onTap, onSwipe }) {
   const startRef = useRef(null)
   const dxRef = useRef(0)
   const swipeFiredRef = useRef(false)
+  const velocityTrackerRef = useRef([])
+  const VELOCITY_WINDOW_MS = 100
+  const FLICK_VELOCITY = 0.4    // px/ms
+  const FLICK_MIN_DISTANCE = 40 // px
   const [dragX, setDragX] = useState(0)
-  const SWIPE_THRESHOLD = 80
+  const [ringKey, setRingKey] = useState(0)
+  const [ringSide, setRingSide] = useState('right')
+  const [entranceDone, setEntranceDone] = useState(false)
+  useEffect(() => {
+    const t = setTimeout(() => setEntranceDone(true), 1300)
+    return () => clearTimeout(t)
+  }, [])
+  // Full traversal — gap between bead centers = 294px, beads pinned at
+  // calc(50% - 175px) on each side near the button ends.
+  const SWIPE_THRESHOLD = 294
 
   const handlePointerDown = (e) => {
     if (disabled) return
     startRef.current = { x: e.clientX, y: e.clientY }
     dxRef.current = 0
     swipeFiredRef.current = false
+    velocityTrackerRef.current = [{ t: e.timeStamp, x: e.clientX }]
     setDragX(0)
   }
   const handlePointerMove = (e) => {
@@ -71,18 +86,39 @@ function ForgeButton({ forgeRef, disabled, onTap, onSwipe }) {
     const dx = e.clientX - startRef.current.x
     const dy = e.clientY - startRef.current.y
     if (Math.abs(dx) > Math.abs(dy)) {
-      const clamped = Math.max(0, Math.min(dx, SWIPE_THRESHOLD * 1.5))
+      const clamped = Math.max(-SWIPE_THRESHOLD, Math.min(dx, SWIPE_THRESHOLD))
       dxRef.current = clamped
       setDragX(clamped)
     }
+    const tracker = velocityTrackerRef.current
+    tracker.push({ t: e.timeStamp, x: e.clientX })
+    const cutoff = e.timeStamp - VELOCITY_WINDOW_MS
+    while (tracker.length > 0 && tracker[0].t < cutoff) tracker.shift()
   }
   const handlePointerUp = () => {
-    if (dxRef.current > SWIPE_THRESHOLD && onSwipe) {
+    const tracker = velocityTrackerRef.current
+    let velocity = 0
+    if (tracker.length >= 2) {
+      const oldest = tracker[0]
+      const newest = tracker[tracker.length - 1]
+      const dt = newest.t - oldest.t
+      if (dt > 0) velocity = (newest.x - oldest.x) / dt
+    }
+    const distance = Math.abs(dxRef.current)
+    const dirMatches = dxRef.current === 0 || Math.sign(velocity) === Math.sign(dxRef.current)
+    const fired =
+      distance >= SWIPE_THRESHOLD ||
+      (Math.abs(velocity) >= FLICK_VELOCITY && distance >= FLICK_MIN_DISTANCE && dirMatches)
+
+    if (fired && onSwipe) {
       swipeFiredRef.current = true
+      setRingSide(dxRef.current > 0 ? 'right' : 'left')
+      setRingKey((k) => k + 1)
       onSwipe()
     }
     startRef.current = null
     dxRef.current = 0
+    velocityTrackerRef.current = []
     setDragX(0)
   }
   const handleClick = (e) => {
@@ -93,21 +129,42 @@ function ForgeButton({ forgeRef, disabled, onTap, onSwipe }) {
     }
     onTap()
   }
-  const swipeProgress = Math.min(1, dragX / SWIPE_THRESHOLD)
+  const swipeProgress = Math.min(1, Math.abs(dragX) / SWIPE_THRESHOLD)
 
   return (
+    <>
+    <style>{`
+      @keyframes yy-pulse-left {
+        0%, 100% { transform: translateX(0)   scale(1); }
+        50%      { transform: translateX(7px) scale(1.06); }
+      }
+      @keyframes yy-pulse-right {
+        0%, 100% { transform: translateX(0)    scale(1); }
+        50%      { transform: translateX(-7px) scale(1.06); }
+      }
+      /* Onboarding: stencil rolls off the target on mount. translateX value
+         matches the FORGE button's SWIPE_THRESHOLD (294px). */
+      @keyframes logo-roll-in-forge {
+        0%   { transform: translateX(294px) rotate(360deg); }
+        100% { transform: translateX(0)     rotate(0deg);   }
+      }
+    `}</style>
+    {/* Wrapper hosts the button + the shockwave ring as siblings. Wrapper
+        has no clip-path, so the ring scales outward freely instead of being
+        cropped by the button's parallelogram silhouette. */}
+    <div className="relative block w-full -mx-5" style={{ width: 'calc(100% + 40px)' }}>
     <button
       ref={forgeRef}
       type="button"
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
-      onPointerCancel={() => { startRef.current = null; dxRef.current = 0; swipeFiredRef.current = false; setDragX(0) }}
+      onPointerCancel={() => { startRef.current = null; dxRef.current = 0; swipeFiredRef.current = false; velocityTrackerRef.current = []; setDragX(0) }}
       onClick={handleClick}
       disabled={disabled}
       className={`
-        relative font-display tracking-[0.25em] uppercase overflow-hidden
-        px-14 py-4 min-h-[56px] min-w-[14rem]
+        relative font-display tracking-[0.25em] uppercase overflow-visible
+        px-24 py-5 min-h-[56px] block w-full
         text-3xl text-gtl-paper
         transition-all duration-200 ease-out
         disabled:opacity-30 disabled:cursor-not-allowed
@@ -119,24 +176,85 @@ function ForgeButton({ forgeRef, disabled, onTap, onSwipe }) {
       `}
       style={{ clipPath: 'polygon(3% 0%, 100% 0%, 97% 100%, 0% 100%)', touchAction: 'pan-y' }}
     >
-      {/* Swipe-progress brighter overlay scales in from the left */}
+      <span className="relative inline-block">
+        {swipeProgress >= 1 ? 'LIFT NOW' : 'FORGE'}
+      </span>
+      {/* Logo halves on opposite sides. Swipe in either direction pulls one
+          across to the other's slot to fuse. */}
+      {(() => {
+        // One full rotation across a full swipe — lands upright at fusion.
+        const rollFactor = 360 / SWIPE_THRESHOLD
+        const stencilTx = Math.max(0, dragX)
+        const targetTx  = Math.min(0, dragX)
+        return (
+          <>
+          <div
+            className="absolute pointer-events-none"
+            style={{
+              left: 'calc(50% - 175px)',
+              top: '50%',
+              width: '56px',
+              height: '56px',
+              marginTop: '-28px',
+              transform: `translateX(${stencilTx}px) rotate(${stencilTx * rollFactor}deg)`,
+              opacity: 0.9 + swipeProgress * 0.1,
+              transition: dragX === 0 ? 'transform 220ms cubic-bezier(0.2,0.8,0.3,1), opacity 200ms' : 'opacity 100ms',
+              animation: !entranceDone
+                ? 'logo-roll-in-forge 1300ms cubic-bezier(0.85, 0, 0.15, 1) forwards'
+                : (dragX === 0 ? 'yy-pulse-left 1.5s ease-in-out infinite' : 'none'),
+              zIndex: 2,
+            }}
+            aria-hidden="true"
+          >
+            <LogoStencil size={56} paused={!entranceDone || dragX !== 0}/>
+          </div>
+          <div
+            className="absolute pointer-events-none"
+            style={{
+              right: 'calc(50% - 175px)',
+              top: '50%',
+              width: '56px',
+              height: '56px',
+              marginTop: '-28px',
+              transform: `translateX(${targetTx}px) rotate(${targetTx * rollFactor}deg)`,
+              opacity: 0.9 + swipeProgress * 0.1,
+              transition: dragX === 0 ? 'transform 220ms cubic-bezier(0.2,0.8,0.3,1), opacity 200ms' : 'opacity 100ms',
+              // Gated on entranceDone too so it stays in phase with the stencil pulse.
+              animation: (entranceDone && dragX === 0) ? 'yy-pulse-right 1.5s ease-in-out infinite' : 'none',
+              zIndex: 1,
+            }}
+            aria-hidden="true"
+          >
+            <LogoTarget size={56}/>
+          </div>
+          </>
+        )
+      })()}
+    </button>
+    {/* Shockwave ring on successful swipe — sibling of the button so the
+        button's clip-path doesn't crop the expanding ring. */}
+    {ringKey > 0 && (
       <div
-        className="absolute inset-0 pointer-events-none bg-gtl-red-bright"
+        key={ringKey}
+        className="absolute pointer-events-none rounded-full"
         style={{
-          opacity: swipeProgress,
-          transform: `scaleX(${swipeProgress})`,
-          transformOrigin: 'left center',
-          transition: dragX === 0 ? 'opacity 200ms, transform 200ms' : 'none',
+          top: '50%',
+          marginTop: '-28px',
+          ...(ringSide === 'right'
+            ? { right: 'calc(50% - 175px)' }
+            : { left:  'calc(50% - 175px)' }),
+          width: '56px',
+          height: '56px',
+          borderStyle: 'solid',
+          borderColor: '#d4181f',
+          animation: 'shockwave 900ms cubic-bezier(0.2, 0.8, 0.3, 1) forwards',
+          zIndex: 3,
         }}
         aria-hidden="true"
       />
-      <span
-        className="relative inline-block"
-        style={{ transform: `translateX(${dragX * 0.3}px)`, transition: dragX === 0 ? 'transform 200ms' : 'none' }}
-      >
-        {swipeProgress >= 1 ? 'LIFT NOW' : 'FORGE'}
-      </span>
-    </button>
+    )}
+    </div>
+    </>
   )
 }
 
@@ -407,7 +525,16 @@ export default function NewCycleNamePage() {
     if (name.trim().length === 0) return
     brandingRef.current = true
     setIsBranding(true)
-    try { localStorage.setItem(pk('cycle-name'), name.trim()) } catch (_) {}
+    try {
+      localStorage.setItem(pk('cycle-name'), name.trim())
+      // Tap path is the MANUAL forge — clear any leftover gtl-quick-forge
+      // flag from a previous (abandoned) swipe attempt. Without this, the
+      // downstream muscles/branded pages would auto-progress and fire the
+      // speed-lines + heist transition even though the user tapped, not
+      // swiped. Flag is normally cleared on /fitness/new/summary, so it
+      // sticks if the user bails out of the chain earlier.
+      localStorage.removeItem('gtl-quick-forge')
+    } catch (_) {}
     play('brand-confirm')
     // Play a second impact ~400ms in to reinforce the peak of the brand
     setTimeout(() => play('stamp'), 380)
@@ -469,12 +596,13 @@ export default function NewCycleNamePage() {
     router.push(NEXT_TARGET)
   }
 
-  // Skip-the-cascade: once the user has committed (brand or fire), the next
-  // pointer/touch input anywhere routes to /fitness/new/muscles immediately.
-  // Excludes RetreatButton (data-retreat) so retreat goes back instead of
-  // fast-forwarding. pointerdown + touchstart for iOS PWA reliability.
+  // Skip-the-cascade: once the user has committed (brand+fire on tap, OR
+  // HeistTransition on swipe-forge), the next pointer/touch input anywhere
+  // routes to /fitness/new/muscles immediately. Excludes RetreatButton
+  // (data-retreat) so retreat goes back instead of fast-forwarding.
+  // pointerdown + touchstart for iOS PWA reliability.
   useEffect(() => {
-    if (!isBranding && !isFireActive) return
+    if (!isBranding && !isFireActive && !quickHeistActive) return
     const handler = (e) => {
       if (e.target?.closest?.('[data-retreat]')) return
       skipNow()
@@ -485,7 +613,7 @@ export default function NewCycleNamePage() {
       window.removeEventListener('pointerdown', handler, { capture: true })
       window.removeEventListener('touchstart',  handler, { capture: true })
     }
-  }, [isBranding, isFireActive])
+  }, [isBranding, isFireActive, quickHeistActive])
 
   /**
    * triggerImpact — fired by the input whenever a new character is added.
@@ -721,7 +849,7 @@ export default function NewCycleNamePage() {
       <FireTransition active={isFireActive} onComplete={handleFireComplete} />
       {/* First hop on the quick-forge swipe — uses the same HeistTransition the
           home page uses (default 'GRIT THOSE TEETH' red-slash overlay). */}
-      <HeistTransition active={quickHeistActive} onComplete={() => router.push(NEXT_TARGET)} />
+      <HeistTransition active={quickHeistActive} onComplete={() => { if (!skippedRef.current) router.push(NEXT_TARGET) }} />
       <SpeedLines active={quickForgeRunning} />
     </main>
   )

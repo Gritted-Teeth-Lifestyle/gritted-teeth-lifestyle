@@ -10,7 +10,6 @@ import Link from 'next/link'
 import { useSound } from '../../../lib/useSound'
 import { useProfileGuard } from '../../../lib/useProfileGuard'
 import { pk } from '../../../lib/storage'
-import FireFadeIn from '../../../components/FireFadeIn'
 import RetreatButton from '../../../components/RetreatButton'
 
 function EditNavButton({ number, label, caption, href }) {
@@ -219,7 +218,6 @@ export default function EditCyclePage() {
       </div>
 
       </div>
-      <FireFadeIn duration={700} />
     </main>
   )
 }

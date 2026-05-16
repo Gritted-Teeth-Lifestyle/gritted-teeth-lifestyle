@@ -9,19 +9,16 @@
 
 ## Mobile Tasks (Current Priority)
 
-### M1. Home Page — Mobile Layout
+### M1. Home Page — Mobile Layout [DONE 2026-05-02]
 Make the calling card dominate the fold on mobile. The nutrition card is a second act — scrolling to it should feel intentional. Fix the dead space between elements.
 
-### M2. Profiles Page — Touch Targets
+### M2. Profiles Page — Touch Targets [DONE 2026-05-02]
 WHO ARE YOU looks great. Make the input and ENTER button wider, taller, more satisfying to tap. Press state on ENTER should feel physical.
-
-### M3. Theatrical Navigation Flashes
-Build a lightweight P5 flash for key navigation moments (name entry → hub, cycle selection, etc.). Lighter than HeistTransition — a half-second color flood or kanji frame. Study `components/HeistTransition.jsx`.
 
 ### M4. Breadcrumb Cleanup
 On mobile only, show just the current page label instead of the full path (e.g. `SCHEDULE` not `PALACE / FITNESS / NEW CYCLE / SCHEDULE`).
 
-### M5. Idle Button Animations (touch-aware)
+### M5. Idle Button Animations (touch-aware) [DONE 2026-05-02]
 Carry-over from original TODO — but on mobile these must be pulse/glow patterns, not hover states. User's thumb should feel drawn to the right button.
 
 ---

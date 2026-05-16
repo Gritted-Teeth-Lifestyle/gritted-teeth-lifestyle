@@ -393,7 +393,13 @@ module.exports = {
         'snap-in':    'snap-in 400ms cubic-bezier(0.2, 0.9, 0.3, 1.1) forwards',
         'pulse-red':  'pulse-red 2s cubic-bezier(0.4, 0, 0.6, 1) infinite',
         'stamp':        'stamp 500ms cubic-bezier(0.2, 1.4, 0.4, 1) forwards',
-        'char-stamp':   'char-stamp 480ms cubic-bezier(0.18, 1.4, 0.4, 1) forwards',
+        /* fill-mode 'both': also holds the 0% keyframe (scale 38, opacity 0)
+           BEFORE the animation starts, so characters with a non-zero
+           animationDelay stay invisible during their wait — without this
+           they paint at their default (scale 1, opacity 1) for the duration
+           of the delay, so the user sees the full word in the input before
+           the stamp cascade even begins. */
+        'char-stamp':   'char-stamp 480ms cubic-bezier(0.18, 1.4, 0.4, 1) both',
         'screen-shake': 'screen-shake 280ms cubic-bezier(0.4, 0, 0.6, 1) both',
         'cursor-blink':   'cursor-blink 1s steps(2, end) infinite',
         'brand-letter':   'brand-letter 1600ms cubic-bezier(0.3, 0, 0.4, 1) forwards',

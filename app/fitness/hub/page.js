@@ -22,6 +22,10 @@ import { useProfileGuard } from '../../../lib/useProfileGuard'
 import { pk } from '../../../lib/storage'
 import HeistTransition from '../../../components/HeistTransition'
 import RetreatButton from '../../../components/RetreatButton'
+import { consumePrefire, setInAnimation, registerChainStep, clearChainTransient } from '../../../lib/predictiveTap'
+import { isPrestigeUnlocked, computeProfileTotalXP, getTierCount, getTier } from '../../../lib/exp'
+import AscendPrompt from '../../../components/exp/AscendPrompt'
+import TierUpFlourish from '../../../components/exp/TierUpFlourish'
 
 function CycleOption({
   number,
@@ -30,6 +34,7 @@ function CycleOption({
   href,
   variant = 'primary',
   onClick,
+  dataPredictiveTapTarget,
 }) {
   const { play } = useSound()
   const [hovered, setHovered] = useState(false)
@@ -38,7 +43,6 @@ function CycleOption({
   const handleLeave = () => setHovered(false)
   const handleClick = (e) => {
     e.preventDefault()
-    play('option-select')
     if (onClick) onClick(href)
   }
 
@@ -50,6 +54,7 @@ function CycleOption({
       onClick={handleClick}
       onMouseEnter={handleEnter}
       onMouseLeave={handleLeave}
+      data-predictive-tap-target={dataPredictiveTapTarget}
       // touch-action: manipulation disables the iOS 300ms double-tap-to-zoom
       // delay, which was suppressing rapid follow-up taps on the LOAD CYCLE /
       // NEW CYCLE buttons (so the skip-on-second-tap path never fired).
@@ -76,23 +81,28 @@ function CycleOption({
         aria-hidden="true"
       />
 
-      {/* Card background — clipped polygon */}
+      {/* Card background — clipped polygon. SECONDARY (LOAD CYCLE) is now a
+          dark outline-style mirror of PRIMARY: ink bg with a red border
+          (rendered via the layer below at idle opacity). */}
       <div
         className={`
           absolute inset-0 gtl-clip-card transition-all duration-300
           ${isPrimary
             ? (hovered ? 'bg-gtl-red-bright' : 'bg-gtl-red')
-            : (hovered ? 'bg-gtl-ivory' : 'bg-gtl-paper')}
+            : (hovered ? 'bg-gtl-surface' : 'bg-gtl-ink')}
           ${hovered ? 'shadow-red-glow' : ''}
         `}
       />
 
-      {/* Hover red border layer — a second clipped polygon slightly larger */}
+      {/* Red border layer — visible at idle for SECONDARY (the outline look),
+          hidden at idle for PRIMARY (becomes the hover glow ring). */}
       <div
         className={`
           absolute -inset-1 gtl-clip-card pointer-events-none
           transition-opacity duration-300
-          ${hovered ? 'opacity-100' : 'opacity-0'}
+          ${isPrimary
+            ? (hovered ? 'opacity-100' : 'opacity-0')
+            : (hovered ? 'opacity-100' : 'opacity-70')}
         `}
         style={{
           background: 'linear-gradient(135deg, #ff2a36 0%, #d4181f 100%)',
@@ -111,26 +121,12 @@ function CycleOption({
           transition-colors duration-300
           ${isPrimary
             ? (hovered ? 'text-gtl-paper' : 'text-gtl-paper/70')
-            : (hovered ? 'text-gtl-red' : 'text-gtl-ink/60')}
+            : (hovered ? 'text-gtl-red-bright' : 'text-gtl-red/70')}
         `}
       >
         OPTION / {number}
       </div>
 
-      {/* Big number stamp — grows on hover */}
-      <div
-        className={`
-          absolute top-3 left-6 font-display leading-none select-none
-          transition-all duration-500 ease-out
-          ${hovered ? 'text-[10rem]' : 'text-[8rem]'}
-          ${isPrimary
-            ? (hovered ? 'text-gtl-paper/30' : 'text-gtl-paper/15')
-            : (hovered ? 'text-gtl-red/25' : 'text-gtl-ink/10')}
-        `}
-        aria-hidden="true"
-      >
-        {number}
-      </div>
 
       {/* Content */}
       <div className="relative h-full flex flex-col justify-end p-8 pt-16">
@@ -149,7 +145,7 @@ function CycleOption({
             font-display text-6xl leading-none mb-2
             transition-all duration-300 ease-out
             ${hovered ? '-rotate-2 translate-x-1' : '-rotate-1'}
-            ${isPrimary ? 'text-gtl-paper' : 'text-gtl-ink'}
+            ${isPrimary ? 'text-gtl-paper' : 'text-gtl-red'}
           `}
         >
           {label}
@@ -158,7 +154,7 @@ function CycleOption({
         <p
           className={`
             font-mono text-[10px] tracking-[0.25em] uppercase mt-3 max-w-[60%]
-            ${isPrimary ? 'text-gtl-paper/80' : 'text-gtl-ink/70'}
+            ${isPrimary ? 'text-gtl-paper/80' : 'text-gtl-chalk/70'}
           `}
         >
           {caption}
@@ -205,6 +201,21 @@ function CycleOption({
  * Used for "CONTINUE CYCLE WITHOUT SAVING" — a transient/throwaway path
  * for users who want to train without committing to a tracked program.
  */
+const MAX_LEVEL = 100
+function getLevelInfo(totalXP) {
+  let level = 0
+  let xpUsed = 0
+  while (level < MAX_LEVEL) {
+    const threshold = 150 + level * 35
+    if (xpUsed + threshold > totalXP) {
+      return { level, progress: totalXP - xpUsed, threshold }
+    }
+    xpUsed += threshold
+    level++
+  }
+  return { level: MAX_LEVEL, progress: 1, threshold: 1 }
+}
+
 function GhostOption({ number, label, caption, href, onClick }) {
   const { play } = useSound()
   const [hovered, setHovered] = useState(false)
@@ -355,18 +366,62 @@ export default function FitnessPage() {
   // (The window pointerdown listener installs in the post-commit useEffect, so
   // there's a brief window where it isn't yet listening.)
   const transitioningRef = useRef(false)
+  // Mount-time stamp for the iOS-leaked-click eat (150ms grace). When the
+  // user predictive-taps a chain destination from the previous page, iOS
+  // can deliver the click event AFTER navigation, landing on the new
+  // page's button. We reject any handler call within 150ms of mount —
+  // a real user click can't physically happen that fast (no paint yet),
+  // so anything in that window is a leaked synthetic click. The
+  // consume's 100ms setTimeout call bypasses this since it doesn't go
+  // through onClick.
+  const mountTimeRef = useRef(0)
+  useEffect(() => { mountTimeRef.current = performance.now() }, [])
+  // R9 hub-side AscendPrompt — small chip linking to profile when prestige
+  // is unlocked. Less aggressive than the profile modal per dispatch.
+  const [prestigeReady, setPrestigeReady] = useState(false)
+  useEffect(() => { setPrestigeReady(isPrestigeUnlocked()) }, [])
+  // Profile-button live caption: LV.{n} · {TIER_NAME}. Null until hydrated
+  // so SSR/CSR don't disagree on the caption text.
+  const [profileMeta, setProfileMeta] = useState(null)
+  useEffect(() => {
+    try {
+      const { xp } = computeProfileTotalXP()
+      const { level } = getLevelInfo(xp)
+      const tierName = getTier(getTierCount())
+      setProfileMeta({ level, tierName })
+    } catch (_) {}
+  }, [])
   // Stable ref to current href so the pointerdown listener doesn't have to
   // re-bind on every transitionConfig update.
   const hrefRef = useRef('')
   useEffect(() => { hrefRef.current = transitionConfig.href }, [transitionConfig.href])
 
+  // Defensive body-scroll unlock. /fitness/active applies a hard scroll lock
+  // (position:fixed + touch-action:none on body). Its cleanup should restore
+  // on unmount, but if a navigation race leaves any of those props set, the
+  // hub page can't scroll. Force-clear on mount.
+  useEffect(() => {
+    document.body.style.position = ''
+    document.body.style.inset = ''
+    document.body.style.touchAction = ''
+    document.body.style.overflow = ''
+    document.body.style.width = ''
+    document.body.style.height = ''
+    document.documentElement.style.overflow = ''
+  }, [])
+
   const skipNow = () => {
     if (skippedRef.current) return
     skippedRef.current = true
+    // inAnim stays open across the hop — next page's consumePrefire
+    // re-asserts it.
     router.push(hrefRef.current)
   }
 
-  const handleSelect = (href) => {
+  const handleSelect = (href, { fromTimer = false } = {}) => {
+    // iOS-leaked-click eat: reject onClick-sourced calls within 150ms
+    // of mount. fromTimer=true bypasses (consume's setTimeout still fires).
+    if (!fromTimer && performance.now() - mountTimeRef.current < 150) return
     // Already transitioning → this rapid second tap is a skip.
     if (transitioningRef.current) { skipNow(); return }
     transitioningRef.current = true
@@ -375,9 +430,12 @@ export default function FitnessPage() {
       // Clear any in-progress edit so ETCH CYCLE creates a fresh entry
       try { localStorage.removeItem(pk('editing-cycle-id')) } catch (_) {}
       try { localStorage.removeItem('gtl-back-to-edit') } catch (_) {}
-      setTransitionConfig({ href, title: 'NEW CYCLE', intensity: 'mega' })
+      setTransitionConfig({ href, title: 'WHAT YOU GOT', intensity: 'mega' })
     } else if (href === '/fitness/load') {
-      setTransitionConfig({ href, title: 'FURTHER WITH EVERY TURN', intensity: 'normal' })
+      setTransitionConfig({ href, title: 'YOU', intensity: 'normal' })
+      // Predictive-tap chain: this is hub-load. Flag in-animation so the
+      // next hit-zone tap stages an 'activate' prefire intent.
+      setInAnimation('hub-load', true)
     } else if (href === '/fitness/stats') {
       setTransitionConfig({ href, title: 'WAR RECORD', intensity: 'normal' })
     } else {
@@ -387,25 +445,39 @@ export default function FitnessPage() {
     setTransitioning(true)
   }
 
-  // Skip-the-transition: once HeistTransition is active, the next pointer/touch
-  // input anywhere on the screen routes to the destination immediately.
-  // Listen for both pointerdown AND touchstart in case iOS PWA suppresses
-  // pointerdown events during rapid-tap sequences. Taps on RetreatButton
-  // (data-retreat) are excluded so retreat navigates back instead of fast-
-  // forwarding to the in-flight transition's destination.
+  // Predictive-tap chain: clear stale transient state from any prior hop
+  // on every mount. Manual LOAD CYCLE tap's onClick handler sets
+  // currentStep correctly via setInAnimation('hub-load', true) before
+  // the canonical-zone pointerdown stages anything. Predictive-chain
+  // arrivals consume the prefire below and eagerly open inAnim there.
+  // Old pattern set ('profile', true) which incorrectly re-armed inAnim
+  // on this static page and let StrictMode double-mount rewind state
+  // from 'hub-load' back to 'profile' after consume fired.
   useEffect(() => {
-    if (!transitioning) return
-    const handler = (e) => {
-      if (e.target?.closest?.('[data-retreat]')) return
-      skipNow()
+    clearChainTransient('hub-mount', 'hub-load')
+  }, [])
+
+  // Predictive-tap consume on mount: if the prior hop's hit-zone tap
+  // staged a 'hub-load' intent (from /fitness during its HeistTransition),
+  // auto-fire the LOAD CYCLE option as if the user tapped it.
+  // Delay the HT trigger by 500ms so the inbound HT plays out fully
+  // before this one starts — clean back-to-back animation cascade.
+  // setInAnimation runs IMMEDIATELY so taps during the 500ms window
+  // still stage the next step ('activate').
+  useEffect(() => {
+    const intent = consumePrefire('hub-load')
+    if (intent) {
+      setInAnimation('hub-load', true)
+      setTimeout(() => handleSelect('/fitness/load', { fromTimer: true }), 50)
     }
-    window.addEventListener('pointerdown', handler, { capture: true })
-    window.addEventListener('touchstart',  handler, { capture: true, passive: true })
-    return () => {
-      window.removeEventListener('pointerdown', handler, { capture: true })
-      window.removeEventListener('touchstart',  handler, { capture: true })
-    }
-  }, [transitioning])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // Register skip-route for the 'hub-load' chain step. Module-level
+  // listener in lib/predictiveTap.js calls this when a tap arrives past
+  // SKIP_GRACE_MS during the hub-load HT. Retreat-button exclusion is
+  // handled centrally.
+  useEffect(() => registerChainStep('hub-load', () => skipNow()), [])
 
   const handleTransitionComplete = () => {
     if (skippedRef.current) return
@@ -413,7 +485,7 @@ export default function FitnessPage() {
   }
 
   return (
-    <main className="relative min-h-screen overflow-hidden bg-gtl-void">
+    <main className="relative min-h-screen overflow-x-hidden bg-gtl-void">
       {/* Background atmospherics */}
       <div className="absolute inset-0 gtl-noise" />
 
@@ -489,6 +561,7 @@ export default function FitnessPage() {
               href="/fitness/load"
               variant="secondary"
               onClick={handleSelect}
+              dataPredictiveTapTarget="hub-load"
             />
           </div>
           <div className="md:translate-y-12">
@@ -528,6 +601,20 @@ export default function FitnessPage() {
               onClick={handleSelect}
             />
           </div>
+          <div className="mt-4">
+            <GhostOption
+              number="05"
+              label="WARRIOR PROFILE"
+              caption={profileMeta ? `LV.${profileMeta.level} · ${profileMeta.tierName}` : 'Identity. Tier, ribbons, prestige.'}
+              href="/fitness/profile"
+              onClick={handleSelect}
+            />
+          </div>
+          {prestigeReady && (
+            <div className="mt-4 flex justify-center">
+              <AscendPrompt surface="hub" />
+            </div>
+          )}
         </div>
 
         {/* Decorative footer slash */}
@@ -580,6 +667,7 @@ export default function FitnessPage() {
         title={transitionConfig.title}
         onComplete={handleTransitionComplete}
       />
+      <TierUpFlourish />
     </main>
   )
 }

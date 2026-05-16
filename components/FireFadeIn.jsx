@@ -33,7 +33,20 @@ export default function FireFadeIn({ duration = 800 }) {
       // any later interactions or paint costs.
       setActive('done')
     }, duration + 200)
-    return () => { clearTimeout(t); clearTimeout(t2) }
+    // Skip-on-tap: any pointer/touch input collapses the flame wall and
+    // unmounts immediately. Capture-phase so a tap on a button below also
+    // dismisses the flame in the same gesture.
+    const skip = () => {
+      clearTimeout(t); clearTimeout(t2)
+      setActive('done')
+    }
+    window.addEventListener('pointerdown', skip, { capture: true })
+    window.addEventListener('touchstart',  skip, { capture: true, passive: true })
+    return () => {
+      clearTimeout(t); clearTimeout(t2)
+      window.removeEventListener('pointerdown', skip, { capture: true })
+      window.removeEventListener('touchstart',  skip, { capture: true })
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [duration])
 
