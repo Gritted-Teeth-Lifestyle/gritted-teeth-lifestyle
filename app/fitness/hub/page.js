@@ -609,7 +609,7 @@ export default function FitnessPage() {
               <CycleOption
                 number="02"
                 label="RESUME DRAFT"
-                caption={`${draftSummary.carvedDays} days carved · ${draftSummary.chips} chips attuned`}
+                caption="An unfinished blade waits in the forge."
                 href="/fitness/new"
                 variant="primary"
                 onClick={handleResumeDraft}
