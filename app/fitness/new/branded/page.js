@@ -12,7 +12,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useSound } from '../../../../lib/useSound'
 import { useProfileGuard } from '../../../../lib/useProfileGuard'
-import { pk } from '../../../../lib/storage'
+import { pk, getDraft, setDraft, getDraftAttunement, setDraftAttunement } from '../../../../lib/storage'
 import FireTransition from '../../../../components/FireTransition'
 import SlashWipe from '../../../../components/SlashWipe'
 import SpeedLines from '../../../../components/SpeedLines'
@@ -679,43 +679,76 @@ export default function SchedulePage() {
   const [selectedDays, setSelectedDays] = useState(new Set())
   const [assignments,  setAssignments]  = useState({})
 
-  // Hydrate from the cycle's persisted state when entering via the edit
-  // hub. /fitness/load's handleReview wrote training-days + daily-plan +
-  // editing-cycle-id before routing here. Without this hydration, the
-  // schedule starts blank and any user edits never line up with the
-  // cycle being edited. Read-only; new-cycle flow (no editing-cycle-id)
-  // continues to start blank.
+  // Persist days + dailyPlan into the draft on every change so back-nav
+  // (e.g. Attune → Retreat → Carve) and orphan-chip cleanup always see
+  // current state. Skipped on mount when there's no draft (legacy flow).
+  const draftWritebackReadyRef = useRef(false)
   useEffect(() => {
     if (typeof window === 'undefined') return
-    let editing = false
-    try { editing = localStorage.getItem(pk('editing-cycle-id')) != null } catch (_) {}
-    if (!editing) return
+    if (!getDraft()) return
+    // Wait one render after mount-hydration so we don't clobber draft with
+    // empty initial state during the first paint.
+    if (!draftWritebackReadyRef.current) {
+      draftWritebackReadyRef.current = true
+      return
+    }
+    const trainingDays = [...selectedDays].sort()
+    const dailyPlan = {}
+    Object.entries(assignments).forEach(([iso, set]) => {
+      if (set && set.size > 0) dailyPlan[iso] = [...set]
+    })
+    // Use the same contiguous-span derivation as persistScheduleDraft so
+    // /attune sees the rest-day-filled timeline the moment the user makes
+    // their first pick.
+    const first = trainingDays[0]
+    const last  = trainingDays[trainingDays.length - 1]
+    let days = []
+    if (first && last) {
+      let cur = new Date(first + 'T00:00:00Z')
+      const end = new Date(last + 'T00:00:00Z')
+      while (cur <= end) {
+        days.push(cur.toISOString().slice(0, 10))
+        cur.setUTCDate(cur.getUTCDate() + 1)
+      }
+    }
+    setDraft({ days, dailyPlan })
+  }, [selectedDays, assignments])
 
+  // Hydrate from the draft cycle on mount, unconditionally. Back-nav from
+  // ATTUNE re-enters this page and must see the days + assignments the
+  // user already carved. Falls back to legacy training-days / daily-plan
+  // keys if no draft exists (e.g. older in-progress flows that pre-date
+  // the draft-cycle model).
+  useEffect(() => {
+    if (typeof window === 'undefined') return
     try {
-      const rawDays = localStorage.getItem(pk('training-days'))
-      const rawPlan = localStorage.getItem(pk('daily-plan'))
-      if (rawDays) {
-        const arr = JSON.parse(rawDays)
-        if (Array.isArray(arr) && arr.length > 0) {
-          setSelectedDays(new Set(arr))
-          // Position the displayed month so the cycle's first day is
-          // visible on mount instead of whatever month "today" lands in.
-          const first = arr[0]
-          if (typeof first === 'string') {
-            const [y, m] = first.split('-').map(Number)
-            if (y && m) setDisplayDate(new Date(y, m - 1, 1))
-          }
+      const draft = getDraft()
+      const days = (draft && Array.isArray(draft.days)) ? draft.days : null
+      const plan = (draft && draft.dailyPlan && typeof draft.dailyPlan === 'object') ? draft.dailyPlan : null
+
+      const fallbackDays = days ? null : (() => {
+        try { return JSON.parse(localStorage.getItem(pk('training-days')) || 'null') } catch (_) { return null }
+      })()
+      const fallbackPlan = plan ? null : (() => {
+        try { return JSON.parse(localStorage.getItem(pk('daily-plan')) || 'null') } catch (_) { return null }
+      })()
+
+      const dayArr = days || fallbackDays
+      if (Array.isArray(dayArr) && dayArr.length > 0) {
+        setSelectedDays(new Set(dayArr))
+        const first = dayArr[0]
+        if (typeof first === 'string') {
+          const [y, m] = first.split('-').map(Number)
+          if (y && m) setDisplayDate(new Date(y, m - 1, 1))
         }
       }
-      if (rawPlan) {
-        const plan = JSON.parse(rawPlan)
-        if (plan && typeof plan === 'object') {
-          const next = {}
-          for (const [iso, arr] of Object.entries(plan)) {
-            if (Array.isArray(arr)) next[iso] = new Set(arr)
-          }
-          setAssignments(next)
+      const planObj = plan || fallbackPlan
+      if (planObj && typeof planObj === 'object') {
+        const next = {}
+        for (const [iso, arr] of Object.entries(planObj)) {
+          if (Array.isArray(arr)) next[iso] = new Set(arr)
         }
+        setAssignments(next)
       }
     } catch (_) {}
   }, [])
@@ -1035,48 +1068,32 @@ export default function SchedulePage() {
       const { trainingDays, dailyPlan } = serializeSchedule()
       localStorage.setItem(pk('training-days'), JSON.stringify(trainingDays))
       localStorage.setItem(pk('daily-plan'),    JSON.stringify(dailyPlan))
+      // Draft is the source of truth for FORGE/HONE/CARVE/ATTUNE/ETCH.
+      // Mirror days + dailyPlan into draft on every commit-worthy write.
+      if (getDraft()) {
+        setDraft({ days: contiguousSpan(trainingDays), dailyPlan })
+      }
       return { trainingDays, dailyPlan }
     } catch (_) {
       return { trainingDays: [], dailyPlan: {} }
     }
   }
 
-  // Side-load the active cycle's days + dailyPlan so the next consumer
-  // (Attune) sees the picks the user just made. Without this, Attune
-  // reads pk('cycles')[active-cycle-id].days, which only the Summary
-  // commit path writes — bypassing it (e.g. tapping ATTUNE before
-  // CARVE) leaves Attune rendering the previous commit's days.
-  const syncActiveCycle = (trainingDays, dailyPlan) => {
-    try {
-      const cycleId = localStorage.getItem(pk('active-cycle-id'))
-                   || localStorage.getItem(pk('editing-cycle-id'))
-      if (!cycleId) return
-      const raw = localStorage.getItem(pk('cycles'))
-      if (!raw) return
-      const cycles = JSON.parse(raw)
-      if (!Array.isArray(cycles)) return
-      const span = contiguousSpan(trainingDays)
-      const next = cycles.map((c) =>
-        c.id === cycleId ? { ...c, days: span, dailyPlan } : c
-      )
-      localStorage.setItem(pk('cycles'), JSON.stringify(next))
-    } catch (_) {}
-  }
-
   const handleCarve = () => {
     if (!carveEnabled) return
     play('card-confirm')
     persistScheduleDraft()
+    if (getDraft()) setDraft({ step: 'summary' })
     setFireActive(true)
   }
 
-  // ATTUNE MOVEMENTS bypasses the CARVE → Summary commit. Persist
-  // everything Attune needs to read fresh values: the draft keys AND
-  // the active cycle's snapshot in pk('cycles').
+  // ATTUNE MOVEMENTS routes to /attune. The draft is the source of truth
+  // — no syncActiveCycle, no active-cycle-id mutation. Attune reads draft
+  // directly via loadDraftOrActive.
   const handleAttuneHandoff = () => {
     play('option-select')
-    const { trainingDays, dailyPlan } = persistScheduleDraft()
-    syncActiveCycle(trainingDays, dailyPlan)
+    persistScheduleDraft()
+    if (getDraft()) setDraft({ step: 'attune' })
     router.push('/attune')
   }
 
