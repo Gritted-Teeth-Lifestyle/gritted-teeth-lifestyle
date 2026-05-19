@@ -1,6 +1,7 @@
 'use client'
 import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
+import RetreatButton from '../../components/RetreatButton'
 import {
   logEntry, getAllEntries, deleteEntry, getDailyTotals, getWeekTotals, getMonthTotals, setGoals, getGoals
 } from '../../lib/nutrition-storage'
@@ -168,8 +169,8 @@ export default function DietPage() {
 
   return (
     <main className="min-h-screen bg-black text-white max-w-2xl mx-auto">
-      <div className="px-6 pt-8 pb-4">
-        <Link href="/" className="text-[#888] text-sm hover:text-white mb-6 block">← Back</Link>
+      <RetreatButton href="/" />
+      <div className="px-6 pt-8 pb-4" style={{ paddingTop: 'max(3rem, calc(env(safe-area-inset-top) + 2.5rem))' }}>
         <h1 className="text-3xl font-black mb-1 tracking-tight">NUTRITION</h1>
         <p className="text-[#888] text-sm mb-6">Track meals by voice or photo</p>
       </div>
