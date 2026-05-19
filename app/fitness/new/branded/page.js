@@ -13,6 +13,7 @@ import { useRouter } from 'next/navigation'
 import { useSound } from '../../../../lib/useSound'
 import { useProfileGuard } from '../../../../lib/useProfileGuard'
 import { pk, getDraft, setDraft, getDraftAttunement, setDraftAttunement } from '../../../../lib/storage'
+import { getExerciseById } from '../../../../lib/exerciseLibrary'
 import FireTransition from '../../../../components/FireTransition'
 import SlashWipe from '../../../../components/SlashWipe'
 import SpeedLines from '../../../../components/SpeedLines'
@@ -934,6 +935,33 @@ export default function SchedulePage() {
       })
       return next
     })
+    // Orphan-chip cleanup: when a muscle is REMOVED from a day, drop any
+    // chip on that day whose exercise's primaryMuscles no longer overlap
+    // with the day's remaining muscles. Custom (library-unknown) chips
+    // pass through untouched.
+    if (allHave && getDraft()) {
+      const draftAtt = getDraftAttunement()
+      let changed = false
+      const nextAtt = { ...draftAtt }
+      for (const k of keys) {
+        const remaining = new Set([...(assignments[k] || new Set())])
+        remaining.delete(muscleId)
+        const dayState = nextAtt[k]
+        if (!dayState || !Array.isArray(dayState.chips) || dayState.chips.length === 0) continue
+        const filtered = dayState.chips.filter((chip) => {
+          const ex = getExerciseById(chip.exerciseId)
+          if (!ex) return true  // unknown / custom — keep
+          const primaries = ex.primaryMuscles || []
+          if (primaries.length === 0) return true  // no claim — keep
+          return primaries.some((p) => remaining.has(p))
+        })
+        if (filtered.length !== dayState.chips.length) {
+          nextAtt[k] = { ...dayState, chips: filtered }
+          changed = true
+        }
+      }
+      if (changed) setDraftAttunement(nextAtt)
+    }
   }
 
   const prevMonth = () => {
