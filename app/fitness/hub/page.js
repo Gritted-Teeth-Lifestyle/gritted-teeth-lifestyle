@@ -19,7 +19,7 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { useSound } from '../../../lib/useSound'
 import { useProfileGuard } from '../../../lib/useProfileGuard'
-import { pk } from '../../../lib/storage'
+import { pk, getDraft, getDraftAttunement, clearDraft } from '../../../lib/storage'
 import HeistTransition from '../../../components/HeistTransition'
 import RetreatButton from '../../../components/RetreatButton'
 import { consumePrefire, setInAnimation, registerChainStep, clearChainTransient } from '../../../lib/predictiveTap'
@@ -380,6 +380,46 @@ export default function FitnessPage() {
   // is unlocked. Less aggressive than the profile modal per dispatch.
   const [prestigeReady, setPrestigeReady] = useState(false)
   useEffect(() => { setPrestigeReady(isPrestigeUnlocked()) }, [])
+
+  // Draft-cycle status: when a WIP draft exists, show Resume Draft +
+  // Start Fresh in place of NEW CYCLE. Recompute on mount so the hub
+  // reflects fresh state after promotion or discard.
+  const [draftSummary, setDraftSummary] = useState(null)
+  const refreshDraftSummary = () => {
+    const draft = getDraft()
+    if (!draft) { setDraftSummary(null); return }
+    const days = Array.isArray(draft.days) ? draft.days.length : 0
+    const dailyPlan = draft.dailyPlan || {}
+    const carvedDays = Object.values(dailyPlan).filter((arr) => Array.isArray(arr) && arr.length > 0).length
+    const att = getDraftAttunement() || {}
+    let chips = 0
+    for (const v of Object.values(att)) chips += Array.isArray(v?.chips) ? v.chips.length : 0
+    setDraftSummary({ carvedDays, chips, step: draft.step || 'muscles' })
+  }
+  useEffect(() => { refreshDraftSummary() }, [])
+  const [startFreshOpen, setStartFreshOpen] = useState(false)
+
+  const stepToRoute = (step) => {
+    switch (step) {
+      case 'schedule': return '/fitness/new/branded'
+      case 'attune':   return '/attune'
+      case 'summary':  return '/fitness/new/summary'
+      case 'muscles':
+      default:         return '/fitness/new/muscles'
+    }
+  }
+  const handleResumeDraft = () => {
+    if (!draftSummary) return
+    const dest = stepToRoute(draftSummary.step)
+    handleSelect(dest)
+  }
+  const handleStartFreshConfirm = () => {
+    clearDraft()
+    try { localStorage.removeItem(pk('editing-cycle-id')) } catch (_) {}
+    setStartFreshOpen(false)
+    refreshDraftSummary()
+    handleSelect('/fitness/new')
+  }
   // Profile-button live caption: LV.{n} · {TIER_NAME}. Null until hydrated
   // so SSR/CSR don't disagree on the caption text.
   const [profileMeta, setProfileMeta] = useState(null)
@@ -565,16 +605,39 @@ export default function FitnessPage() {
             />
           </div>
           <div className="md:translate-y-12">
-            <CycleOption
-              number="02"
-              label="NEW CYCLE"
-              caption="Begin from zero. Define the climb. Forge a fresh program."
-              href="/fitness/new"
-              variant="primary"
-              onClick={handleSelect}
-            />
+            {draftSummary ? (
+              <CycleOption
+                number="02"
+                label="RESUME DRAFT"
+                caption={`${draftSummary.carvedDays} days carved · ${draftSummary.chips} chips attuned`}
+                href="/fitness/new"
+                variant="primary"
+                onClick={handleResumeDraft}
+              />
+            ) : (
+              <CycleOption
+                number="02"
+                label="NEW CYCLE"
+                caption="Begin from zero. Define the climb. Forge a fresh program."
+                href="/fitness/new"
+                variant="primary"
+                onClick={handleSelect}
+              />
+            )}
           </div>
         </div>
+        {draftSummary && (
+          <div className="mt-6 flex justify-end">
+            <button
+              type="button"
+              onClick={() => setStartFreshOpen(true)}
+              className="font-mono text-[10px] tracking-[0.3em] uppercase text-gtl-ash hover:text-gtl-red border border-gtl-edge hover:border-gtl-red px-4 py-2 transition-colors"
+              style={{ clipPath: 'polygon(6% 0%, 100% 0%, 94% 100%, 0% 100%)' }}
+            >
+              START FRESH
+            </button>
+          </div>
+        )}
 
         {/* Third option — ghost / transient path, visually distinct */}
         <div className="mt-20 md:mt-24">
@@ -668,6 +731,51 @@ export default function FitnessPage() {
         onComplete={handleTransitionComplete}
       />
       <TierUpFlourish />
+      {startFreshOpen && draftSummary && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          onClick={() => setStartFreshOpen(false)}
+          style={{
+            position: 'fixed', inset: 0, zIndex: 1000,
+            background: 'rgba(7,7,8,0.85)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            padding: '1.5rem',
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: '#0d0d10', border: '2px solid #d4181f',
+              padding: '1.5rem', maxWidth: 360, width: '100%',
+              clipPath: 'polygon(4% 0%, 100% 0%, 96% 100%, 0% 100%)',
+            }}
+          >
+            <div className="font-mono text-[10px] tracking-[0.3em] uppercase text-gtl-red mb-3">DISCARD DRAFT</div>
+            <p className="font-display text-xl text-gtl-chalk leading-tight mb-4">
+              Discard current draft? You've picked {draftSummary.carvedDays} day{draftSummary.carvedDays === 1 ? '' : 's'}.
+            </p>
+            <div className="flex gap-3 justify-end">
+              <button
+                type="button"
+                onClick={() => setStartFreshOpen(false)}
+                className="font-mono text-[10px] tracking-[0.3em] uppercase text-gtl-chalk border border-gtl-edge px-4 py-2 hover:border-gtl-red"
+                style={{ clipPath: 'polygon(6% 0%, 100% 0%, 94% 100%, 0% 100%)' }}
+              >
+                CANCEL
+              </button>
+              <button
+                type="button"
+                onClick={handleStartFreshConfirm}
+                className="font-mono text-[10px] tracking-[0.3em] uppercase text-gtl-paper bg-gtl-red border border-gtl-red-bright px-4 py-2 hover:bg-gtl-red-bright"
+                style={{ clipPath: 'polygon(6% 0%, 100% 0%, 94% 100%, 0% 100%)' }}
+              >
+                DISCARD
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   )
 }
