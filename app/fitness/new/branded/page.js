@@ -831,6 +831,19 @@ export default function SchedulePage() {
     return cellDate < todayFlat
   }
 
+  // When a day is deselected, drop its entire chip block from
+  // draft-attunement. Auto-delete is total: the day goes, its chips go
+  // — including custom chips. Mirrors the muscle-removal cleanup in
+  // toggleMuscle but applied at day granularity.
+  const dropDayChips = (key) => {
+    if (!getDraft()) return
+    const draftAtt = getDraftAttunement()
+    if (!draftAtt || !(key in draftAtt)) return
+    const next = { ...draftAtt }
+    delete next[key]
+    setDraftAttunement(next)
+  }
+
   // Tap: toggle in/out of selection batch. Unselecting clears that day's muscles.
   const tapDay = useCallback((d) => {
     if (isPast(d)) return
@@ -850,6 +863,7 @@ export default function SchedulePage() {
         delete next[key]
         return next
       })
+      dropDayChips(key)
     }
   }, [year, month, today, play, selectedDays])
 
@@ -870,6 +884,7 @@ export default function SchedulePage() {
         delete next[key]
         return next
       })
+      dropDayChips(key)
     }
   }, [year, month, today])
 
