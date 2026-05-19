@@ -1095,8 +1095,8 @@ export default function LoadCyclePage() {
       localStorage.setItem(pk('training-days'), JSON.stringify(cycle.days || []))
       localStorage.setItem(pk('daily-plan'), JSON.stringify(cycle.dailyPlan || {}))
     } catch (_) {}
-    fireDestRef.current = '/fitness/new'
-    setFireDest('/fitness/new')
+    fireDestRef.current = '/fitness/edit'
+    setFireDest('/fitness/edit')
     setFireActive(true)
   }
 
