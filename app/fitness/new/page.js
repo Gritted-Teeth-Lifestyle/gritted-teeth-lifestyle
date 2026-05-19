@@ -18,7 +18,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useSound } from '../../../lib/useSound'
 import { useProfileGuard } from '../../../lib/useProfileGuard'
-import { pk } from '../../../lib/storage'
+import { pk, setDraft, clearDraft } from '../../../lib/storage'
 import FireTransition from '../../../components/FireTransition'
 import HeistTransition from '../../../components/HeistTransition'
 import SpeedLines from '../../../components/SpeedLines'
@@ -534,6 +534,18 @@ export default function NewCycleNamePage() {
       // swiped. Flag is normally cleared on /fitness/new/summary, so it
       // sticks if the user bails out of the chain earlier.
       localStorage.removeItem('gtl-quick-forge')
+      // Draft lifecycle: FORGE creates a fresh draft cycle. Clears any
+      // prior draft + draft-attunement + editing-cycle-id per spec.
+      clearDraft()
+      localStorage.removeItem(pk('editing-cycle-id'))
+      setDraft({
+        id: Date.now().toString(),
+        name: name.trim(),
+        muscles: [],
+        days: [],
+        dailyPlan: {},
+        step: 'muscles',
+      })
     } catch (_) {}
     play('brand-confirm')
     // Play a second impact ~400ms in to reinforce the peak of the brand
@@ -821,6 +833,17 @@ export default function NewCycleNamePage() {
                 try {
                   localStorage.setItem(pk('cycle-name'), name.trim())
                   localStorage.setItem('gtl-quick-forge', '1')
+                  // Draft lifecycle: same FORGE create-draft as the tap path.
+                  clearDraft()
+                  localStorage.removeItem(pk('editing-cycle-id'))
+                  setDraft({
+                    id: Date.now().toString(),
+                    name: name.trim(),
+                    muscles: [],
+                    days: [],
+                    dailyPlan: {},
+                    step: 'muscles',
+                  })
                 } catch (_) {}
                 setQuickForgeRunning(true)
                 setQuickHeistActive(true)

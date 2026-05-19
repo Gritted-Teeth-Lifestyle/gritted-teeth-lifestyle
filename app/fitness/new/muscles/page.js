@@ -19,7 +19,7 @@ import { useRouter } from 'next/navigation'
 import dynamic from 'next/dynamic'
 import { useSound } from '../../../../lib/useSound'
 import { useProfileGuard } from '../../../../lib/useProfileGuard'
-import { pk } from '../../../../lib/storage'
+import { pk, getDraft, setDraft } from '../../../../lib/storage'
 import FireTransition from '../../../../components/FireTransition'
 import SlashWipe from '../../../../components/SlashWipe'
 import SpeedLines from '../../../../components/SpeedLines'
@@ -499,6 +499,19 @@ export default function MusclesPage() {
     else if (localStorage.getItem('gtl-quick-forge') === '1') backHref = '/fitness/new'
   } catch (_) {}
   const [selected, setSelected] = useState(() => new Set())
+  // Hydrate from draft.muscles on mount so back-nav preserves selection.
+  useEffect(() => {
+    const draft = getDraft()
+    if (draft && Array.isArray(draft.muscles) && draft.muscles.length > 0) {
+      setSelected(new Set(draft.muscles))
+    }
+  }, [])
+  // Persist draft.muscles on every change.
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    if (!getDraft()) return
+    setDraft({ muscles: [...selected] })
+  }, [selected])
   const [focusedGroup, setFocusedGroup] = useState(null)
   const [modelKey, setModelKey] = useState('goku')
   const [stampRevision, setStampRevision] = useState(0)
@@ -665,6 +678,7 @@ export default function MusclesPage() {
       if (cancelled) return
       const allIds = MUSCLE_GROUPS.map(g => g.id)
       try { localStorage.setItem(pk('muscle-targets'), JSON.stringify(allIds)) } catch (_) {}
+      setDraft({ muscles: allIds, step: 'schedule' })
       setQuickHeistActive(true)
     }, 2400)
     return () => { cancelled = true; clearTimeout(t1); clearTimeout(t2) }
@@ -797,6 +811,7 @@ export default function MusclesPage() {
             {count > 0 && (
               <MobileForgeStamp count={count} onFire={() => {
                 try { localStorage.setItem(pk('muscle-targets'), JSON.stringify([...selected])) } catch (_) {}
+                setDraft({ muscles: [...selected], step: 'schedule' })
                 setFireActive(true)
               }} />
             )}
@@ -989,6 +1004,7 @@ export default function MusclesPage() {
                 <ForgeButton count={count} onFire={() => {
                   play('card-confirm')
                   try { localStorage.setItem(pk('muscle-targets'), JSON.stringify([...selected])) } catch (_) {}
+                  setDraft({ muscles: [...selected], step: 'schedule' })
                   setFireActive(true)
                 }} onHover={() => play('button-hover')} />
               </div>
