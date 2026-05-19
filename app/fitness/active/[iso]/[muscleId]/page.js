@@ -20,7 +20,7 @@ import { useProfileGuard } from '../../../../../lib/useProfileGuard'
 import { pk } from '../../../../../lib/storage'
 import PickerSheet from '../../../../../components/attune/PickerSheet'
 import HeistTransition from '../../../../../components/HeistTransition'
-import { chipsForDay, addChip, useChipsForDay } from '../../../../../lib/attunement'
+import { chipsForDay, addChip, useChipsForDay, replaceExercise } from '../../../../../lib/attunement'
 import { consumePrefire, setInAnimation, disarmChain, subscribeStaged, clearChainTransient } from '../../../../../lib/predictiveTap'
 import {
   calculateSetXP,
@@ -38,7 +38,8 @@ import {
   computeDailyReckoning,
   replaceConsistencyCredit,
 } from '../../../../../lib/exp'
-import { getExerciseById } from '../../../../../lib/exerciseLibrary'
+import { getExerciseById, exercisesByMuscle } from '../../../../../lib/exerciseLibrary'
+import { byNotoriety } from '../../../../../lib/exerciseNotoriety'
 import BodyweightModal from '../../../../../components/onboarding/BodyweightModal'
 import SetXPCinematic from '../../../../../components/exp/SetXPCinematic'
 
@@ -1241,7 +1242,7 @@ function SetChip({ setIndex, set, hasData, ghostSet, onOpen, play }) {
 }
 
 /* ── Single exercise row — dynamic set chips + ADD SET ── */
-function ExerciseRow({ name, index, sets, ghostSets, onOpen, onAddSet, onDeleteSet }) {
+function ExerciseRow({ name, index, sets, ghostSets, onOpen, onAddSet, onDeleteSet, onReplace }) {
   const { play } = useSound()
   const rowRef = useRef(null)
   const selected = sets.some((s) => s.reps > 0)
@@ -1342,9 +1343,99 @@ function ExerciseRow({ name, index, sets, ghostSets, onOpen, onAddSet, onDeleteS
               </div>
             </button>
           )}
+          {onReplace && (
+            <button
+              type="button"
+              onClick={() => { play('button-hover'); onReplace() }}
+              onMouseEnter={() => play('button-hover')}
+              className="relative cursor-pointer select-none outline-none focus-visible:outline-2 focus-visible:outline-gtl-red shrink-0"
+            >
+              <div
+                className="flex flex-col items-center px-3 py-2"
+                style={{
+                  clipPath: 'polygon(6% 0%, 100% 0%, 94% 100%, 0% 100%)',
+                  background: '#0d0d10',
+                  border: '1px dashed #3a3a42',
+                  minWidth: '64px',
+                }}
+              >
+                <span className="font-display leading-none" style={{ fontSize: 'clamp(0.7rem, 1.2vw, 0.9rem)', color: '#c8c8c8' }}>⇄</span>
+                <span className="font-mono text-[7px] tracking-[0.3em] uppercase leading-none mt-0.5" style={{ color: '#c8c8c8' }}>REPLACE</span>
+              </div>
+            </button>
+          )}
         </div>
       </div>
     </li>
+  )
+}
+
+/* ── Replace-exercise modal: scrollable list of exercises for this muscle ── */
+function ReplaceExerciseModal({ muscleId, currentExerciseId, onPick, onClose }) {
+  const options = useMemo(() => {
+    return exercisesByMuscle(muscleId).slice().sort(byNotoriety)
+  }, [muscleId])
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: 'fixed', inset: 0, zIndex: 1000,
+        background: 'rgba(7,7,8,0.85)',
+        display: 'flex', alignItems: 'flex-end', justifyContent: 'center',
+      }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          width: '100%', maxWidth: 520,
+          maxHeight: '80vh',
+          background: '#0d0d10',
+          border: '2px solid #d4181f',
+          borderBottom: 'none',
+          display: 'flex', flexDirection: 'column',
+        }}
+      >
+        <div style={{
+          padding: '0.75rem 1rem',
+          borderBottom: '1px solid #2a2a30',
+          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+        }}>
+          <span className="font-mono" style={{ fontSize: '10px', letterSpacing: '0.3em', color: '#c8c8c8' }}>REPLACE EXERCISE</span>
+          <button
+            type="button"
+            onClick={onClose}
+            style={{ background: 'transparent', border: 'none', color: '#c8c8c8', fontSize: '18px', cursor: 'pointer' }}
+          >
+            ✕
+          </button>
+        </div>
+        <div style={{ overflowY: 'auto', flex: 1 }}>
+          {options.map((ex) => {
+            const isCurrent = ex.id === currentExerciseId
+            return (
+              <button
+                key={ex.id}
+                type="button"
+                disabled={isCurrent}
+                onClick={() => onPick(ex.id)}
+                style={{
+                  display: 'block', width: '100%', textAlign: 'left',
+                  padding: '0.75rem 1rem',
+                  borderBottom: '1px solid #1a1a20',
+                  background: isCurrent ? 'rgba(212,24,31,0.12)' : 'transparent',
+                  color: isCurrent ? '#3a3a42' : '#e8e8e8',
+                  fontFamily: 'var(--font-display, Anton, sans-serif)',
+                  fontSize: '1rem',
+                  cursor: isCurrent ? 'default' : 'pointer',
+                }}
+              >
+                {ex.label}{isCurrent ? '  (current)' : ''}
+              </button>
+            )
+          })}
+        </div>
+      </div>
+    </div>
   )
 }
 
@@ -1457,6 +1548,7 @@ function ExercisePanel({ muscleId, dayIso, originRect, onClose, cycleId, onAddMo
   const [weights, setWeights]           = useState({})
   const [setCounts, setSetCounts]       = useState({}) // exerciseName → number of sets (default 2)
   const [priorData, setPriorData]       = useState({}) // exerciseName → { weight: [], reps: [] } from prior days
+  const [replaceTargetId, setReplaceTargetId] = useState(null) // exerciseId of chip being replaced
   // shaking — used to wobble the panel briefly on certain events.
   const [shaking, setShaking]             = useState(false)
   const [activeExercise, setActiveExercise] = useState(null)
@@ -1873,6 +1965,7 @@ function ExercisePanel({ muscleId, dayIso, originRect, onClose, cycleId, onAddMo
                   return updated
                 })
               }}
+              onReplace={() => setReplaceTargetId(name)}
             />
           ))}
 
@@ -1952,6 +2045,24 @@ function ExercisePanel({ muscleId, dayIso, originRect, onClose, cycleId, onAddMo
         snapshot={activeCinematic.snapshot}
         tierName={activeCinematic.tierName}
         onComplete={() => setActiveCinematic(null)}
+      />
+    )}
+    {replaceTargetId && (
+      <ReplaceExerciseModal
+        muscleId={muscleId}
+        currentExerciseId={replaceTargetId}
+        onClose={() => setReplaceTargetId(null)}
+        onPick={(newExerciseId) => {
+          const targetChip = (dayChips || []).find((c) => c.exerciseId === replaceTargetId)
+          if (targetChip) {
+            replaceExercise(cycleId, 'chip', {
+              dayId: dayIso,
+              chipId: targetChip.id,
+              newExerciseId,
+            })
+          }
+          setReplaceTargetId(null)
+        }}
       />
     )}
     </>
