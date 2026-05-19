@@ -18,7 +18,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { DndContext, PointerSensor, useSensor, useSensors } from '@dnd-kit/core'
-import { pk } from '../../lib/storage'
+import { pk, getDraft, setDraft } from '../../lib/storage'
 import RetreatButton from '../../components/RetreatButton'
 import CycleCalendar from '../../components/attune/CycleCalendar'
 import PickerSheet from '../../components/attune/PickerSheet'
@@ -48,6 +48,23 @@ function loadActiveCycle() {
   }
 }
 
+// Prefer the in-flight draft cycle if one exists; otherwise fall back to
+// the promoted active cycle. The draft IS source of truth for any
+// FORGE/HONE/CARVE/ATTUNE editing — only ETCH promotes it.
+function loadDraftOrActive() {
+  const draft = getDraft()
+  if (draft && draft.id) {
+    return {
+      id: draft.id,
+      name: draft.name,
+      days: Array.isArray(draft.days) ? draft.days : [],
+      dailyPlan: draft.dailyPlan && typeof draft.dailyPlan === 'object' ? draft.dailyPlan : {},
+      targets: Array.isArray(draft.muscles) ? draft.muscles : [],
+    }
+  }
+  return loadActiveCycle()
+}
+
 function persistCycleMuscleAssignment(cycle, dayId, muscle) {
   if (!cycle || !dayId || !muscle) return cycle
   const nextDailyPlan = { ...(cycle.dailyPlan || {}) }
@@ -57,10 +74,17 @@ function persistCycleMuscleAssignment(cycle, dayId, muscle) {
   }
   const nextCycle = { ...cycle, dailyPlan: nextDailyPlan }
   try {
-    const raw = localStorage.getItem(pk('cycles'))
-    const cycles = raw ? JSON.parse(raw) : []
-    const updated = cycles.map(c => c.id === nextCycle.id ? nextCycle : c)
-    localStorage.setItem(pk('cycles'), JSON.stringify(updated))
+    // If the cycle is the in-flight draft, write to the draft slot; never
+    // mutate pk('cycles') from the editing flow.
+    const draft = getDraft()
+    if (draft && draft.id === nextCycle.id) {
+      setDraft({ dailyPlan: nextDailyPlan })
+    } else {
+      const raw = localStorage.getItem(pk('cycles'))
+      const cycles = raw ? JSON.parse(raw) : []
+      const updated = cycles.map(c => c.id === nextCycle.id ? nextCycle : c)
+      localStorage.setItem(pk('cycles'), JSON.stringify(updated))
+    }
     localStorage.setItem(pk('daily-plan'), JSON.stringify(nextDailyPlan))
   } catch (_) {}
   return nextCycle
@@ -86,7 +110,7 @@ export default function AttunePage() {
   const bypassGuardRef = useRef(false)
 
   useEffect(() => {
-    setCycle(loadActiveCycle())
+    setCycle(loadDraftOrActive())
   }, [])
 
   // Live count of empty workout days — drives both the guard's count
