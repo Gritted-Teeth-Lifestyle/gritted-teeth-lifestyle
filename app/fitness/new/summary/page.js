@@ -10,7 +10,7 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { useSound } from '../../../../lib/useSound'
 import { useProfileGuard } from '../../../../lib/useProfileGuard'
-import { pk } from '../../../../lib/storage'
+import { pk, promoteDraft } from '../../../../lib/storage'
 import FireTransition from '../../../../components/FireTransition'
 import RetreatButton from '../../../../components/RetreatButton'
 import SpeedLines from '../../../../components/SpeedLines'
@@ -2768,22 +2768,29 @@ export default function SummaryPage() {
   const handleBeginRef = useRef(null)
   const handleBegin = () => {
     play('card-confirm')
+    // ETCH: promote the draft cycle into pk('cycles'), move draft-attunement
+    // → attunement-{realId}, clear draft slot + editing-cycle-id, set
+    // active-cycle-id. Fallback path (no draft) commits from local state in
+    // case ETCH is reached without going through FORGE first.
     try {
-      const existing  = JSON.parse(localStorage.getItem(pk('cycles')) || '[]')
-      const editingId = localStorage.getItem(pk('editing-cycle-id'))
-      if (editingId) {
-        const updated = existing.map((c) =>
-          c.id === editingId ? { ...c, name: cycleName, targets, days, dailyPlan } : c
-        )
-        localStorage.setItem(pk('cycles'), JSON.stringify(updated))
-        localStorage.removeItem(pk('editing-cycle-id'))
-      } else {
-        const cycle = {
-          id: Date.now().toString(),
-          name: cycleName, targets, days, dailyPlan,
-          createdAt: new Date().toISOString(),
+      const realId = promoteDraft()
+      if (!realId) {
+        const existing  = JSON.parse(localStorage.getItem(pk('cycles')) || '[]')
+        const editingId = localStorage.getItem(pk('editing-cycle-id'))
+        if (editingId) {
+          const updated = existing.map((c) =>
+            c.id === editingId ? { ...c, name: cycleName, targets, days, dailyPlan } : c
+          )
+          localStorage.setItem(pk('cycles'), JSON.stringify(updated))
+          localStorage.removeItem(pk('editing-cycle-id'))
+        } else {
+          const cycle = {
+            id: Date.now().toString(),
+            name: cycleName, targets, days, dailyPlan,
+            createdAt: new Date().toISOString(),
+          }
+          localStorage.setItem(pk('cycles'), JSON.stringify([cycle, ...existing]))
         }
-        localStorage.setItem(pk('cycles'), JSON.stringify([cycle, ...existing]))
       }
     } catch (_) {}
 
