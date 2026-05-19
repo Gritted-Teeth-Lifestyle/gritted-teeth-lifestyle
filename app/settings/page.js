@@ -308,7 +308,12 @@ export default function SettingsPage() {
   const handleHaptics = (next) => {
     setHapticsOn(next)
     writeRaw(KEY_HAPTICS_ON, next ? '1' : '0')
-    if (next && typeof navigator !== 'undefined' && navigator.vibrate) {
+    // Preview pulse — stronger than the normal option-select haptic so the
+    // user gets a clear "this is what HAPTICS will feel like" sample. Routed
+    // through canVibrate() so the handler stays safe even if the
+    // hapticsSupported gate around the UI is ever removed (iOS exposes
+    // navigator.vibrate but it no-ops there).
+    if (next && canVibrate()) {
       try { navigator.vibrate(40) } catch {}
     }
     play(next ? 'option-select' : 'menu-close')
