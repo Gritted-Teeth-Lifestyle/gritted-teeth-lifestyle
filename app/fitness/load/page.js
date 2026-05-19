@@ -1070,10 +1070,33 @@ export default function LoadCyclePage() {
   const handleReview = (cycle) => {
     if (fireActiveRef.current) { skipNow(); return }
     fireActiveRef.current = true
-    loadCycleIntoStorage(cycle)
-    try { localStorage.setItem(pk('editing-cycle-id'), cycle.id) } catch (_) {}
-    fireDestRef.current = '/fitness/edit'
-    setFireDest('/fitness/edit')
+    // Edit-existing: clone the real cycle into the draft slot (NOT into
+    // active-cycle-id — editing is distinct from activating). Clone its
+    // attunement chips into draft-attunement so /attune sees them. Mark
+    // editing-cycle-id so ETCH replaces in-place instead of appending.
+    try {
+      const draft = {
+        id: cycle.id,
+        name: cycle.name,
+        muscles: Array.isArray(cycle.targets) ? [...cycle.targets] : [],
+        days: Array.isArray(cycle.days) ? [...cycle.days] : [],
+        dailyPlan: cycle.dailyPlan && typeof cycle.dailyPlan === 'object' ? { ...cycle.dailyPlan } : {},
+        step: 'muscles',
+      }
+      localStorage.setItem(pk('draft-cycle'), JSON.stringify(draft))
+      const att = localStorage.getItem(pk(`attunement-${cycle.id}`))
+      if (att) localStorage.setItem(pk('draft-attunement'), att)
+      else localStorage.removeItem(pk('draft-attunement'))
+      localStorage.setItem(pk('editing-cycle-id'), cycle.id)
+      // Pre-fill legacy keys so the Name page's editing-hydration sees
+      // the pre-filled cycle-name and the other pages still work mid-edit.
+      localStorage.setItem(pk('cycle-name'), cycle.name)
+      localStorage.setItem(pk('muscle-targets'), JSON.stringify(cycle.targets || []))
+      localStorage.setItem(pk('training-days'), JSON.stringify(cycle.days || []))
+      localStorage.setItem(pk('daily-plan'), JSON.stringify(cycle.dailyPlan || {}))
+    } catch (_) {}
+    fireDestRef.current = '/fitness/new'
+    setFireDest('/fitness/new')
     setFireActive(true)
   }
 
