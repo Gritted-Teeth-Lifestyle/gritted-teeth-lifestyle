@@ -1137,7 +1137,7 @@ export default function LoadCyclePage() {
               href="/fitness/new"
               className="font-mono text-[10px] tracking-[0.3em] uppercase text-gtl-red hover:text-gtl-red-bright transition-colors"
             >
-              ← FORGE YOUR FIRST CYCLE
+              FORGE YOUR FIRST CYCLE ▶︎
             </Link>
           </div>
         ) : (

@@ -764,10 +764,10 @@ export default function StatsPage() {
               Forge your first cycle to start tracking.
             </p>
             <Link
-              href="/fitness/hub"
+              href="/fitness/new"
               className="inline-block mt-8 font-mono text-xs tracking-[0.3em] uppercase text-gtl-red hover:text-gtl-red-bright transition-colors"
             >
-              ← RETURN TO HUB
+              FORGE A CYCLE ▶︎
             </Link>
           </div>
         ) : (
