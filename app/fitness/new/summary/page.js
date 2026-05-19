@@ -10,7 +10,7 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { useSound } from '../../../../lib/useSound'
 import { useProfileGuard } from '../../../../lib/useProfileGuard'
-import { pk, promoteDraft } from '../../../../lib/storage'
+import { pk, promoteDraft, getDraft } from '../../../../lib/storage'
 import FireTransition from '../../../../components/FireTransition'
 import RetreatButton from '../../../../components/RetreatButton'
 import SpeedLines from '../../../../components/SpeedLines'
@@ -2692,6 +2692,17 @@ export default function SummaryPage() {
 
   useEffect(() => {
     try {
+      // Prefer the draft cycle (the in-flight source of truth). Legacy
+      // localStorage keys are read only as a fallback for flows that
+      // pre-date the draft model.
+      const draft = getDraft()
+      if (draft) {
+        if (typeof draft.name === 'string') setCycleName(draft.name)
+        if (Array.isArray(draft.muscles)) setTargets(draft.muscles)
+        if (Array.isArray(draft.days)) setDays(draft.days)
+        if (draft.dailyPlan && typeof draft.dailyPlan === 'object') setDailyPlan(draft.dailyPlan)
+        return
+      }
       const name = localStorage.getItem(pk('cycle-name'))
       const rawT = localStorage.getItem(pk('muscle-targets'))
       const rawD = localStorage.getItem(pk('training-days'))

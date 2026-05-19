@@ -409,6 +409,15 @@ export default function NewCycleNamePage() {
   const [name, setName] = useState(() => {
     if (typeof window === 'undefined') return ''
     try {
+      // Prefer the draft slot — that's the in-flight cycle's name.
+      const draftRaw = window.localStorage.getItem(pk('draft-cycle'))
+      if (draftRaw) {
+        const draft = JSON.parse(draftRaw)
+        if (draft && typeof draft.name === 'string' && draft.name.trim().length > 0) {
+          return draft.name.trim()
+        }
+      }
+      // Legacy fallback for any in-flight flow that pre-dates the draft model.
       const editingId = window.localStorage.getItem(pk('editing-cycle-id'))
       const savedName = window.localStorage.getItem(pk('cycle-name'))
       if (editingId && savedName && savedName.trim().length > 0) return savedName.trim()
@@ -473,11 +482,20 @@ export default function NewCycleNamePage() {
   const fireKickoffTimerRef = useRef(null)
   const NEXT_TARGET = '/fitness/new/muscles'
 
+  // Edit-mode FORGE routes back to /fitness/edit (matches Enter handler);
+  // fresh-cycle FORGE continues the forward chain.
+  const resolveNext = () => {
+    try {
+      if (localStorage.getItem('gtl-back-to-edit') === '1') return '/fitness/edit'
+    } catch (_) {}
+    return NEXT_TARGET
+  }
+
   const skipNow = () => {
     if (skippedRef.current) return
     skippedRef.current = true
     if (fireKickoffTimerRef.current) clearTimeout(fireKickoffTimerRef.current)
-    router.push(NEXT_TARGET)
+    router.push(resolveNext())
   }
 
   // Auto-finish the initial char-stamp cascade (initial.length * 35ms stagger
@@ -534,18 +552,25 @@ export default function NewCycleNamePage() {
       // swiped. Flag is normally cleared on /fitness/new/summary, so it
       // sticks if the user bails out of the chain earlier.
       localStorage.removeItem('gtl-quick-forge')
-      // Draft lifecycle: FORGE creates a fresh draft cycle. Clears any
-      // prior draft + draft-attunement + editing-cycle-id per spec.
-      clearDraft()
-      localStorage.removeItem(pk('editing-cycle-id'))
-      setDraft({
-        id: Date.now().toString(),
-        name: name.trim(),
-        muscles: [],
-        days: [],
-        dailyPlan: {},
-        step: 'muscles',
-      })
+      // Edit-from-hub mode: update the existing draft's name in place
+      // and return to the edit hub. Don't wipe the draft.
+      const backToEdit = localStorage.getItem('gtl-back-to-edit') === '1'
+      if (backToEdit) {
+        setDraft({ name: name.trim() })
+      } else {
+        // FORGE path: fresh cycle creation. Clears any prior draft +
+        // draft-attunement + editing-cycle-id per spec.
+        clearDraft()
+        localStorage.removeItem(pk('editing-cycle-id'))
+        setDraft({
+          id: Date.now().toString(),
+          name: name.trim(),
+          muscles: [],
+          days: [],
+          dailyPlan: {},
+          step: 'muscles',
+        })
+      }
     } catch (_) {}
     play('brand-confirm')
     // Play a second impact ~400ms in to reinforce the peak of the brand
@@ -605,7 +630,7 @@ export default function NewCycleNamePage() {
   /** Called from FireTransition when its sequence peaks — navigate now. */
   const handleFireComplete = () => {
     if (skippedRef.current) return
-    router.push(NEXT_TARGET)
+    router.push(resolveNext())
   }
 
   // Skip-the-cascade: once the user has committed (brand+fire on tap, OR
@@ -872,7 +897,7 @@ export default function NewCycleNamePage() {
       <FireTransition active={isFireActive} onComplete={handleFireComplete} />
       {/* First hop on the quick-forge swipe — uses the same HeistTransition the
           home page uses (default 'GRIT THOSE TEETH' red-slash overlay). */}
-      <HeistTransition active={quickHeistActive} onComplete={() => { if (!skippedRef.current) router.push(NEXT_TARGET) }} />
+      <HeistTransition active={quickHeistActive} onComplete={() => { if (!skippedRef.current) router.push(resolveNext()) }} />
       <SpeedLines active={quickForgeRunning} />
     </main>
   )

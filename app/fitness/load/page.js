@@ -1088,12 +1088,6 @@ export default function LoadCyclePage() {
       if (att) localStorage.setItem(pk('draft-attunement'), att)
       else localStorage.removeItem(pk('draft-attunement'))
       localStorage.setItem(pk('editing-cycle-id'), cycle.id)
-      // Pre-fill legacy keys so the Name page's editing-hydration sees
-      // the pre-filled cycle-name and the other pages still work mid-edit.
-      localStorage.setItem(pk('cycle-name'), cycle.name)
-      localStorage.setItem(pk('muscle-targets'), JSON.stringify(cycle.targets || []))
-      localStorage.setItem(pk('training-days'), JSON.stringify(cycle.days || []))
-      localStorage.setItem(pk('daily-plan'), JSON.stringify(cycle.dailyPlan || {}))
     } catch (_) {}
     fireDestRef.current = '/fitness/edit'
     setFireDest('/fitness/edit')
