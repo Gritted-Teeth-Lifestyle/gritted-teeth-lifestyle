@@ -679,41 +679,7 @@ export default function SchedulePage() {
 
   const [selectedDays, setSelectedDays] = useState(new Set())
   const [assignments,  setAssignments]  = useState({})
-
-  // Persist days + dailyPlan into the draft on every change so back-nav
-  // (e.g. Attune → Retreat → Carve) and orphan-chip cleanup always see
-  // current state. Skipped on mount when there's no draft (legacy flow).
-  const draftWritebackReadyRef = useRef(false)
-  useEffect(() => {
-    if (typeof window === 'undefined') return
-    if (!getDraft()) return
-    // Wait one render after mount-hydration so we don't clobber draft with
-    // empty initial state during the first paint.
-    if (!draftWritebackReadyRef.current) {
-      draftWritebackReadyRef.current = true
-      return
-    }
-    const trainingDays = [...selectedDays].sort()
-    const dailyPlan = {}
-    Object.entries(assignments).forEach(([iso, set]) => {
-      if (set && set.size > 0) dailyPlan[iso] = [...set]
-    })
-    // Use the same contiguous-span derivation as persistScheduleDraft so
-    // /attune sees the rest-day-filled timeline the moment the user makes
-    // their first pick.
-    const first = trainingDays[0]
-    const last  = trainingDays[trainingDays.length - 1]
-    let days = []
-    if (first && last) {
-      let cur = new Date(first + 'T00:00:00Z')
-      const end = new Date(last + 'T00:00:00Z')
-      while (cur <= end) {
-        days.push(cur.toISOString().slice(0, 10))
-        cur.setUTCDate(cur.getUTCDate() + 1)
-      }
-    }
-    setDraft({ days, dailyPlan })
-  }, [selectedDays, assignments])
+  const [hydrated, setHydrated] = useState(false)
 
   // Hydrate from the draft cycle on mount, unconditionally. Back-nav from
   // ATTUNE re-enters this page and must see the days + assignments the
@@ -752,7 +718,39 @@ export default function SchedulePage() {
         setAssignments(next)
       }
     } catch (_) {}
+    setHydrated(true)
   }, [])
+
+  // Persist days + dailyPlan into the draft on every change so back-nav
+  // (e.g. Attune → Retreat → Carve) and orphan-chip cleanup always see
+  // current state. Gated on `hydrated` so the empty initial state never
+  // clobbers a freshly-loaded draft (matters in StrictMode where the
+  // effect double-invokes on mount).
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    if (!hydrated) return
+    if (!getDraft()) return
+    const trainingDays = [...selectedDays].sort()
+    const dailyPlan = {}
+    Object.entries(assignments).forEach(([iso, set]) => {
+      if (set && set.size > 0) dailyPlan[iso] = [...set]
+    })
+    // Use the same contiguous-span derivation as persistScheduleDraft so
+    // /attune sees the rest-day-filled timeline the moment the user makes
+    // their first pick.
+    const first = trainingDays[0]
+    const last  = trainingDays[trainingDays.length - 1]
+    let days = []
+    if (first && last) {
+      let cur = new Date(first + 'T00:00:00Z')
+      const end = new Date(last + 'T00:00:00Z')
+      while (cur <= end) {
+        days.push(cur.toISOString().slice(0, 10))
+        cur.setUTCDate(cur.getUTCDate() + 1)
+      }
+    }
+    setDraft({ days, dailyPlan })
+  }, [selectedDays, assignments, hydrated])
 
   const [fireActive,   setFireActive]   = useState(false)
   const [quickHeistActive, setQuickHeistActive] = useState(false)

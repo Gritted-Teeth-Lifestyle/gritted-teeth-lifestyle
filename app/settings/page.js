@@ -8,6 +8,7 @@ import { pk } from '../../lib/storage'
 import NumberRow from '../../components/settings/NumberRow'
 import SexToggle from '../../components/settings/SexToggle'
 import DateRow from '../../components/settings/DateRow'
+import { canVibrate } from '../../lib/platform'
 import {
   BGM_TRACKS,
   BGM_VOLUME_KEY,
@@ -140,6 +141,8 @@ export default function SettingsPage() {
   const [hapticsOn, setHapticsOn] = useState(true)
   const [bgmTrackTitle, setBgmTrackTitle] = useState(null)
   const [bgmVolume, setBgmVolume] = useState(1)
+  // canVibrate() reads navigator — keep it client-only via the `ready` gate.
+  const hapticsSupported = ready && canVibrate()
   const [userBW, setUserBW]       = useState(null)   // R1a: lb integer, profile-scoped
   const [userSex, setUserSex]     = useState('m')    // R1a: 'm' | 'f', default 'm'
   const [userDOB, setUserDOB]     = useState(null)   // R16: ISO 'YYYY-MM-DD' | null, optional
@@ -256,6 +259,10 @@ export default function SettingsPage() {
   }
 
   // R1a: bodyweight (60-500 lb integer). null clears the key.
+  // While the user is typing we accept the raw parsed value without clamping
+  // — clamping mid-keystroke would overwrite partial input (e.g. "1" on the
+  // way to "150" would snap to 60). The commit handler below clamps + persists
+  // on blur.
   const handleBodyweight = (n) => {
     if (n == null) {
       setUserBW(null)
@@ -263,9 +270,19 @@ export default function SettingsPage() {
       return
     }
     if (!Number.isFinite(n)) return
-    const clamped = Math.max(60, Math.min(500, Math.round(n)))
-    setUserBW(clamped)
-    try { localStorage.setItem(pk('user-bodyweight'), String(clamped)) } catch (_) {}
+    setUserBW(n)
+  }
+
+  const commitBodyweight = () => {
+    setUserBW((current) => {
+      if (current == null) {
+        try { localStorage.removeItem(pk('user-bodyweight')) } catch (_) {}
+        return null
+      }
+      const clamped = Math.max(60, Math.min(500, Math.round(current)))
+      try { localStorage.setItem(pk('user-bodyweight'), String(clamped)) } catch (_) {}
+      return clamped
+    })
   }
 
   const handleSex = (next) => {
@@ -495,15 +512,20 @@ export default function SettingsPage() {
             </div>
           )}
 
-          {/* HAPTICS */}
-          <div className="mb-8">
-            <div className="flex items-center gap-4 mb-3">
-              <div className="h-px w-8 bg-gtl-edge" />
-              <span className="font-matisse text-[9px] tracking-[0.4em] uppercase text-gtl-smoke">HAPTICS</span>
-              <div className="h-px flex-1 bg-gtl-edge" />
+          {/* HAPTICS — only rendered on platforms that actually vibrate. iOS
+              Safari / Chrome iOS PWA expose navigator.vibrate but it's a
+              no-op there, so canVibrate() hides the toggle entirely rather
+              than letting the user toggle a dead setting. */}
+          {hapticsSupported && (
+            <div className="mb-8">
+              <div className="flex items-center gap-4 mb-3">
+                <div className="h-px w-8 bg-gtl-edge" />
+                <span className="font-matisse text-[9px] tracking-[0.4em] uppercase text-gtl-smoke">HAPTICS</span>
+                <div className="h-px flex-1 bg-gtl-edge" />
+              </div>
+              <Toggle label="VIBRATION" value={hapticsOn} onChange={handleHaptics} />
             </div>
-            {ready && <Toggle label="VIBRATION" value={hapticsOn} onChange={handleHaptics} />}
-          </div>
+          )}
 
           {/* WARRIOR DATA — R1a IPF GL inputs: bodyweight + sex. Profile-scoped via pk(). */}
           {ready && activeProfile && (
@@ -519,6 +541,7 @@ export default function SettingsPage() {
                   value={userBW}
                   unit="LBS"
                   onChange={handleBodyweight}
+                  onCommit={commitBodyweight}
                   min={60}
                   max={500}
                   step={1}

@@ -21,17 +21,22 @@ export default function NumberRow({
   value,
   unit = '',
   onChange,
+  onCommit,
   min,
   max,
   step = 1,
   placeholder,
 }) {
   // Local string mirror so the user can clear the field without flickering
-  // back to the parsed number. Sync on external prop changes.
+  // back to the parsed number. Sync on external prop changes, but NOT while
+  // the input is focused — mid-typing clamps from the parent would otherwise
+  // overwrite partial keystrokes (e.g. "1" of "150" becomes "60").
   const [text, setText] = useState(value == null ? '' : String(value))
+  const [focused, setFocused] = useState(false)
   useEffect(() => {
+    if (focused) return
     setText(value == null ? '' : String(value))
-  }, [value])
+  }, [value, focused])
 
   const handleChange = (e) => {
     const raw = e.target.value
@@ -40,6 +45,11 @@ export default function NumberRow({
     const n = parseFloat(raw)
     if (!Number.isFinite(n)) { onChange(null); return }
     onChange(n)
+  }
+
+  const handleBlur = () => {
+    setFocused(false)
+    if (onCommit) onCommit()
   }
 
   return (
@@ -58,6 +68,8 @@ export default function NumberRow({
             enterKeyHint="done"
             value={text}
             onChange={handleChange}
+            onFocus={() => setFocused(true)}
+            onBlur={handleBlur}
             min={min}
             max={max}
             step={step}
