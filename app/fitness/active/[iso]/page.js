@@ -2049,9 +2049,22 @@ function DayFocus({ iso, muscles, isLastDay, originRect, onClose, cycleId, onMus
   // with the click. The actual hop+HT lives on the page-export wrapper —
   // we just call onMuscleHop and let the parent fire HeistTransition +
   // router.push to /fitness/active/[iso]/[muscleId].
+  //
+  // Rest-day branch: NO REST sits in the canonical hero slot (see gtl3's
+  // 2333084 — rest day mirrors the muscle rolodex). The 'muscle' intent
+  // staged from /fitness/active's today HT still lands here; we just have
+  // no muscle to route to. Consume the intent anyway so it doesn't haunt
+  // the queue, then disarm — the chain naturally terminates at iso and
+  // the user picks NO REST / EAT / REST manually. Without consuming on
+  // rest day, the intent sits until TTL (10s) and may misfire if the user
+  // converts rest → workout within that window and a re-mount runs the
+  // consume effect a second time.
   useEffect(() => {
-    if (!hasWork) return
     const intent = consumePrefire('muscle')
+    if (!hasWork) {
+      if (intent) disarmChain('rest-day-terminal')
+      return
+    }
     if (intent) {
       // Use heroMuscle (first uncomplete) to match what the rolodex
       // auto-centers on. Falls back to muscles[0] if all are complete.
