@@ -2179,7 +2179,9 @@ function DayFocus({ iso, muscles, isLastDay, originRect, onClose, cycleId, onMus
   const rolodexRef = useRef(null)
   const ACTIVE_TOP_Y = 479
   const heroMuscle = (() => {
-    if (!hasWork) return null
+    // Rest-day rolodex: NO REST sits in the hero slot so the predictive-tap
+    // chain hits the same canonical y=479 zone it would on a workout day.
+    if (!hasWork) return 'norest'
     for (const id of muscles) {
       if (!isMuscleComplete(cycleId, iso, id)) return id
     }
@@ -2192,7 +2194,6 @@ function DayFocus({ iso, muscles, isLastDay, originRect, onClose, cycleId, onMus
   // scroll event, pulling the closest card to y=479 — no settling
   // between cards. Mirrors the parent /fitness/active rolodex.
   useEffect(() => {
-    if (!hasWork) return
     const container = rolodexRef.current
     if (!container) return
 
@@ -2235,7 +2236,7 @@ function DayFocus({ iso, muscles, isLastDay, originRect, onClose, cycleId, onMus
       ro.disconnect()
       if (snapTimer) clearTimeout(snapTimer)
     }
-  }, [hasWork, muscles])
+  }, [hasWork, muscles, heroMuscle])
 
   // Auto-center the hero muscle to viewport y=479 on mount + on hero
   // change. Direct scrollTop assignment with retries — mirrors the
@@ -2244,7 +2245,6 @@ function DayFocus({ iso, muscles, isLastDay, originRect, onClose, cycleId, onMus
   // the retries cover the case where the first frame measures before
   // paddingTop:60vh has laid out fully.
   useEffect(() => {
-    if (!hasWork) return
     const container = rolodexRef.current
     if (!container || !heroMuscle) return
     let cancelled = false
@@ -2766,63 +2766,101 @@ function DayFocus({ iso, muscles, isLastDay, originRect, onClose, cycleId, onMus
             )}
               </div>
             ) : (
-              // Rest-day rolodex: three vertical options replace the muscle
-              // list. NO REST is in the hero slot (where the centered muscle
-              // would normally be — same y=466 canonical zone). EAT + REST
-              // sit below as rolodex siblings.
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', alignItems: 'stretch' }}>
-                {/* NO REST — converts the rest day to a workout via picker. */}
-                <button
-                  type="button"
-                  onClick={() => setRestPickerOpen(true)}
-                  data-predictive-tap-target="muscle"
-                  className="flex items-center gap-3 py-4 px-6 cursor-pointer"
-                  style={{
-                    background: '#d4181f',
-                    border: '1px solid rgba(212,24,31,0.9)',
-                    clipPath: 'polygon(4% 0%, 100% 0%, 96% 100%, 0% 100%)',
-                    boxShadow: '0 0 24px rgba(212,24,31,0.4)',
-                  }}
-                >
-                  <span className="font-display leading-none"
-                    style={{ fontSize: 'clamp(1.6rem, 3.2vw, 2.4rem)', color: '#f5f0e8', textShadow: '2px 2px 0 #070708', letterSpacing: '0.04em', transform: 'rotate(-1deg)' }}>
-                    NO REST
-                  </span>
-                </button>
-
-                {/* EAT — routes to the diet tracker. */}
-                <button
-                  type="button"
-                  onClick={() => router.push('/diet')}
-                  className="flex items-center gap-3 py-3 px-6 cursor-pointer"
-                  style={{
-                    background: 'transparent',
-                    border: '1px solid rgba(212,24,31,0.6)',
-                    clipPath: 'polygon(4% 0%, 100% 0%, 96% 100%, 0% 100%)',
-                  }}
-                >
-                  <span className="font-display leading-none"
-                    style={{ fontSize: 'clamp(1.2rem, 2.5vw, 1.7rem)', color: '#d4181f', letterSpacing: '0.04em' }}>
-                    EAT
-                  </span>
-                </button>
-
-                {/* REST — acknowledges the rest day; no route (the existing
-                    BRING ON TOMORROW button at the bottom handles stamping). */}
-                <button
-                  type="button"
-                  className="flex items-center gap-3 py-3 px-6 cursor-default"
-                  style={{
-                    background: 'transparent',
-                    border: '1px solid rgba(212,24,31,0.3)',
-                    clipPath: 'polygon(4% 0%, 100% 0%, 96% 100%, 0% 100%)',
-                  }}
-                >
-                  <span className="font-display leading-none"
-                    style={{ fontSize: 'clamp(1.2rem, 2.5vw, 1.7rem)', color: 'rgba(212,24,31,0.55)', letterSpacing: '0.04em' }}>
-                    REST
-                  </span>
-                </button>
+              // Rest-day rolodex: mirrors the workout-day rolodex MECHANICS
+              // exactly (scroll container, 60vh phantom space, --rolodex-t
+              // opacity falloff, tap-to-center gating, auto-center hero).
+              // Three options replace the muscle cards; NO REST is the hero
+              // so the predictive-tap chain target lands at canonical y=479.
+              <div
+                ref={rolodexRef}
+                data-rolodex-container
+                data-scroll-passthrough
+                style={{
+                  flex: '1 1 0%',
+                  minHeight: 0,
+                  height: '100%',
+                  overflowY: 'auto',
+                  overflowX: 'hidden',
+                  WebkitOverflowScrolling: 'touch',
+                  overscrollBehaviorY: 'contain',
+                  touchAction: 'pan-y',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '12px',
+                  paddingTop: '60vh',
+                  paddingBottom: '60vh',
+                }}
+              >
+                {[
+                  { id: 'norest', label: 'NO REST', kind: 'hero',     onClick: () => setRestPickerOpen(true) },
+                  { id: 'eat',    label: 'EAT',    kind: 'secondary', onClick: () => router.push('/diet') },
+                  { id: 'rest',   label: 'REST',   kind: 'muted',     onClick: null },
+                ].map((opt) => {
+                  const isHero = opt.id === 'norest'
+                  return (
+                    <div
+                      key={opt.id}
+                      data-rolodex-muscle={opt.id}
+                      onClickCapture={(e) => {
+                        // Tap-to-select-then-open: centered card → click
+                        // bubbles to the button; non-centered card → block
+                        // and scroll the tapped card to the active line.
+                        const wrapper = e.currentTarget
+                        if (!wrapper.hasAttribute('data-rolodex-centered')) {
+                          e.preventDefault()
+                          e.stopPropagation()
+                          wrapper.scrollIntoView({ behavior: 'smooth', block: 'center' })
+                        }
+                      }}
+                      style={{
+                        flexShrink: 0,
+                        minHeight: '56px',
+                        opacity: 'calc(0.7 + 0.3 * var(--rolodex-t, 0))',
+                        transition: 'opacity 100ms linear',
+                      }}
+                    >
+                      <button
+                        type="button"
+                        onClick={opt.onClick || (() => {})}
+                        data-predictive-tap-target={isHero ? 'muscle' : undefined}
+                        className={`flex items-center gap-3 w-full ${opt.kind === 'muted' ? 'cursor-default' : 'cursor-pointer'} ${opt.kind === 'hero' ? 'py-4 px-6' : 'py-3 px-6'}`}
+                        style={
+                          opt.kind === 'hero'
+                            ? {
+                                background: '#d4181f',
+                                border: '1px solid rgba(212,24,31,0.9)',
+                                clipPath: 'polygon(4% 0%, 100% 0%, 96% 100%, 0% 100%)',
+                                boxShadow: '0 0 24px rgba(212,24,31,0.4)',
+                              }
+                            : opt.kind === 'secondary'
+                            ? {
+                                background: 'transparent',
+                                border: '1px solid rgba(212,24,31,0.6)',
+                                clipPath: 'polygon(4% 0%, 100% 0%, 96% 100%, 0% 100%)',
+                              }
+                            : {
+                                background: 'transparent',
+                                border: '1px solid rgba(212,24,31,0.3)',
+                                clipPath: 'polygon(4% 0%, 100% 0%, 96% 100%, 0% 100%)',
+                              }
+                        }
+                      >
+                        <span
+                          className="font-display leading-none"
+                          style={
+                            opt.kind === 'hero'
+                              ? { fontSize: 'clamp(1.6rem, 3.2vw, 2.4rem)', color: '#f5f0e8', textShadow: '2px 2px 0 #070708', letterSpacing: '0.04em', transform: 'rotate(-1deg)' }
+                              : opt.kind === 'secondary'
+                              ? { fontSize: 'clamp(1.2rem, 2.5vw, 1.7rem)', color: '#d4181f', letterSpacing: '0.04em' }
+                              : { fontSize: 'clamp(1.2rem, 2.5vw, 1.7rem)', color: 'rgba(212,24,31,0.55)', letterSpacing: '0.04em' }
+                          }
+                        >
+                          {opt.label}
+                        </span>
+                      </button>
+                    </div>
+                  )
+                })}
               </div>
             )}
           </div>
