@@ -1,6 +1,6 @@
 'use client'
 import { useEffect, useRef, useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import CallingCard from '../components/CallingCard'
 import HeistTransition from '../components/HeistTransition'
 import GateScreen from '../components/GateScreen'
@@ -294,6 +294,28 @@ export default function Home() {
     return () => window.removeEventListener('pageshow', onPageShow)
   }, [])
 
+  // Set the gate-warmup session cookie on mount. Middleware reads this
+  // to allow non-gate routes to pass through without redirecting back
+  // here. Session-scoped (no max-age) — fresh browser sessions re-warm.
+  useEffect(() => {
+    try {
+      document.cookie = 'gtl-warm=1; path=/; SameSite=Lax'
+    } catch (_) {}
+  }, [])
+
+  // returnTo deep-link handling. Middleware bounces direct deep-links to
+  // /?returnTo=<original>; the gate honors it as the post-activation
+  // destination regardless of fitness/nutrition pick.
+  const isSafeReturnTo = (rt) =>
+    typeof rt === 'string' &&
+    rt.startsWith('/') &&
+    !rt.startsWith('//') &&            // protocol-relative
+    !rt.includes('://')                // absolute URL
+
+  const searchParams = useSearchParams()
+  const returnToRaw = searchParams?.get('returnTo')
+  const returnTo = isSafeReturnTo(returnToRaw) ? returnToRaw : null
+
   // phase: 'gate' (default) → 'flash-fitness' | 'flash-nutrition' → route
   //   or:  'gate' → 'heist' (swipe during entrance: skip flash, play HeistTransition only)
   const [phase, setPhase] = useState('gate')
@@ -313,7 +335,8 @@ export default function Home() {
     // by handleTouchEnd's swipe paths below — calling it here would be too late
     // for iOS PWA's autoplay rules (audio.play must run inside the user gesture).
     play('brand-confirm')
-    const target = kind === 'fitness' ? '/fitness' : '/diet'
+    const defaultTarget = kind === 'fitness' ? '/fitness' : '/diet'
+    const target = returnTo || defaultTarget
     setPhase(kind === 'fitness' ? 'flash-fitness' : 'flash-nutrition')
     setTransitionTarget(target)
     targetRef.current = target
@@ -364,7 +387,8 @@ export default function Home() {
   // double-taps to skip mid-exit). onEnter fires after EXIT_MS once the
   // gate-exit slashes finish.
   const handleGateCommit = (kind) => {
-    targetRef.current = kind === 'fitness' ? '/fitness' : '/diet'
+    const defaultTarget = kind === 'fitness' ? '/fitness' : '/diet'
+    targetRef.current = returnTo || defaultTarget
   }
   const handleGateEnter = (kind) => activate(kind)
 
@@ -372,7 +396,8 @@ export default function Home() {
   // card; play HeistTransition only, then route. Phase set to 'heist' so
   // neither GateScreen nor CallingCardReveal renders behind the transition.
   const handleFastToHeist = (kind) => {
-    const target = kind === 'fitness' ? '/fitness' : '/diet'
+    const defaultTarget = kind === 'fitness' ? '/fitness' : '/diet'
+    const target = returnTo || defaultTarget
     targetRef.current = target
     setTransitionTarget(target)
     setPhase('heist')
