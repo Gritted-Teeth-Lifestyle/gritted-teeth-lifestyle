@@ -406,24 +406,29 @@ export default function NewCycleNamePage() {
   // localStorage lookup; useState initializer reads it on the client only
   // (typeof window check) — server render falls back to empty so hydration
   // matches.
-  const [name, setName] = useState(() => {
-    if (typeof window === 'undefined') return ''
+  // SSR-safe: server always renders ''; client populates after hydration
+  // in the effect below. Eliminates the "Text content did not match" warning
+  // that fired when localStorage was inspected during the useState initializer.
+  const [name, setName] = useState('')
+  useEffect(() => {
     try {
-      // Prefer the draft slot — that's the in-flight cycle's name.
       const draftRaw = window.localStorage.getItem(pk('draft-cycle'))
       if (draftRaw) {
         const draft = JSON.parse(draftRaw)
         if (draft && typeof draft.name === 'string' && draft.name.trim().length > 0) {
-          return draft.name.trim()
+          setName(draft.name.trim())
+          return
         }
       }
-      // Legacy fallback for any in-flight flow that pre-dates the draft model.
       const editingId = window.localStorage.getItem(pk('editing-cycle-id'))
       const savedName = window.localStorage.getItem(pk('cycle-name'))
-      if (editingId && savedName && savedName.trim().length > 0) return savedName.trim()
+      if (editingId && savedName && savedName.trim().length > 0) {
+        setName(savedName.trim())
+        return
+      }
     } catch (_) {}
-    return pickRandomName()
-  })
+    setName(pickRandomName())
+  }, [])
   const nameRef = useRef(name)
   useEffect(() => { nameRef.current = name }, [name])
 
