@@ -133,6 +133,10 @@ function ForgeButton({ forgeRef, disabled, onTap, onSwipe }) {
 
   return (
     <>
+    {/* logo-roll-in-forge: onboarding stencil rolls off the target on mount.
+        translateX value matches the FORGE button's SWIPE_THRESHOLD (294px).
+        Kept as a JSX comment — apostrophes inside <style>{`...`}</style> get
+        SSR-encoded to &#x27; and trip a hydration mismatch. */}
     <style>{`
       @keyframes yy-pulse-left {
         0%, 100% { transform: translateX(0)   scale(1); }
@@ -142,8 +146,6 @@ function ForgeButton({ forgeRef, disabled, onTap, onSwipe }) {
         0%, 100% { transform: translateX(0)    scale(1); }
         50%      { transform: translateX(-7px) scale(1.06); }
       }
-      /* Onboarding: stencil rolls off the target on mount. translateX value
-         matches the FORGE button's SWIPE_THRESHOLD (294px). */
       @keyframes logo-roll-in-forge {
         0%   { transform: translateX(294px) rotate(360deg); }
         100% { transform: translateX(0)     rotate(0deg);   }
