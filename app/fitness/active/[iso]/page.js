@@ -2070,9 +2070,13 @@ function DayFocus({ iso, muscles, isLastDay, originRect, onClose, cycleId, onMus
   const [allWeights, setAllWeights] = useState({})
   const [refreshKey, setRefreshKey] = useState(0)
   const [unlogOpen, setUnlogOpen]   = useState(false)
-  const [stamped, setStamped]       = useState(() => {
-    try { return localStorage.getItem(pk(`done-${cycleId}-${iso}`)) === 'true' } catch { return false }
-  })
+  // SSR-safe: server renders `false`; client populates from localStorage post-mount.
+  const [stamped, setStamped]       = useState(false)
+  useEffect(() => {
+    try {
+      if (localStorage.getItem(pk(`done-${cycleId}-${iso}`)) === 'true') setStamped(true)
+    } catch (_) {}
+  }, [cycleId, iso])
 
   const handleClose = useCallback(() => {
     play('menu-close')
