@@ -429,7 +429,7 @@ export default function ProfilePage() {
             <span className="text-gtl-red inline-block rotate-1">ARE YOU</span>
           </h1>
           <p className="font-mono text-xs tracking-[0.25em] uppercase text-gtl-ash mt-1 max-w-sm">
-            Your cycles, lifts, and EXP belong to you alone.
+            ONE NAME. ONE RECORD. NOTHING SHARED.
           </p>
         </div>
 
@@ -478,7 +478,7 @@ export default function ProfilePage() {
             <button
               type="submit"
               disabled={!trimmed}
-              className="relative shrink-0 outline-none group"
+              className={`relative shrink-0 outline-none group${trimmed ? ' cta-idle-breathe' : ''}`}
             >
               <div
                 className={`absolute inset-0 pointer-events-none transition-colors duration-200

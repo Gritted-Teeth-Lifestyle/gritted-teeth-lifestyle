@@ -166,7 +166,7 @@ function CombatLogPanel({ onClose }) {
           <div className="mt-24 text-center">
             <p className="font-display text-3xl text-gtl-ash">NO SETS LOGGED</p>
             <p className="font-mono text-[10px] tracking-[0.3em] uppercase text-gtl-smoke mt-4">
-              Complete a training day and log your lifts. The record keeps itself.
+              Log a set. Come back and read what you built.
             </p>
           </div>
         )}
@@ -761,7 +761,7 @@ export default function StatsPage() {
           <div className="mt-16 text-center">
             <p className="font-display text-3xl text-gtl-ash">NO BATTLES LOGGED</p>
             <p className="font-mono text-[10px] tracking-[0.3em] uppercase text-gtl-smoke mt-4">
-              Forge your first cycle to start tracking.
+              Nothing's been logged. You know what to do.
             </p>
             <Link
               href="/fitness/new"
@@ -893,7 +893,7 @@ export default function StatsPage() {
         <div className="mt-8 md:mt-16 flex items-center gap-4">
           <div className="h-px flex-1 bg-gtl-edge" />
           <div className="font-mono text-[9px] tracking-[0.4em] uppercase text-gtl-smoke">
-            GRITTED TEETH LIFESTYLE / WAR RECORD
+            <span className="hidden md:inline">GRITTED TEETH LIFESTYLE / </span>WAR RECORD
           </div>
           <div className="h-px flex-1 bg-gtl-edge" />
         </div>

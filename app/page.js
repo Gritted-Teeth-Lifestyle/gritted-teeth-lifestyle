@@ -184,8 +184,8 @@ const FITNESS_CARD = {
 const NUTRITION_CARD = {
   title: 'NUTRITION',
   subtitle: 'TARGET / PALACE 02',
-  body: 'WHAT YOU EAT IS WHO YOU ARE. EVERY MEAL IS A CHOICE. MAKE IT COUNT.',
-  signOff: 'STAY DISCIPLINED',
+  body: 'WHAT YOU PUT IN SHAPES WHAT WALKS OUT. EVERY MEAL IS IN THE RECORD.',
+  signOff: 'NOTHING GOES UNLOGGED',
   rotate: 'rotate-2',
   compact: true,
 }

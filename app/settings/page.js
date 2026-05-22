@@ -449,7 +449,7 @@ export default function SettingsPage() {
               </span>
             </h1>
             <p className="font-matisse text-xs tracking-[0.25em] uppercase text-gtl-ash mt-6 max-w-md">
-              Tune the ritual. Audio, haptics, and the levers that hold your warrior's record.
+              The controls. Dial them in and forget they're here.
             </p>
             {activeProfile && (
               <p className="font-matisse text-[10px] tracking-[0.3em] uppercase text-gtl-smoke mt-3">
@@ -626,7 +626,7 @@ export default function SettingsPage() {
           <div className="mt-12 flex items-center gap-4">
             <div className="h-px flex-1 bg-gtl-edge" />
             <div className="font-matisse text-[9px] tracking-[0.4em] uppercase text-gtl-smoke">
-              GRITTED TEETH LIFESTYLE / SETTINGS
+              <span className="hidden md:inline">GRITTED TEETH LIFESTYLE / </span>SETTINGS
             </div>
             <div className="h-px flex-1 bg-gtl-edge" />
           </div>
