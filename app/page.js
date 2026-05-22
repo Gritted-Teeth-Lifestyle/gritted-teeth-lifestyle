@@ -182,7 +182,7 @@ const NUTRITION_CARD = {
   body: 'WHAT YOU PUT IN SHAPES WHAT WALKS OUT. EVERY MEAL IS IN THE RECORD.',
   signOff: 'NOTHING GOES UNLOGGED',
   rotate: 'rotate-2',
-  compact: false,
+  compact: true,
 }
 
 function CallingCardReveal({ kind }) {
@@ -204,6 +204,9 @@ function CallingCardReveal({ kind }) {
           16%  { opacity: 1; }
           100% { opacity: 1; }
         }
+        /* Phantom-Thieves throw — card flies in diagonally from off-screen
+           top-right while spinning twice CCW, decelerates as it approaches
+           the center, lands with a tiny jitter and settles flat. */
         @keyframes card-spin-throw {
           0%   { opacity: 0; transform: translate(140vw, -90vh) rotate(-720deg) scale(0.55); }
           15%  { opacity: 1; }
@@ -227,45 +230,48 @@ function CallingCardReveal({ kind }) {
           signOff={card.signOff}
           rotate={card.rotate}
           compact={card.compact}
-          onActivate={() => {}}
+          onActivate={() => { /* navigation owned by parent timer */ }}
         />
       </div>
     </div>
   )
 }
 
-// ── Ransom-note title — letter-by-letter mismatched font/bg/color mix ──
-function DoorRansomTitle({ text }) {
-  const RECIPES = [
-    { cls: 'font-display',            color: '#f4ede0', bg: '#0e0e10', tilt: -2 },
-    { cls: 'font-athletic font-black', color: '#0e0e10', bg: '#f4ede0', tilt:  1 },
-    { cls: 'font-display',            color: '#f4ede0', bg: '#d4181f', tilt:  3 },
-    { cls: 'font-athletic font-black', color: '#0e0e10', bg: '#f4ede0', tilt: -1 },
-    { cls: 'font-display',            color: '#d4181f', bg: '#0e0e10', tilt:  2 },
-    { cls: 'font-athletic font-black', color: '#0e0e10', bg: '#f4ede0', tilt: -3 },
-    { cls: 'font-display',            color: '#f4ede0', bg: '#d4181f', tilt:  1 },
-    { cls: 'font-athletic font-black', color: '#f4ede0', bg: '#0e0e10', tilt: -2 },
-    { cls: 'font-display',            color: '#0e0e10', bg: '#f4ede0', tilt:  2 },
+// Ransom-note title for dark war-room panels — inverse of CallingCard's paper version
+function DarkRansomTitle({ text }) {
+  const isLong = text.length > 7
+  const recipes = isLong ? [
+    { font: 'font-display',             size: 'text-3xl md:text-4xl', tilt: '-rotate-2', bg: 'bg-gtl-red',     color: 'text-gtl-paper', pad: 'px-1.5 py-0' },
+    { font: 'font-athletic font-black', size: 'text-4xl md:text-5xl', tilt: 'rotate-1',  bg: '',               color: 'text-gtl-chalk', pad: 'px-1 py-0' },
+    { font: 'font-display',             size: 'text-2xl md:text-3xl', tilt: 'rotate-3',  bg: '',               color: 'text-gtl-red',   pad: 'px-1 py-0' },
+    { font: 'font-athletic font-black', size: 'text-3xl md:text-4xl', tilt: '-rotate-1', bg: 'bg-gtl-surface', color: 'text-gtl-chalk', pad: 'px-1.5 py-0' },
+    { font: 'font-display',             size: 'text-4xl md:text-5xl', tilt: 'rotate-2',  bg: 'bg-gtl-red',     color: 'text-gtl-paper', pad: 'px-1.5 py-0' },
+    { font: 'font-athletic font-black', size: 'text-3xl md:text-4xl', tilt: '-rotate-3', bg: '',               color: 'text-gtl-chalk', pad: 'px-1 py-0' },
+    { font: 'font-display',             size: 'text-2xl md:text-3xl', tilt: 'rotate-1',  bg: 'bg-gtl-ink',     color: 'text-gtl-gold',  pad: 'px-1.5 py-0' },
+    { font: 'font-athletic font-black', size: 'text-4xl md:text-5xl', tilt: '-rotate-2', bg: '',               color: 'text-gtl-chalk', pad: 'px-1 py-0' },
+    { font: 'font-display',             size: 'text-3xl md:text-4xl', tilt: 'rotate-3',  bg: 'bg-gtl-red',     color: 'text-gtl-paper', pad: 'px-1.5 py-0' },
+  ] : [
+    { font: 'font-display',             size: 'text-4xl md:text-5xl', tilt: '-rotate-2', bg: 'bg-gtl-red',     color: 'text-gtl-paper', pad: 'px-2 py-0' },
+    { font: 'font-athletic font-black', size: 'text-5xl md:text-6xl', tilt: 'rotate-1',  bg: '',               color: 'text-gtl-chalk', pad: 'px-1 py-0' },
+    { font: 'font-display',             size: 'text-3xl md:text-4xl', tilt: 'rotate-3',  bg: '',               color: 'text-gtl-red',   pad: 'px-1.5 py-0' },
+    { font: 'font-athletic font-black', size: 'text-4xl md:text-5xl', tilt: '-rotate-1', bg: 'bg-gtl-surface', color: 'text-gtl-chalk', pad: 'px-2 py-0' },
+    { font: 'font-display',             size: 'text-5xl md:text-6xl', tilt: 'rotate-2',  bg: 'bg-gtl-red',     color: 'text-gtl-paper', pad: 'px-2 py-0' },
+    { font: 'font-athletic font-black', size: 'text-4xl md:text-5xl', tilt: '-rotate-3', bg: '',               color: 'text-gtl-chalk', pad: 'px-1 py-0' },
+    { font: 'font-display',             size: 'text-3xl md:text-4xl', tilt: 'rotate-1',  bg: 'bg-gtl-ink',     color: 'text-gtl-gold',  pad: 'px-2 py-0' },
   ]
+  const letters = text.toUpperCase().split('')
   return (
-    <div style={{ display: 'flex', flexWrap: 'nowrap', alignItems: 'flex-end', gap: 2, lineHeight: 1 }}>
-      {text.toUpperCase().split('').map((char, i) => {
-        const r = RECIPES[i % RECIPES.length]
+    <div className="flex flex-wrap items-end gap-x-1 leading-none" aria-label={text}>
+      {letters.map((letter, i) => {
+        const r = recipes[i % recipes.length]
         return (
           <span
             key={i}
-            className={r.cls}
-            style={{
-              display: 'inline-block',
-              fontSize: 'clamp(3rem, 7.5vw, 6rem)',
-              color: r.color,
-              background: r.bg,
-              padding: '0 4px',
-              lineHeight: 1,
-              transform: `rotate(${r.tilt}deg) translateY(${((i % 3) - 1) * 4}px)`,
-            }}
+            className={`inline-block ${r.font} ${r.size} ${r.tilt} ${r.bg} ${r.color} ${r.pad}`}
+            style={{ transform: `translateY(${(i % 3) - 1}px)` }}
+            aria-hidden="true"
           >
-            {char}
+            {letter}
           </span>
         )
       })}
@@ -273,224 +279,358 @@ function DoorRansomTitle({ text }) {
   )
 }
 
-// ── War-room door panel — fills its flex slot, full P5 treatment ──
-function DoorPanel({ kind, onActivate }) {
+// Inner content of a war-room door — separated from the button so hover
+// state can be tracked on the button wrapper and passed down via a render
+// prop / context-free prop drilling pattern isn't needed. Instead the button
+// wraps this and we use CSS :has() or just inline state on the button.
+function WarDoorInner({ kind, hovered, pressed }) {
+  const isFitness = kind === 'fitness'
+  return (
+    <div
+      className="relative flex flex-col justify-between overflow-hidden"
+      style={{ background: '#070708', height: '100%', width: '100%' }}
+    >
+      {/* Noise */}
+      <div className="absolute inset-0 gtl-noise pointer-events-none" aria-hidden="true" />
+
+      {/* Atmospheric corner glow */}
+      <div
+        className="absolute inset-0 pointer-events-none"
+        style={{
+          background: isFitness
+            ? 'linear-gradient(135deg, rgba(122,14,20,0.5) 0%, transparent 55%)'
+            : 'linear-gradient(225deg, rgba(122,14,20,0.5) 0%, transparent 55%)',
+          opacity: hovered ? 1 : 0.5,
+          transition: 'opacity 300ms ease-out',
+        }}
+        aria-hidden="true"
+      />
+
+      {/* Top accent bar */}
+      <div
+        className="absolute top-0 left-0 right-0 pointer-events-none"
+        style={{
+          height: hovered ? 5 : 3,
+          background: hovered ? '#ff2a36' : '#d4181f',
+          transition: 'height 200ms ease-out, background 200ms ease-out',
+        }}
+        aria-hidden="true"
+      />
+
+      {/* Vertical side accent */}
+      <div
+        className="absolute top-0 pointer-events-none"
+        style={{
+          [isFitness ? 'left' : 'right']: 0,
+          width: 4,
+          height: hovered ? 200 : 110,
+          background: '#d4181f',
+          transition: 'height 300ms ease-out',
+        }}
+        aria-hidden="true"
+      />
+
+      {/* Palace number watermark */}
+      <div
+        className="absolute pointer-events-none select-none"
+        aria-hidden="true"
+        style={{
+          bottom: '-2rem',
+          [isFitness ? 'right' : 'left']: '-0.5rem',
+          fontFamily: 'Anton, Impact, sans-serif',
+          fontSize: 'clamp(6rem, 16vw, 16rem)',
+          lineHeight: 0.8,
+          color: '#ffffff',
+          opacity: 0.025,
+          fontWeight: 900,
+          userSelect: 'none',
+        }}
+      >
+        {isFitness ? '01' : '02'}
+      </div>
+
+      {/* Main content */}
+      <div className="relative z-10 flex flex-col p-5 md:p-10 pt-7 md:pt-12 flex-1">
+        {/* Breadcrumb */}
+        <div className="flex items-center gap-3 mb-5 md:mb-8">
+          <div
+            style={{
+              height: 1,
+              width: hovered ? 56 : 32,
+              background: hovered ? '#d4181f' : '#26262a',
+              transition: 'width 300ms ease-out, background 200ms ease-out',
+            }}
+          />
+          <span className="font-mono text-[8px] md:text-[10px] tracking-[0.35em] uppercase text-gtl-smoke">
+            {isFitness ? 'TARGET / PALACE 01' : 'TARGET / PALACE 02'}
+          </span>
+        </div>
+
+        {/* Ransom-note title */}
+        <div className="mb-4 md:mb-6">
+          <DarkRansomTitle text={isFitness ? 'FITNESS' : 'NUTRITION'} />
+        </div>
+
+        {/* Slash divider */}
+        <div
+          className="h-1.5 mb-4 md:mb-6 pointer-events-none"
+          style={{
+            background: hovered ? '#ff2a36' : '#d4181f',
+            transform: 'skewX(-12deg)',
+            transformOrigin: 'left center',
+            width: hovered ? '82%' : '48%',
+            transition: 'width 300ms ease-out, background 200ms ease-out',
+          }}
+          aria-hidden="true"
+        />
+
+        {/* Body */}
+        <p
+          className="font-mono text-[10px] md:text-xs leading-relaxed tracking-wide uppercase max-w-xs"
+          style={{ color: '#4a4a4f' }}
+        >
+          {isFitness
+            ? 'YOUR WEAKNESS HAS BEEN NOTED. THE CLIMB BEGINS THE MOMENT YOU STEP THROUGH.'
+            : 'WHAT YOU PUT IN SHAPES WHAT WALKS OUT. EVERY MEAL IS IN THE RECORD.'}
+        </p>
+      </div>
+
+      {/* CTA */}
+      <div className="relative z-10 p-5 md:p-10 pt-0">
+        <div
+          style={{
+            transform: hovered ? 'translateX(6px)' : 'translateX(0)',
+            transition: 'transform 200ms ease-out',
+            display: 'inline-block',
+          }}
+        >
+          <div style={{ position: 'relative', display: 'inline-block' }}>
+            {/* Shadow slab */}
+            <div
+              aria-hidden="true"
+              style={{
+                position: 'absolute',
+                inset: 0,
+                background: '#4a0a0e',
+                clipPath: 'polygon(4% 0%, 100% 0%, 96% 100%, 0% 100%)',
+                transform: pressed ? 'translate(0,0)' : 'translate(5px, 5px)',
+                transition: 'transform 80ms ease-out',
+              }}
+            />
+            {/* Face */}
+            <div
+              style={{
+                position: 'relative',
+                padding: '0.6rem 1.25rem',
+                clipPath: 'polygon(4% 0%, 100% 0%, 96% 100%, 0% 100%)',
+                background: pressed ? '#ff2a36' : (hovered ? '#e8191f' : '#d4181f'),
+                transform: pressed ? 'translate(5px,5px)' : 'translate(0,0)',
+                transition: 'transform 80ms ease-out, background 100ms ease-out',
+              }}
+            >
+              <span className="font-mono text-[11px] tracking-[0.3em] uppercase font-bold text-gtl-paper">
+                {isFitness ? '▸ ENTER' : '▸ LOG MEAL'}
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Hover red wash */}
+      <div
+        className="absolute inset-0 pointer-events-none"
+        style={{
+          background: 'linear-gradient(135deg, rgba(212,24,31,0.09) 0%, rgba(212,24,31,0.04) 60%, transparent 100%)',
+          opacity: hovered ? 1 : 0,
+          transition: 'opacity 300ms ease-out',
+        }}
+        aria-hidden="true"
+      />
+    </div>
+  )
+}
+
+function WarDoorButton({ kind, onActivate }) {
   const { play } = useSound()
   const [hovered, setHovered] = useState(false)
   const [pressed, setPressed] = useState(false)
-
-  const isFitness = kind === 'fitness'
-  const cfg = isFitness
-    ? {
-        palace:   'PALACE 01',
-        domain:   'PHYSICAL / COMBAT',
-        title:    'FITNESS',
-        body:     'YOUR WEAKNESS HAS BEEN NOTED. THE CLIMB BEGINS THE MOMENT YOU CHOOSE THIS DOOR.',
-        kanji:    '体',
-        bloom:    '15% 20%',
-        gradient: 'linear-gradient(145deg, rgba(212,24,31,0.22) 0%, transparent 55%)',
-        bg:       '#070708',
-      }
-    : {
-        palace:   'PALACE 02',
-        domain:   'FUEL / DISCIPLINE',
-        title:    'NUTRITION',
-        body:     'WHAT YOU PUT IN SHAPES WHAT WALKS OUT. EVERY MEAL IS IN THE RECORD.',
-        kanji:    '食',
-        bloom:    '85% 80%',
-        gradient: 'linear-gradient(-145deg, rgba(212,24,31,0.18) 0%, transparent 55%)',
-        bg:       '#0e0e10',
-      }
-
   return (
     <button
       type="button"
-      className="relative flex-1 overflow-hidden text-left"
+      aria-label={kind === 'fitness' ? 'Enter Fitness' : 'Enter Nutrition'}
+      className="flex-1 outline-none cursor-pointer text-left"
       style={{
-        minHeight: '50svh',
-        background: cfg.bg,
+        padding: 0,
         border: 'none',
-        cursor: 'pointer',
         display: 'flex',
         flexDirection: 'column',
+        // Press feedback on the door itself
+        transform: pressed ? 'scale(0.988)' : 'scale(1)',
+        transition: 'transform 80ms ease-out',
+        paddingBottom: 'env(safe-area-inset-bottom, 0px)',
       }}
+      onClick={onActivate}
       onMouseEnter={() => { setHovered(true); play('card-hover') }}
       onMouseLeave={() => { setHovered(false); setPressed(false) }}
       onPointerDown={() => setPressed(true)}
       onPointerUp={() => setPressed(false)}
-      onPointerCancel={() => { setPressed(false); setHovered(false) }}
-      onClick={() => { play('card-confirm'); onActivate() }}
+      onPointerCancel={() => setPressed(false)}
     >
-      {/* Red atmosphere bloom */}
+      <WarDoorInner kind={kind} hovered={hovered} pressed={pressed} />
+    </button>
+  )
+}
+
+function WarRoom({ onFitness, onNutrition, startMusic }) {
+  const { play } = useSound()
+  const [entered, setEntered] = useState(false)
+  const router = useRouter()
+
+  useEffect(() => {
+    const t = setTimeout(() => setEntered(true), 60)
+    return () => clearTimeout(t)
+  }, [])
+
+  // Prefetch all reachable routes silently while the user reads the doors
+  useEffect(() => {
+    ;['/fitness', '/diet', '/fitness/hub', '/fitness/load', '/fitness/active'].forEach(href => {
+      try { router.prefetch(href) } catch {}
+    })
+  }, [router])
+
+  const handleDoor = (kind) => {
+    startMusic()
+    play('brand-confirm')
+    if (kind === 'fitness') onFitness()
+    else onNutrition()
+  }
+
+  return (
+    <div
+      className="absolute inset-0 flex flex-col"
+      style={{ background: '#070708' }}
+    >
+      <style>{`
+        @keyframes war-door-left {
+          from { transform: translateX(-6%); opacity: 0; }
+          to   { transform: translateX(0);   opacity: 1; }
+        }
+        @keyframes war-door-right {
+          from { transform: translateX(6%);  opacity: 0; }
+          to   { transform: translateX(0);   opacity: 1; }
+        }
+      `}</style>
+
+      {/* Noise */}
+      <div className="absolute inset-0 gtl-noise pointer-events-none" aria-hidden="true" />
+
+      {/* Centre depth bloom */}
       <div
         className="absolute inset-0 pointer-events-none"
         style={{
-          background: `radial-gradient(ellipse at ${cfg.bloom}, rgba(212,24,31,0.4) 0%, transparent 65%)`,
-          opacity: hovered ? 1 : 0.35,
-          transition: 'opacity 500ms ease-out',
+          background: 'radial-gradient(ellipse at 50% 80%, rgba(90,10,15,0.35) 0%, transparent 65%)',
         }}
+        aria-hidden="true"
       />
-      {/* Directional gradient */}
-      <div
-        className="absolute inset-0 pointer-events-none"
-        style={{
-          background: cfg.gradient,
-          opacity: hovered ? 1 : 0.45,
-          transition: 'opacity 400ms ease-out',
-        }}
-      />
+
+      {/* Corner accents */}
+      <div className="absolute top-0 left-0 bg-gtl-red pointer-events-none" style={{ height: 4, width: 120 }} aria-hidden="true" />
+      <div className="absolute top-0 left-0 bg-gtl-red pointer-events-none" style={{ width: 4, height: 120 }} aria-hidden="true" />
+      <div className="absolute bottom-0 right-0 bg-gtl-red pointer-events-none" style={{ height: 4, width: 120 }} aria-hidden="true" />
+      <div className="absolute bottom-0 right-0 bg-gtl-red pointer-events-none" style={{ width: 4, height: 120 }} aria-hidden="true" />
 
       {/* Kanji watermark */}
       <div
         className="absolute pointer-events-none select-none"
         aria-hidden="true"
         style={{
-          ...(isFitness
-            ? { bottom: '-3rem', right: '-1rem' }
-            : { top: '-3rem', left: '-1rem' }),
+          top: '-3rem', left: '-2rem',
           fontFamily: '"FOT-Matisse Pro EB", "Noto Serif JP", serif',
-          fontSize: 'clamp(14rem, 30vw, 22rem)',
+          fontSize: 'clamp(14rem, 40vw, 28rem)',
           lineHeight: 0.8,
           color: '#ffffff',
-          opacity: hovered ? 0.07 : 0.03,
+          opacity: 0.022,
           fontWeight: 900,
-          transition: 'opacity 500ms ease-out',
           userSelect: 'none',
         }}
       >
-        {cfg.kanji}
+        戦
       </div>
 
-      {/* Primary corner accent — fitness: top-left, nutrition: bottom-right */}
-      {isFitness ? (
-        <>
-          <div className="absolute top-0 left-0 bg-gtl-red pointer-events-none"
-               style={{ height: 4, width: hovered ? 200 : 140, transition: 'width 350ms cubic-bezier(0.2,1,0.3,1)' }} />
-          <div className="absolute top-0 left-0 bg-gtl-red pointer-events-none"
-               style={{ width: 4, height: hovered ? 200 : 140, transition: 'height 350ms cubic-bezier(0.2,1,0.3,1)' }} />
-          <div className="absolute bottom-0 right-0 bg-gtl-red pointer-events-none"
-               style={{ height: 3, width: hovered ? 80 : 48, opacity: 0.45, transition: 'width 350ms cubic-bezier(0.2,1,0.3,1)' }} />
-          <div className="absolute bottom-0 right-0 bg-gtl-red pointer-events-none"
-               style={{ width: 3, height: hovered ? 80 : 48, opacity: 0.45, transition: 'height 350ms cubic-bezier(0.2,1,0.3,1)' }} />
-        </>
-      ) : (
-        <>
-          <div className="absolute bottom-0 right-0 bg-gtl-red pointer-events-none"
-               style={{ height: 4, width: hovered ? 200 : 140, transition: 'width 350ms cubic-bezier(0.2,1,0.3,1)' }} />
-          <div className="absolute bottom-0 right-0 bg-gtl-red pointer-events-none"
-               style={{ width: 4, height: hovered ? 200 : 140, transition: 'height 350ms cubic-bezier(0.2,1,0.3,1)' }} />
-          <div className="absolute top-0 left-0 bg-gtl-red pointer-events-none"
-               style={{ height: 3, width: hovered ? 80 : 48, opacity: 0.45, transition: 'width 350ms cubic-bezier(0.2,1,0.3,1)' }} />
-          <div className="absolute top-0 left-0 bg-gtl-red pointer-events-none"
-               style={{ width: 3, height: hovered ? 80 : 48, opacity: 0.45, transition: 'height 350ms cubic-bezier(0.2,1,0.3,1)' }} />
-        </>
-      )}
-
-      {/* Palace badge — parallelogram pill */}
-      <div
-        className="absolute pointer-events-none"
+      {/* Header */}
+      <header
+        className="relative z-10 shrink-0 flex items-center justify-between"
         style={{
-          ...(isFitness ? { top: '1.5rem', right: '1.5rem' } : { top: '1.5rem', left: '1.5rem' }),
-          clipPath: 'polygon(8% 0%, 100% 0%, 92% 100%, 0% 100%)',
-          background: hovered ? '#d4181f' : '#1a1a1e',
-          padding: '0.35rem 1.1rem',
-          transition: 'background 300ms ease-out',
+          padding: '0 1.25rem 0.6rem',
+          paddingTop: 'max(0.75rem, env(safe-area-inset-top))',
+          borderBottom: '1px solid #1a1a1a',
         }}
       >
-        <span
-          className="font-mono text-[9px] tracking-[0.4em] uppercase"
-          style={{ color: hovered ? '#f4ede0' : '#6a6a72', transition: 'color 300ms ease-out' }}
+        <div
+          style={{
+            fontFamily: 'Anton, Impact, sans-serif',
+            fontSize: '1.5rem',
+            color: '#f1eee5',
+            letterSpacing: '-0.02em',
+            textShadow: '2px 2px 0 #d4181f',
+          }}
         >
-          {cfg.palace}
-        </span>
-      </div>
-
-      {/* Main content */}
-      <div
-        className="relative z-10 flex flex-col justify-center flex-1"
-        style={{
-          padding: 'clamp(3rem, 6vw, 5rem) clamp(2rem, 5vw, 4rem)',
-          transform: hovered ? (pressed ? 'translateY(2px)' : 'translateY(-4px)') : 'translateY(0)',
-          transition: pressed ? 'transform 80ms ease-out' : 'transform 300ms ease-out',
-        }}
-      >
-        {/* Step tag */}
-        <div className="flex items-center gap-4 mb-6">
-          <div
-            className="h-px bg-gtl-red flex-shrink-0"
-            style={{ width: hovered ? 48 : 32, transition: 'width 300ms ease-out' }}
-          />
-          <span className="font-mono text-[10px] tracking-[0.3em] uppercase text-gtl-red">
-            {cfg.domain}
+          GTL
+        </div>
+        <div className="flex items-center gap-3">
+          <div className="h-px w-6 bg-gtl-edge" />
+          <span className="font-mono text-[8px] tracking-[0.35em] uppercase text-gtl-smoke">
+            GRITTED TEETH LIFESTYLE
           </span>
         </div>
+      </header>
 
-        {/* Ransom-note title */}
-        <div className="mb-8">
-          <DoorRansomTitle text={cfg.title} />
+      {/* War room doors */}
+      <div
+        className="relative z-10 flex-1 flex flex-col md:flex-row"
+        style={{ minHeight: 0 }}
+      >
+        {/* FITNESS DOOR */}
+        <div
+          className="flex-1 flex flex-col"
+          style={{
+            animation: entered ? 'war-door-left 450ms cubic-bezier(0.2, 1, 0.3, 1) both' : 'none',
+            opacity: entered ? undefined : 0,
+          }}
+        >
+          <WarDoorButton kind="fitness" onActivate={() => handleDoor('fitness')} />
         </div>
 
-        {/* Slash divider */}
+        {/* Divider */}
         <div
-          className="mb-6"
-          style={{
-            height: 5,
-            background: '#d4181f',
-            transform: 'skewX(-12deg)',
-            width: hovered ? '85%' : '55%',
-            transition: 'width 500ms cubic-bezier(0.2, 1, 0.3, 1)',
-          }}
-        />
-
-        {/* Body copy */}
-        <p className="font-mono text-xs tracking-[0.2em] uppercase text-gtl-ash max-w-xs mb-10 leading-relaxed">
-          {cfg.body}
-        </p>
-
-        {/* INFILTRATE — shadow slab CTA */}
-        <div
-          className="relative inline-flex self-start"
-          style={{ opacity: hovered ? 1 : 0.5, transition: 'opacity 300ms ease-out' }}
+          className="shrink-0 relative hidden md:block"
+          aria-hidden="true"
+          style={{ width: 2, background: '#1a1a1a' }}
         >
-          {/* Shadow */}
           <div
-            className="absolute inset-0 bg-gtl-red-deep pointer-events-none"
             style={{
-              clipPath: 'polygon(4% 0%, 100% 0%, 96% 100%, 0% 100%)',
-              transform: pressed ? 'translate(0,0)' : 'translate(6px, 6px)',
-              transition: 'transform 80ms ease-out',
+              position: 'absolute',
+              top: '50%', left: '50%',
+              transform: 'translate(-50%, -50%) skewY(-12deg)',
+              width: 4,
+              height: '38%',
+              background: '#d4181f',
             }}
-            aria-hidden="true"
           />
-          {/* Face */}
-          <div
-            className="relative flex items-center gap-2 px-6 py-3"
-            style={{
-              clipPath: 'polygon(4% 0%, 100% 0%, 96% 100%, 0% 100%)',
-              background: pressed ? '#ff2a36' : '#d4181f',
-              transform: pressed ? 'translate(6px, 6px)' : 'translate(0,0)',
-              transition: 'transform 80ms ease-out, background 80ms ease-out',
-            }}
-          >
-            <span className="font-display text-sm tracking-[0.15em] text-gtl-paper">INFILTRATE</span>
-            <span className="font-display text-base text-gtl-paper leading-none">▶</span>
-          </div>
+        </div>
+
+        {/* NUTRITION DOOR */}
+        <div
+          className="flex-1 flex flex-col"
+          style={{
+            animation: entered ? 'war-door-right 450ms cubic-bezier(0.2, 1, 0.3, 1) 80ms both' : 'none',
+            opacity: entered ? undefined : 0,
+          }}
+        >
+          <WarDoorButton kind="nutrition" onActivate={() => handleDoor('nutrition')} />
         </div>
       </div>
-
-      {/* Hover wash */}
-      <div
-        className="absolute inset-0 pointer-events-none"
-        style={{
-          background: isFitness
-            ? 'linear-gradient(145deg, rgba(212,24,31,0.1) 0%, transparent 60%)'
-            : 'linear-gradient(-145deg, rgba(212,24,31,0.1) 0%, transparent 60%)',
-          opacity: hovered ? 1 : 0,
-          transition: 'opacity 500ms ease-out',
-        }}
-        aria-hidden="true"
-      />
-    </button>
+    </div>
   )
 }
 
@@ -498,8 +638,7 @@ export default function Home() {
   const router = useRouter()
   const { play } = useSound()
 
-  // bfcache restore re-roll — swap singleton to a fresh random track on
-  // back-button returns when random-on-launch is enabled.
+  // bfcache restore re-roll: returning via back button re-picks a random track
   useEffect(() => {
     const onPageShow = (event) => {
       if (!event.persisted) return
@@ -526,25 +665,17 @@ export default function Home() {
     return () => window.removeEventListener('pageshow', onPageShow)
   }, [])
 
-  // Warm up destination route bundles during idle time on the home screen.
-  useEffect(() => {
-    const routes = ['/fitness', '/diet', '/fitness/hub', '/fitness/load', '/fitness/active']
-    routes.forEach(href => { try { router.prefetch(href) } catch {} })
-  }, [router])
-
-  const [phase, setPhase] = useState('idle')
+  const [phase, setPhase] = useState('gate')
   const [transitionTarget, setTransitionTarget] = useState('/fitness')
   const [transitioning, setTransitioning] = useState(false)
   const flashTimerRef = useRef(null)
   const skippedRef = useRef(false)
   const targetRef = useRef('/fitness')
 
+  // activate() is called from WarRoom.handleDoor() — synchronously within the
+  // user gesture, so startBgMusic() inside handleDoor runs in the same tick.
   const activate = (kind) => {
-    if (phase !== 'idle') return
-    // startBgMusic MUST be called synchronously inside the user-gesture handler.
-    // iOS PWA blocks audio.play() outside the synchronous click context.
-    startBgMusic()
-    play('brand-confirm')
+    if (phase !== 'gate') return
     const target = kind === 'fitness' ? '/fitness' : '/diet'
     setPhase(kind === 'fitness' ? 'flash-fitness' : 'flash-nutrition')
     setTransitionTarget(target)
@@ -559,20 +690,20 @@ export default function Home() {
     router.push(targetRef.current)
   }
 
-  // Keyboard: up/left = fitness, down/right = nutrition
+  // Keyboard shortcut: arrow up = fitness, arrow down = nutrition
   useEffect(() => {
-    if (phase !== 'idle') return
+    if (phase !== 'gate') return
     const handler = (e) => {
-      if (e.key === 'ArrowUp' || e.key === 'ArrowLeft')        activate('fitness')
-      else if (e.key === 'ArrowDown' || e.key === 'ArrowRight') activate('nutrition')
+      if (e.key === 'ArrowUp')        { startBgMusic(); play('brand-confirm'); activate('fitness') }
+      else if (e.key === 'ArrowDown') { startBgMusic(); play('brand-confirm'); activate('nutrition') }
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
   }, [phase])
 
-  // Skip-all: once committed, next tap anywhere routes immediately.
+  // Once gate committed, any tap skips straight to route
   useEffect(() => {
-    if (phase === 'idle') return
+    if (phase === 'gate') return
     const handler = () => skipAll()
     window.addEventListener('pointerdown', handler, { capture: true })
     return () => window.removeEventListener('pointerdown', handler, { capture: true })
@@ -586,70 +717,15 @@ export default function Home() {
   return (
     <main
       className="relative overflow-hidden"
-      style={{ minHeight: '100svh', background: '#070708', isolation: 'isolate' }}
+      style={{ minHeight: '100%', background: '#280609', isolation: 'isolate' }}
     >
-      {/* Global noise grain */}
-      <div className="absolute inset-0 gtl-noise pointer-events-none" />
-
-      {/* Global atmospheric gradient */}
-      <div
-        className="absolute inset-0 pointer-events-none"
-        style={{
-          background: 'linear-gradient(135deg, rgba(122,14,20,0.15) 0%, transparent 50%, rgba(74,10,14,0.2) 100%)',
-        }}
-      />
-
-      {/* War-room doors */}
-      {phase === 'idle' && (
-        <div
-          className="relative z-10 flex flex-col md:flex-row"
-          style={{ minHeight: '100svh' }}
-          role="navigation"
-          aria-label="Choose your palace"
-        >
-          <DoorPanel kind="fitness" onActivate={() => activate('fitness')} />
-
-          {/* Seam divider — horizontal on mobile, vertical on desktop */}
-          <style>{`
-            .gtl-seam-div { height: 3px; background: #d4181f; }
-            @media (min-width: 768px) {
-              .gtl-seam-div { height: auto; width: 3px; }
-            }
-          `}</style>
-          <div
-            className="gtl-seam-div flex-shrink-0 self-stretch relative"
-            aria-hidden="true"
-          />
-
-          {/* GTL seal — centered on screen (exactly where the two doors meet) */}
-          <div
-            className="absolute z-20 pointer-events-none"
-            style={{
-              top: '50%',
-              left: '50%',
-              transform: 'translate(-50%, -50%)',
-            }}
-            aria-hidden="true"
-          >
-            <div
-              style={{
-                background: '#070708',
-                border: '2px solid #d4181f',
-                clipPath: 'polygon(6% 0%, 100% 0%, 94% 100%, 0% 100%)',
-                padding: '0.35rem 1.4rem',
-                boxShadow: '0 0 20px rgba(212,24,31,0.4)',
-              }}
-            >
-              <span className="font-mono text-[10px] tracking-[0.5em] uppercase text-gtl-red">
-                GTL
-              </span>
-            </div>
-          </div>
-
-          <DoorPanel kind="nutrition" onActivate={() => activate('nutrition')} />
-        </div>
+      {phase === 'gate' && (
+        <WarRoom
+          onFitness={() => activate('fitness')}
+          onNutrition={() => activate('nutrition')}
+          startMusic={startBgMusic}
+        />
       )}
-
       {phase === 'flash-fitness'   && <CallingCardReveal kind="fitness"   />}
       {phase === 'flash-nutrition' && <CallingCardReveal kind="nutrition" />}
 
