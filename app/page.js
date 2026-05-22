@@ -3,7 +3,6 @@ import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import CallingCard from '../components/CallingCard'
 import HeistTransition from '../components/HeistTransition'
-import GateScreen from '../components/GateScreen'
 import { useSound } from '../lib/useSound'
 import {
   BGM_TRACKS,
@@ -167,12 +166,8 @@ function startBgMusic() {
   }, 50)
 }
 
-const FLASH_DURATION  = 1000    // ms — calling-card hold time before transition kicks in
+const FLASH_DURATION = 1000
 
-// CallingCard reveal — wraps the real CallingCard component (the one the original
-// post-gate home used) inside a centered full-screen backdrop. The card animates
-// in via card-reveal-pop, sits visible for ~FLASH_DURATION, then HeistTransition
-// slashes wipe + push the route.
 const FITNESS_CARD = {
   title: 'FITNESS',
   subtitle: 'TARGET / PALACE 01',
@@ -187,7 +182,7 @@ const NUTRITION_CARD = {
   body: 'WHAT YOU PUT IN SHAPES WHAT WALKS OUT. EVERY MEAL IS IN THE RECORD.',
   signOff: 'NOTHING GOES UNLOGGED',
   rotate: 'rotate-2',
-  compact: true,
+  compact: false,
 }
 
 function CallingCardReveal({ kind }) {
@@ -209,12 +204,6 @@ function CallingCardReveal({ kind }) {
           16%  { opacity: 1; }
           100% { opacity: 1; }
         }
-        /* Phantom-Thieves throw — card flies in diagonally from off-screen
-           top-right while spinning twice CCW, decelerates as it approaches
-           the center, lands with a tiny jitter and settles flat. The card's
-           own rotate-2 tilt is applied by CallingCard's wrapper inside this
-           transform, so the keyframe finishes at rotate(0) to keep the
-           final tilt clean. */
         @keyframes card-spin-throw {
           0%   { opacity: 0; transform: translate(140vw, -90vh) rotate(-720deg) scale(0.55); }
           15%  { opacity: 1; }
@@ -227,11 +216,6 @@ function CallingCardReveal({ kind }) {
       <div
         style={{
           width: '100%', maxWidth: '20rem',
-          // Card is non-interactive in this overlay context — taps pass
-          // through to the radial-gradient backdrop, where the window-level
-          // pointerdown skip listener catches them. Otherwise the inner
-          // CallingCard <button> swallows the tap and triggers its
-          // setLaunching() animation while we're trying to route away.
           pointerEvents: 'none',
           animation: 'card-spin-throw 750ms cubic-bezier(0.16, 1, 0.3, 1) forwards',
         }}
@@ -243,30 +227,279 @@ function CallingCardReveal({ kind }) {
           signOff={card.signOff}
           rotate={card.rotate}
           compact={card.compact}
-          onActivate={() => { /* navigation owned by parent timer */ }}
+          onActivate={() => {}}
         />
       </div>
     </div>
   )
 }
 
-// SwipeHints now live INSIDE GateScreen as absolute children of its button so
-// mix-blend-mode:multiply has the atmospheric bands as siblings to blend
-// against. See components/GateScreen.jsx for the rendering.
+// ── Ransom-note title — letter-by-letter mismatched font/bg/color mix ──
+function DoorRansomTitle({ text }) {
+  const RECIPES = [
+    { cls: 'font-display',            color: '#f4ede0', bg: '#0e0e10', tilt: -2 },
+    { cls: 'font-athletic font-black', color: '#0e0e10', bg: '#f4ede0', tilt:  1 },
+    { cls: 'font-display',            color: '#f4ede0', bg: '#d4181f', tilt:  3 },
+    { cls: 'font-athletic font-black', color: '#0e0e10', bg: '#f4ede0', tilt: -1 },
+    { cls: 'font-display',            color: '#d4181f', bg: '#0e0e10', tilt:  2 },
+    { cls: 'font-athletic font-black', color: '#0e0e10', bg: '#f4ede0', tilt: -3 },
+    { cls: 'font-display',            color: '#f4ede0', bg: '#d4181f', tilt:  1 },
+    { cls: 'font-athletic font-black', color: '#f4ede0', bg: '#0e0e10', tilt: -2 },
+    { cls: 'font-display',            color: '#0e0e10', bg: '#f4ede0', tilt:  2 },
+  ]
+  return (
+    <div style={{ display: 'flex', flexWrap: 'nowrap', alignItems: 'flex-end', gap: 2, lineHeight: 1 }}>
+      {text.toUpperCase().split('').map((char, i) => {
+        const r = RECIPES[i % RECIPES.length]
+        return (
+          <span
+            key={i}
+            className={r.cls}
+            style={{
+              display: 'inline-block',
+              fontSize: 'clamp(3rem, 7.5vw, 6rem)',
+              color: r.color,
+              background: r.bg,
+              padding: '0 4px',
+              lineHeight: 1,
+              transform: `rotate(${r.tilt}deg) translateY(${((i % 3) - 1) * 4}px)`,
+            }}
+          >
+            {char}
+          </span>
+        )
+      })}
+    </div>
+  )
+}
+
+// ── War-room door panel — fills its flex slot, full P5 treatment ──
+function DoorPanel({ kind, onActivate }) {
+  const { play } = useSound()
+  const [hovered, setHovered] = useState(false)
+  const [pressed, setPressed] = useState(false)
+
+  const isFitness = kind === 'fitness'
+  const cfg = isFitness
+    ? {
+        palace:   'PALACE 01',
+        domain:   'PHYSICAL / COMBAT',
+        title:    'FITNESS',
+        body:     'YOUR WEAKNESS HAS BEEN NOTED. THE CLIMB BEGINS THE MOMENT YOU CHOOSE THIS DOOR.',
+        kanji:    '体',
+        bloom:    '15% 20%',
+        gradient: 'linear-gradient(145deg, rgba(212,24,31,0.22) 0%, transparent 55%)',
+        bg:       '#070708',
+      }
+    : {
+        palace:   'PALACE 02',
+        domain:   'FUEL / DISCIPLINE',
+        title:    'NUTRITION',
+        body:     'WHAT YOU PUT IN SHAPES WHAT WALKS OUT. EVERY MEAL IS IN THE RECORD.',
+        kanji:    '食',
+        bloom:    '85% 80%',
+        gradient: 'linear-gradient(-145deg, rgba(212,24,31,0.18) 0%, transparent 55%)',
+        bg:       '#0e0e10',
+      }
+
+  return (
+    <button
+      type="button"
+      className="relative flex-1 overflow-hidden text-left"
+      style={{
+        minHeight: '50svh',
+        background: cfg.bg,
+        border: 'none',
+        cursor: 'pointer',
+        display: 'flex',
+        flexDirection: 'column',
+      }}
+      onMouseEnter={() => { setHovered(true); play('card-hover') }}
+      onMouseLeave={() => { setHovered(false); setPressed(false) }}
+      onPointerDown={() => setPressed(true)}
+      onPointerUp={() => setPressed(false)}
+      onPointerCancel={() => { setPressed(false); setHovered(false) }}
+      onClick={() => { play('card-confirm'); onActivate() }}
+    >
+      {/* Red atmosphere bloom */}
+      <div
+        className="absolute inset-0 pointer-events-none"
+        style={{
+          background: `radial-gradient(ellipse at ${cfg.bloom}, rgba(212,24,31,0.4) 0%, transparent 65%)`,
+          opacity: hovered ? 1 : 0.35,
+          transition: 'opacity 500ms ease-out',
+        }}
+      />
+      {/* Directional gradient */}
+      <div
+        className="absolute inset-0 pointer-events-none"
+        style={{
+          background: cfg.gradient,
+          opacity: hovered ? 1 : 0.45,
+          transition: 'opacity 400ms ease-out',
+        }}
+      />
+
+      {/* Kanji watermark */}
+      <div
+        className="absolute pointer-events-none select-none"
+        aria-hidden="true"
+        style={{
+          ...(isFitness
+            ? { bottom: '-3rem', right: '-1rem' }
+            : { top: '-3rem', left: '-1rem' }),
+          fontFamily: '"FOT-Matisse Pro EB", "Noto Serif JP", serif',
+          fontSize: 'clamp(14rem, 30vw, 22rem)',
+          lineHeight: 0.8,
+          color: '#ffffff',
+          opacity: hovered ? 0.07 : 0.03,
+          fontWeight: 900,
+          transition: 'opacity 500ms ease-out',
+          userSelect: 'none',
+        }}
+      >
+        {cfg.kanji}
+      </div>
+
+      {/* Primary corner accent — fitness: top-left, nutrition: bottom-right */}
+      {isFitness ? (
+        <>
+          <div className="absolute top-0 left-0 bg-gtl-red pointer-events-none"
+               style={{ height: 4, width: hovered ? 200 : 140, transition: 'width 350ms cubic-bezier(0.2,1,0.3,1)' }} />
+          <div className="absolute top-0 left-0 bg-gtl-red pointer-events-none"
+               style={{ width: 4, height: hovered ? 200 : 140, transition: 'height 350ms cubic-bezier(0.2,1,0.3,1)' }} />
+          <div className="absolute bottom-0 right-0 bg-gtl-red pointer-events-none"
+               style={{ height: 3, width: hovered ? 80 : 48, opacity: 0.45, transition: 'width 350ms cubic-bezier(0.2,1,0.3,1)' }} />
+          <div className="absolute bottom-0 right-0 bg-gtl-red pointer-events-none"
+               style={{ width: 3, height: hovered ? 80 : 48, opacity: 0.45, transition: 'height 350ms cubic-bezier(0.2,1,0.3,1)' }} />
+        </>
+      ) : (
+        <>
+          <div className="absolute bottom-0 right-0 bg-gtl-red pointer-events-none"
+               style={{ height: 4, width: hovered ? 200 : 140, transition: 'width 350ms cubic-bezier(0.2,1,0.3,1)' }} />
+          <div className="absolute bottom-0 right-0 bg-gtl-red pointer-events-none"
+               style={{ width: 4, height: hovered ? 200 : 140, transition: 'height 350ms cubic-bezier(0.2,1,0.3,1)' }} />
+          <div className="absolute top-0 left-0 bg-gtl-red pointer-events-none"
+               style={{ height: 3, width: hovered ? 80 : 48, opacity: 0.45, transition: 'width 350ms cubic-bezier(0.2,1,0.3,1)' }} />
+          <div className="absolute top-0 left-0 bg-gtl-red pointer-events-none"
+               style={{ width: 3, height: hovered ? 80 : 48, opacity: 0.45, transition: 'height 350ms cubic-bezier(0.2,1,0.3,1)' }} />
+        </>
+      )}
+
+      {/* Palace badge — parallelogram pill */}
+      <div
+        className="absolute pointer-events-none"
+        style={{
+          ...(isFitness ? { top: '1.5rem', right: '1.5rem' } : { top: '1.5rem', left: '1.5rem' }),
+          clipPath: 'polygon(8% 0%, 100% 0%, 92% 100%, 0% 100%)',
+          background: hovered ? '#d4181f' : '#1a1a1e',
+          padding: '0.35rem 1.1rem',
+          transition: 'background 300ms ease-out',
+        }}
+      >
+        <span
+          className="font-mono text-[9px] tracking-[0.4em] uppercase"
+          style={{ color: hovered ? '#f4ede0' : '#6a6a72', transition: 'color 300ms ease-out' }}
+        >
+          {cfg.palace}
+        </span>
+      </div>
+
+      {/* Main content */}
+      <div
+        className="relative z-10 flex flex-col justify-center flex-1"
+        style={{
+          padding: 'clamp(3rem, 6vw, 5rem) clamp(2rem, 5vw, 4rem)',
+          transform: hovered ? (pressed ? 'translateY(2px)' : 'translateY(-4px)') : 'translateY(0)',
+          transition: pressed ? 'transform 80ms ease-out' : 'transform 300ms ease-out',
+        }}
+      >
+        {/* Step tag */}
+        <div className="flex items-center gap-4 mb-6">
+          <div
+            className="h-px bg-gtl-red flex-shrink-0"
+            style={{ width: hovered ? 48 : 32, transition: 'width 300ms ease-out' }}
+          />
+          <span className="font-mono text-[10px] tracking-[0.3em] uppercase text-gtl-red">
+            {cfg.domain}
+          </span>
+        </div>
+
+        {/* Ransom-note title */}
+        <div className="mb-8">
+          <DoorRansomTitle text={cfg.title} />
+        </div>
+
+        {/* Slash divider */}
+        <div
+          className="mb-6"
+          style={{
+            height: 5,
+            background: '#d4181f',
+            transform: 'skewX(-12deg)',
+            width: hovered ? '85%' : '55%',
+            transition: 'width 500ms cubic-bezier(0.2, 1, 0.3, 1)',
+          }}
+        />
+
+        {/* Body copy */}
+        <p className="font-mono text-xs tracking-[0.2em] uppercase text-gtl-ash max-w-xs mb-10 leading-relaxed">
+          {cfg.body}
+        </p>
+
+        {/* INFILTRATE — shadow slab CTA */}
+        <div
+          className="relative inline-flex self-start"
+          style={{ opacity: hovered ? 1 : 0.5, transition: 'opacity 300ms ease-out' }}
+        >
+          {/* Shadow */}
+          <div
+            className="absolute inset-0 bg-gtl-red-deep pointer-events-none"
+            style={{
+              clipPath: 'polygon(4% 0%, 100% 0%, 96% 100%, 0% 100%)',
+              transform: pressed ? 'translate(0,0)' : 'translate(6px, 6px)',
+              transition: 'transform 80ms ease-out',
+            }}
+            aria-hidden="true"
+          />
+          {/* Face */}
+          <div
+            className="relative flex items-center gap-2 px-6 py-3"
+            style={{
+              clipPath: 'polygon(4% 0%, 100% 0%, 96% 100%, 0% 100%)',
+              background: pressed ? '#ff2a36' : '#d4181f',
+              transform: pressed ? 'translate(6px, 6px)' : 'translate(0,0)',
+              transition: 'transform 80ms ease-out, background 80ms ease-out',
+            }}
+          >
+            <span className="font-display text-sm tracking-[0.15em] text-gtl-paper">INFILTRATE</span>
+            <span className="font-display text-base text-gtl-paper leading-none">▶</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Hover wash */}
+      <div
+        className="absolute inset-0 pointer-events-none"
+        style={{
+          background: isFitness
+            ? 'linear-gradient(145deg, rgba(212,24,31,0.1) 0%, transparent 60%)'
+            : 'linear-gradient(-145deg, rgba(212,24,31,0.1) 0%, transparent 60%)',
+          opacity: hovered ? 1 : 0,
+          transition: 'opacity 500ms ease-out',
+        }}
+        aria-hidden="true"
+      />
+    </button>
+  )
+}
 
 export default function Home() {
   const router = useRouter()
   const { play } = useSound()
 
-  // bfcache restore re-roll. Browser refresh already re-rolls because the
-  // module re-evaluates and the IIFE picks fresh. But returning to / via
-  // the back button (or any path that hits the bfcache) restores the page
-  // without running scripts, so the singleton sticks with whatever track
-  // was picked on the original load. `pageshow.persisted` is the canonical
-  // signal for that case — when it fires AND random-on-launch is on, swap
-  // the singleton's src to a fresh random track. Listener is scoped to the
-  // home page (registered/cleaned in useEffect) so other routes are
-  // unaffected.
+  // bfcache restore re-roll — swap singleton to a fresh random track on
+  // back-button returns when random-on-launch is enabled.
   useEffect(() => {
     const onPageShow = (event) => {
       if (!event.persisted) return
@@ -287,43 +520,38 @@ export default function Home() {
       try { a.load() } catch {}
       window.__gtlBgMusicTrackId = track.id
       setBgmMediaSession(track)
-      // Allow startBgMusic to fire fresh on the next gate tap.
       window.__gtlBgMusicStarted = false
     }
     window.addEventListener('pageshow', onPageShow)
     return () => window.removeEventListener('pageshow', onPageShow)
   }, [])
 
-  // phase: 'gate' (default) → 'flash-fitness' | 'flash-nutrition' → route
-  //   or:  'gate' → 'heist' (swipe during entrance: skip flash, play HeistTransition only)
-  const [phase, setPhase] = useState('gate')
+  // Warm up destination route bundles during idle time on the home screen.
+  useEffect(() => {
+    const routes = ['/fitness', '/diet', '/fitness/hub', '/fitness/load', '/fitness/active']
+    routes.forEach(href => { try { router.prefetch(href) } catch {} })
+  }, [router])
+
+  const [phase, setPhase] = useState('idle')
   const [transitionTarget, setTransitionTarget] = useState('/fitness')
   const [transitioning, setTransitioning] = useState(false)
-  // Holds the FLASH_DURATION → setTransitioning timer so a skip tap can clear it.
   const flashTimerRef = useRef(null)
-  // Latches once skipAll fires so we don't double-route from a stale timer or
-  // HeistTransition's own onComplete.
   const skippedRef = useRef(false)
-  // Stable ref to current transitionTarget for skipAll (avoids re-binding handlers).
   const targetRef = useRef('/fitness')
 
   const activate = (kind) => {
-    if (phase !== 'gate') return
-    // bg music is started synchronously by GateScreen.handleClick (tap path) or
-    // by handleTouchEnd's swipe paths below — calling it here would be too late
-    // for iOS PWA's autoplay rules (audio.play must run inside the user gesture).
+    if (phase !== 'idle') return
+    // startBgMusic MUST be called synchronously inside the user-gesture handler.
+    // iOS PWA blocks audio.play() outside the synchronous click context.
+    startBgMusic()
     play('brand-confirm')
     const target = kind === 'fitness' ? '/fitness' : '/diet'
     setPhase(kind === 'fitness' ? 'flash-fitness' : 'flash-nutrition')
     setTransitionTarget(target)
     targetRef.current = target
-    // After the calling-card reveal holds for FLASH_DURATION, kick off the
-    // heist transition. Route push fires when the slash wipes complete.
     flashTimerRef.current = setTimeout(() => setTransitioning(true), FLASH_DURATION)
   }
 
-  // One extra tap after the gate commit skips the rest of the cascade
-  // (gate exit slashes → calling card → heist transition). Music is unaffected.
   const skipAll = () => {
     if (skippedRef.current) return
     skippedRef.current = true
@@ -331,24 +559,20 @@ export default function Home() {
     router.push(targetRef.current)
   }
 
-  // Keyboard shortcut: arrow up = fitness, arrow down = nutrition (desktop).
+  // Keyboard: up/left = fitness, down/right = nutrition
   useEffect(() => {
-    if (phase !== 'gate') return
+    if (phase !== 'idle') return
     const handler = (e) => {
-      if (e.key === 'ArrowUp')      activate('fitness')
-      else if (e.key === 'ArrowDown') activate('nutrition')
+      if (e.key === 'ArrowUp' || e.key === 'ArrowLeft')        activate('fitness')
+      else if (e.key === 'ArrowDown' || e.key === 'ArrowRight') activate('nutrition')
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
   }, [phase])
 
-  // Skip-everything: once the gate has been committed (phase !== 'gate'),
-  // the next pointerdown anywhere on the screen routes immediately. Using
-  // window-level capture sidesteps every per-element gotcha (iOS first-tap
-  // hover absorption on the CallingCard button, HeistTransition's
-  // pointer-events-none layer, z-index races, etc).
+  // Skip-all: once committed, next tap anywhere routes immediately.
   useEffect(() => {
-    if (phase === 'gate') return
+    if (phase === 'idle') return
     const handler = () => skipAll()
     window.addEventListener('pointerdown', handler, { capture: true })
     return () => window.removeEventListener('pointerdown', handler, { capture: true })
@@ -359,48 +583,73 @@ export default function Home() {
     router.push(transitionTarget)
   }
 
-  // GateScreen owns its own tap + swipe input. onCommit fires synchronously
-  // (so we have the target ref before exit slashes start, in case the user
-  // double-taps to skip mid-exit). onEnter fires after EXIT_MS once the
-  // gate-exit slashes finish.
-  const handleGateCommit = (kind) => {
-    targetRef.current = kind === 'fitness' ? '/fitness' : '/diet'
-  }
-  const handleGateEnter = (kind) => activate(kind)
-
-  // Swipe during the entrance animation — skip entrance + gate exit + calling
-  // card; play HeistTransition only, then route. Phase set to 'heist' so
-  // neither GateScreen nor CallingCardReveal renders behind the transition.
-  const handleFastToHeist = (kind) => {
-    const target = kind === 'fitness' ? '/fitness' : '/diet'
-    targetRef.current = target
-    setTransitionTarget(target)
-    setPhase('heist')
-    setTransitioning(true)
-  }
-
   return (
-    // Flow-based wrapper — min-h:100svh + bg-gtl-void matches the original c18b728
-    // home and avoids the iOS PWA safe-area-inset clip that plagued any
-    // position:fixed parent. html/body underneath paints #280609 (per globals.css)
-    // so even if anything bleeds through, the user sees dark red, not black.
-    // 100svh (small viewport height) instead of 100dvh: dvh is dynamic and reads
-    // stale on the first iOS PWA mount, leaving a bottom-padding band until the
-    // page re-renders. svh is locked at parse time — same race-free outcome.
     <main
       className="relative overflow-hidden"
-      style={{ minHeight: '100%', background: '#280609', isolation: 'isolate' }}
+      style={{ minHeight: '100svh', background: '#070708', isolation: 'isolate' }}
     >
-      {phase === 'gate' && (
-        <GateScreen
-          onEnter={handleGateEnter}
-          onCommit={handleGateCommit}
-          onMusicStart={startBgMusic}
-          onSkip={skipAll}
-          onFastToHeist={handleFastToHeist}
-          swipeHintLabels={{ top: 'SWIPE UP FOR FITNESS', bottom: 'SWIPE DOWN FOR NUTRITION' }}
-        />
+      {/* Global noise grain */}
+      <div className="absolute inset-0 gtl-noise pointer-events-none" />
+
+      {/* Global atmospheric gradient */}
+      <div
+        className="absolute inset-0 pointer-events-none"
+        style={{
+          background: 'linear-gradient(135deg, rgba(122,14,20,0.15) 0%, transparent 50%, rgba(74,10,14,0.2) 100%)',
+        }}
+      />
+
+      {/* War-room doors */}
+      {phase === 'idle' && (
+        <div
+          className="relative z-10 flex flex-col md:flex-row"
+          style={{ minHeight: '100svh' }}
+          role="navigation"
+          aria-label="Choose your palace"
+        >
+          <DoorPanel kind="fitness" onActivate={() => activate('fitness')} />
+
+          {/* Seam divider — horizontal on mobile, vertical on desktop */}
+          <style>{`
+            .gtl-seam-div { height: 3px; background: #d4181f; }
+            @media (min-width: 768px) {
+              .gtl-seam-div { height: auto; width: 3px; }
+            }
+          `}</style>
+          <div
+            className="gtl-seam-div flex-shrink-0 self-stretch relative"
+            aria-hidden="true"
+          />
+
+          {/* GTL seal — centered on screen (exactly where the two doors meet) */}
+          <div
+            className="absolute z-20 pointer-events-none"
+            style={{
+              top: '50%',
+              left: '50%',
+              transform: 'translate(-50%, -50%)',
+            }}
+            aria-hidden="true"
+          >
+            <div
+              style={{
+                background: '#070708',
+                border: '2px solid #d4181f',
+                clipPath: 'polygon(6% 0%, 100% 0%, 94% 100%, 0% 100%)',
+                padding: '0.35rem 1.4rem',
+                boxShadow: '0 0 20px rgba(212,24,31,0.4)',
+              }}
+            >
+              <span className="font-mono text-[10px] tracking-[0.5em] uppercase text-gtl-red">
+                GTL
+              </span>
+            </div>
+          </div>
+
+          <DoorPanel kind="nutrition" onActivate={() => activate('nutrition')} />
+        </div>
       )}
+
       {phase === 'flash-fitness'   && <CallingCardReveal kind="fitness"   />}
       {phase === 'flash-nutrition' && <CallingCardReveal kind="nutrition" />}
 
