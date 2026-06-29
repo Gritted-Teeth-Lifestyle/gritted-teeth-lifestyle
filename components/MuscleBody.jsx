@@ -18,7 +18,7 @@ import { useSound } from '../lib/useSound'
 
 // Preload all four models so switching between them is instant
 useGLTF.preload('/models/goku.glb')
-useGLTF.preload('/models/super_saiyan_goku.glb')
+useGLTF.preload('/models/super_saiyan_goku_rigged.glb')
 useGLTF.preload('/models/gohan.glb')
 useGLTF.preload('/models/muscle_body.glb')
 
@@ -76,12 +76,12 @@ const MODELS = {
     ],
   },
   gokuSSJ: {
-    path: '/models/super_saiyan_goku.glb',
+    path: '/models/super_saiyan_goku_rigged.glb',
     rotationY: Math.PI,
     scaleMult: 1.0,
-    // Off-origin GLB — Center component re-centers at runtime.
-    // Hitboxes ported from goku (same body proportions, no bone names available for SSJ).
-    // Use debug mode + drag gizmos to fine-tune if needed.
+    // Now RIGGED via Mixamo (33-bone skeleton + idle clip) → muscles are
+    // bone-derived through the pipeline like Goku/Gohan. These hitboxes are the
+    // legacy static fallback, only used if the rig ever fails to resolve.
     hitboxes: [
       { group: 'chest',      position: [-0.22,  1.01, -0.23], rotation: [-0.554, 0,  0],     scale: [0.25, 0.16, 0.13] },
       { group: 'chest',      position: [ 0.22,  1.01, -0.23], rotation: [-0.554, 0,  0],     scale: [0.25, 0.16, 0.13] },
@@ -1320,7 +1320,11 @@ const TORSO_MUSCLES = {
   back:  { from: 'Spine1', to: 'Spine2', t: 0.55, zBias: -1 },
 }
 
-const _stripBone = (n) => n.replace(/^mixamorig/i, '').replace(/_\d+$/, '')
+// Normalize any mixamo bone name to its bare base: strips the `mixamorig`
+// prefix plus whatever separator follows (`:` from raw Mixamo, `_` from some
+// GLB exporters, a space, or nothing) and any trailing dedupe index.
+// e.g. "mixamorig:LeftArm" / "mixamorigLeftArm_09" / "mixamorig_LeftArm.001" → "LeftArm"
+const _stripBone = (n) => n.replace(/^mixamorig[^A-Za-z]*/i, '').replace(/[_.]\d+$/, '')
 
 function collectBones(root) {
   const map = {}
