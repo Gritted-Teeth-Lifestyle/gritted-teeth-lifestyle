@@ -20,7 +20,7 @@ import { useSound } from '../lib/useSound'
 useGLTF.preload('/models/goku.glb')
 useGLTF.preload('/models/super_saiyan_goku_rigged.glb')
 useGLTF.preload('/models/gohan.glb')
-useGLTF.preload('/models/muscle_body.glb')
+useGLTF.preload('/models/muscle_body_rigged.glb')
 
 const TARGET_HEIGHT = 4.0
 
@@ -152,7 +152,7 @@ const MODELS = {
     ],
   },
   anatomy: {
-    path: '/models/muscle_body.glb',
+    path: '/models/muscle_body_rigged.glb',
     rotationY: 0,
     scaleMult: 1.0,
     // Calibrated from scratch against the actual anatomy GLB — do NOT
@@ -675,9 +675,18 @@ function ModelDisplay({ modelKey, onReady }) {
   }, [cloned, onReady])
 
   // Animation playback — plays the model's first clip BY DEFAULT for rigged
-  // models (Goku Idle, Gohan Kamehameha, etc.). The bone-driven muscles +
+  // models (Goku Idle, Gohan Kamehameha, SSJ, etc.). The bone-driven muscles +
   // camera track the moving skeleton automatically. Opt out with ?anim=0.
   const mixerRef = useRef(null)
+  const hipsRef = useRef(null)
+  const hipsRest = useRef(null)
+  useEffect(() => {
+    // Find the Hips/root bone so we can plant horizontal root motion (below).
+    let hips = null
+    cloned.traverse((o) => { if (o.isBone && !hips && /hips$/i.test(_stripBone(o.name))) hips = o })
+    hipsRef.current = hips
+    hipsRest.current = hips ? { x: hips.position.x, z: hips.position.z } : null
+  }, [cloned])
   useEffect(() => {
     const off = typeof window !== 'undefined' &&
       new URLSearchParams(window.location.search).get('anim') === '0'
@@ -688,7 +697,15 @@ function ModelDisplay({ modelKey, onReady }) {
     mixerRef.current = mixer
     return () => { mixer.stopAllAction(); mixerRef.current = null }
   }, [cloned, animations])
-  useFrame((_, dt) => { if (mixerRef.current) mixerRef.current.update(dt) })
+  useFrame((_, dt) => {
+    if (!mixerRef.current) return
+    mixerRef.current.update(dt)
+    // Strip horizontal ROOT MOTION — pin the Hips to its rest X/Z so clips that
+    // stride (e.g. Mixamo "Blocking") idle in place instead of wandering off
+    // the overview. Vertical bob (Y) is kept. Works for any model/clip.
+    const h = hipsRef.current, r = hipsRest.current
+    if (h && r) { h.position.x = r.x; h.position.z = r.z }
+  })
 
   const modelLayout = useMemo(() => {
     // ── Selective bind-pose restore for arm/spine bones ───────────────
