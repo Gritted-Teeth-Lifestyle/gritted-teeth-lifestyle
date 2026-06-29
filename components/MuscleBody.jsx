@@ -674,16 +674,17 @@ function ModelDisplay({ modelKey, onReady }) {
     return () => { if (onReady) onReady(null) }
   }, [cloned, onReady])
 
-  // Optional animation playback (gated by ?anim=1) — proves the bone-driven
-  // muscles track a MOVING skeleton. When the real animation feature lands this
-  // is where the mixer/clip selection lives; muscles + camera already follow.
+  // Animation playback — plays the model's first clip BY DEFAULT for rigged
+  // models (Goku Idle, Gohan Kamehameha, etc.). The bone-driven muscles +
+  // camera track the moving skeleton automatically. Opt out with ?anim=0.
   const mixerRef = useRef(null)
   useEffect(() => {
-    const on = typeof window !== 'undefined' &&
-      new URLSearchParams(window.location.search).get('anim') === '1'
-    if (!on || !animations || !animations.length) return
+    const off = typeof window !== 'undefined' &&
+      new URLSearchParams(window.location.search).get('anim') === '0'
+    if (off || !animations || !animations.length) return
     const mixer = new THREE.AnimationMixer(cloned)
-    mixer.clipAction(animations[0]).play()
+    const action = mixer.clipAction(animations[0])
+    action.reset().play()
     mixerRef.current = mixer
     return () => { mixer.stopAllAction(); mixerRef.current = null }
   }, [cloned, animations])
