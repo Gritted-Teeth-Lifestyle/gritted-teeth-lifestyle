@@ -7,7 +7,7 @@
     }
   },
   "postCreateCommand": "npm install -g @anthropic-ai/claude-code && npm install",
-  "postStartCommand": "nohup bash scripts/codespace-serve.sh > /tmp/gtl-start.log 2>&1 &",
+  "postStartCommand": "bash scripts/codespace-serve.sh",
   "forwardPorts": [3000],
   "portsAttributes": {
     "3000": {
