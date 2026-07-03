@@ -26,7 +26,8 @@ import {
   getTierCount,
   getTier,
 } from '../../../lib/exp'
-import { consumePrefire, setInAnimation, disarmChain, subscribeStaged, registerChainStep, clearChainTransient, isPendingChainHead } from '../../../lib/predictiveTap'
+import { consumePrefire, setInAnimation, disarmChain, subscribeStaged } from '../../../lib/predictiveTap'
+import { useChainPage } from '../../../lib/useChainPage'
 import TierUpFlourish from '../../../components/exp/TierUpFlourish'
 // Day-hop and BEGIN HERE muscle-hop now navigate to /fitness/active/[iso]
 // (Stage 1 of App Router refactor) so HeistTransition fires naturally and
@@ -2747,14 +2748,6 @@ export default function ActiveCyclePage() {
   useEffect(() => { barXPRef.current = barXP }, [barXP])
   useEffect(() => { mountTimeRef.current = performance.now() }, [])
 
-  // Predictive-tap chain: clear stale transient state from any prior hop
-  // on every mount. Manual TODAY tap's onClick handler sets currentStep
-  // correctly via setInAnimation('today', true). Chain arrivals consume
-  // the prefire below and eagerly open inAnim there.
-  useEffect(() => {
-    clearChainTransient('active-mount', 'today')
-  }, [])
-
   useEffect(() => {
     // Page-level scroll lock — prevents iOS PWA viewport-pan in any direction.
     // overflow alone isn't enough on WKWebView; position:fixed + inset:0 +
@@ -2974,63 +2967,36 @@ export default function ActiveCyclePage() {
     setFireDayHop(iso)
   }
 
-  // Register skip-route for the 'today' chain step. Module-level listener
-  // in lib/predictiveTap.js calls this when a tap arrives past
-  // SKIP_GRACE_MS during the today HT. Retreat-button exclusion + leaked-
-  // tap absorption are handled centrally (the grace replaces the old
-  // per-page 150ms armedAt window).
-  useEffect(() => registerChainStep('today', () => {
-    if (skippedDayHopRef.current) return
-    if (!fireDayHopRef.current) return
-    skippedDayHopRef.current = true
-    router.push('/fitness/active/' + fireDayHopRef.current)
-  }), [router])
-
-  // Predictive-tap chain — open the 'today' window IMMEDIATELY on mount
-  // (before the ready-gated consume below fires) ONLY when a 'today'
-  // intent is already queued. Without the queue gate this fired on every
-  // cold visit to /fitness/active, pre-arming the page for predictive
-  // staging — one manual tap on the TODAY card then staged 'muscle'
-  // (because pointerdown saw inAnim=true, currentStep='today') AND fired
-  // today HT via onClick, cascading TWO hops from one user tap.
-  //
-  // With the gate, eager-open fires only when we're truly mid-chain
-  // (queue head is 'today'). Cold visits leave the page idle.
-  useEffect(() => {
-    if (isPendingChainHead('today')) {
-      setInAnimation('today', true)
-    }
-  }, [])
-
-  // Predictive-tap consume: when the page is ready, check for a 'today'
-  // prefire intent staged on the prior page's HT (e.g., user tapped during
-  // ACTIVATE's slash). If matched, auto-fire handleDayHop(target) as if the
-  // user tapped the TODAY card. Falls back to the closest-day hero if
-  // today isn't in the cycle's training days.
-  useEffect(() => {
-    if (!ready) return
-    if (!days || days.length === 0) return
-    if (fireDayHop) return
-    const target = days.includes(todayIsoStr)
-      ? todayIsoStr
-      : days.reduce((closest, iso) => {
-          const dC = Math.abs(parseDate(closest) - parseDate(todayIsoStr))
-          const dI = Math.abs(parseDate(iso) - parseDate(todayIsoStr))
-          return dI < dC ? iso : closest
-        }, days[0])
-    // Mount-time consume only — catches the cross-page hop where the
-    // user predictive-tapped 'today' during the previous page's HT
-    // (intent staged before this page mounted). Direct taps on the
-    // TODAY card are handled by DayButton's onClick → handleDayHop.
-    // No subscribeStaged or polling: those caught direct-tap pointerdowns
-    // and double-fired with the click event for the same physical tap.
-    const intent = consumePrefire('today')
-    if (intent) {
-      setInAnimation('today', true)
+  // Predictive-tap chain wiring — mount-clear, gated consume, eager-open
+  // bridge, and skip-route in one place (lib/useChainPage.js). On a
+  // consumed 'today' intent, auto-fire handleDayHop(target) as if the user
+  // tapped the TODAY card; falls back to the closest day if today isn't in
+  // the cycle. The hook's queue-gated eager-open replaces the old
+  // isPendingChainHead mount effect (cold visits stay idle — one manual
+  // TODAY tap must NOT cascade two hops). Direct taps are handled by
+  // DayButton's onClick → handleDayHop; no subscribeStaged/polling (those
+  // double-fired with the click for the same physical tap).
+  useChainPage({
+    step: 'today',
+    clearTag: 'active-mount',
+    ready: ready && days.length > 0 && !fireDayHop,
+    onArrive: () => {
+      const target = days.includes(todayIsoStr)
+        ? todayIsoStr
+        : days.reduce((closest, iso) => {
+            const dC = Math.abs(parseDate(closest) - parseDate(todayIsoStr))
+            const dI = Math.abs(parseDate(iso) - parseDate(todayIsoStr))
+            return dI < dC ? iso : closest
+          }, days[0])
       setTimeout(() => handleDayHop(target, { fromTimer: true }), 50)
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ready, days, fireDayHop])
+    },
+    routeForward: () => {
+      if (skippedDayHopRef.current) return
+      if (!fireDayHopRef.current) return
+      skippedDayHopRef.current = true
+      router.push('/fitness/active/' + fireDayHopRef.current)
+    },
+  })
 
   const triggerXPAnimation = useCallback((closingDay) => {
     // Build particles: one per completed day, positioned at each card

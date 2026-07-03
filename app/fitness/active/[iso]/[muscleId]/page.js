@@ -22,7 +22,8 @@ import { getUserDOB } from '../../../../../lib/userPrefs'
 import PickerSheet from '../../../../../components/attune/PickerSheet'
 import HeistTransition from '../../../../../components/HeistTransition'
 import { chipsForDay, addChip, useChipsForDay, replaceExercise } from '../../../../../lib/attunement'
-import { consumePrefire, setInAnimation, disarmChain, subscribeStaged, clearChainTransient } from '../../../../../lib/predictiveTap'
+import { disarmChain } from '../../../../../lib/predictiveTap'
+import { useChainPage } from '../../../../../lib/useChainPage'
 import {
   calculateSetXP,
   upsertSetSnapshot,
@@ -2120,22 +2121,10 @@ function DayFocus({ iso, muscles, isLastDay, originRect, onClose, cycleId, onMus
     setPickerOpen(true)
   }, [cycleId, iso, hasWork, pickerDismissed])
 
-  // Predictive-tap chain — final hop. Mount-time consume only: catches
-  // the cross-page hop where the user predictive-tapped 'muscle' during
-  // the previous page's HT (intent staged before this route mounted).
-  // Direct taps on the BEGIN HERE button are handled by its onClick.
-  // No subscribeStaged: it caught direct-tap pointerdowns and double-fired
-  // with the click. The actual hop+HT lives on the page-export wrapper —
-  // we just call onMuscleHop and let the parent fire HeistTransition +
-  // router.push to /fitness/active/[iso]/[muscleId].
-  useEffect(() => {
-    if (!hasWork) return
-    const intent = consumePrefire('muscle')
-    if (intent && muscles[0]) {
-      setTimeout(() => onMuscleHop(muscles[0]), 100)
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hasWork])
+  // No 'muscle' consume here. This DayFocus copy renders on the TERMINAL
+  // route — the [iso] page's wrapper is the single consumer of the 'muscle'
+  // intent (via useChainPage). A consume here could misfire onMuscleHop
+  // toward a different muscle than the one this route already shows.
 
   const [allReps, setAllReps]       = useState({})
   const [allWeights, setAllWeights] = useState({})
@@ -2883,12 +2872,13 @@ export default function ActiveMuscleExercisePage() {
     setReady(true)
   }, [])
 
-  // Predictive-tap chain: this is the chain END. Clear stale transient
-  // state from the inbound 'muscle' HT. No further hops to stage; the
-  // chain naturally disarms on retreat or new chain arm.
-  useEffect(() => {
-    clearChainTransient('muscleId-mount', 'muscle')
-  }, [])
+  // Predictive-tap chain: this is the chain END. Terminal disarm — release
+  // the transient HT state AND the prefire queue on arrival. Nothing
+  // consumes past this page; the old guarded clear ("skip if consume owns
+  // 'muscle'") left inAnim=true/currentStep='muscle' alive on this page and
+  // on retreat back to [iso], because the [iso] hop's state matched the
+  // guard's shape forever.
+  useChainPage({ step: 'muscle', clearTag: 'muscle-terminal', terminal: true })
 
   // The picker is opened only when the user taps ADD MOVE — no
   // auto-open even on an empty-chip day. Empty days simply render

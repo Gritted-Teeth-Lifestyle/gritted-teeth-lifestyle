@@ -22,7 +22,8 @@ import { useProfileGuard } from '../../../lib/useProfileGuard'
 import { pk, getDraft, getDraftAttunement, clearDraft } from '../../../lib/storage'
 import HeistTransition from '../../../components/HeistTransition'
 import RetreatButton from '../../../components/RetreatButton'
-import { consumePrefire, setInAnimation, registerChainStep, clearChainTransient } from '../../../lib/predictiveTap'
+import { setInAnimation } from '../../../lib/predictiveTap'
+import { useChainPage } from '../../../lib/useChainPage'
 import { isPrestigeUnlocked, computeProfileTotalXP, getTierCount, getTier } from '../../../lib/exp'
 import AscendPrompt from '../../../components/exp/AscendPrompt'
 import TierUpFlourish from '../../../components/exp/TierUpFlourish'
@@ -485,39 +486,17 @@ export default function FitnessPage() {
     setTransitioning(true)
   }
 
-  // Predictive-tap chain: clear stale transient state from any prior hop
-  // on every mount. Manual LOAD CYCLE tap's onClick handler sets
-  // currentStep correctly via setInAnimation('hub-load', true) before
-  // the canonical-zone pointerdown stages anything. Predictive-chain
-  // arrivals consume the prefire below and eagerly open inAnim there.
-  // Old pattern set ('profile', true) which incorrectly re-armed inAnim
-  // on this static page and let StrictMode double-mount rewind state
-  // from 'hub-load' back to 'profile' after consume fired.
-  useEffect(() => {
-    clearChainTransient('hub-mount', 'hub-load')
-  }, [])
-
-  // Predictive-tap consume on mount: if the prior hop's hit-zone tap
-  // staged a 'hub-load' intent (from /fitness during its HeistTransition),
-  // auto-fire the LOAD CYCLE option as if the user tapped it.
-  // Delay the HT trigger by 500ms so the inbound HT plays out fully
-  // before this one starts — clean back-to-back animation cascade.
-  // setInAnimation runs IMMEDIATELY so taps during the 500ms window
-  // still stage the next step ('activate').
-  useEffect(() => {
-    const intent = consumePrefire('hub-load')
-    if (intent) {
-      setInAnimation('hub-load', true)
-      setTimeout(() => handleSelect('/fitness/load', { fromTimer: true }), 50)
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
-  // Register skip-route for the 'hub-load' chain step. Module-level
-  // listener in lib/predictiveTap.js calls this when a tap arrives past
-  // SKIP_GRACE_MS during the hub-load HT. Retreat-button exclusion is
-  // handled centrally.
-  useEffect(() => registerChainStep('hub-load', () => skipNow()), [])
+  // Predictive-tap chain wiring — mount-clear, consume, skip-route in one
+  // place (lib/useChainPage.js owns the ordering + StrictMode guards).
+  // On a consumed 'hub-load' intent, auto-fire the LOAD CYCLE option as if
+  // the user tapped it; the anim window opens at consume time so taps
+  // during the 50ms defer still stage the next step ('activate').
+  useChainPage({
+    step: 'hub-load',
+    clearTag: 'hub-mount',
+    onArrive: () => setTimeout(() => handleSelect('/fitness/load', { fromTimer: true }), 50),
+    routeForward: () => skipNow(),
+  })
 
   const handleTransitionComplete = () => {
     if (skippedRef.current) return

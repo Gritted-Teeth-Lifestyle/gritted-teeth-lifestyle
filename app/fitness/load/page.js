@@ -16,7 +16,8 @@ import { pk } from '../../../lib/storage'
 import HeistTransition from '../../../components/HeistTransition'
 import RetreatButton from '../../../components/RetreatButton'
 import { LogoStencil, LogoTarget } from '../../../components/LogoHalf'
-import { consumePrefire, setInAnimation, registerChainStep, clearChainTransient } from '../../../lib/predictiveTap'
+import { setInAnimation } from '../../../lib/predictiveTap'
+import { useChainPage } from '../../../lib/useChainPage'
 
 const MUSCLE_LABELS = {
   chest: 'CHEST', back: 'BACK', shoulders: 'SHOULDERS',
@@ -963,14 +964,6 @@ export default function LoadCyclePage() {
     router.push(fireDestRef.current)
   }
 
-  // Predictive-tap chain: clear stale transient state from any prior hop
-  // on every mount. Manual ACTIVATE tap's onClick handler sets
-  // currentStep correctly via setInAnimation('activate', true). Chain
-  // arrivals consume the prefire below and eagerly open inAnim there.
-  useEffect(() => {
-    clearChainTransient('load-mount', 'activate')
-  }, [])
-
   useEffect(() => {
     try {
       const raw = localStorage.getItem(pk('cycles'))
@@ -990,12 +983,6 @@ export default function LoadCyclePage() {
     } catch (_) {}
     setReady(true)
   }, [])
-
-  // Register skip-route for the 'activate' chain step. Module-level
-  // listener in lib/predictiveTap.js calls this when a tap arrives past
-  // SKIP_GRACE_MS during the activate HT. Retreat-button exclusion is
-  // handled centrally.
-  useEffect(() => registerChainStep('activate', () => skipNow()), [])
 
   const selectedCycle = cycles.find((c) => c.id === selectedId) ?? null
 
@@ -1036,36 +1023,21 @@ export default function LoadCyclePage() {
     setFireActive(true)
   }
 
-  // Predictive-tap consume: mount-time only. The 'activate' intent is
-  // always staged on the PRIOR page (/fitness/hub during its HeistTransition
-  // → router.push → /fitness/load mounts → consume reads it). The stage
-  // is therefore always present BEFORE this useEffect runs, so a single
-  // mount-time check is sufficient.
-  //
-  // Do NOT add subscribeStaged or polling here. Both cause a double-fire
-  // bug when the user taps ACTIVATE manually: pointerdown stages
-  // 'activate' → notifyStaged → tryConsume → handleActivate (call 1) →
-  // setFireActive=true → HeistTransition mounts. Click event → onTap →
-  // handleActivate (call 2) → fireActiveRef.current=true → skipNow →
-  // router.push immediately → HT bypassed before it can play.
-  //
-  // Manual taps only need ActivatePopup's own onTap. Predictive taps
-  // are handled by mount-time consume. No third path needed.
-  useEffect(() => {
-    if (!ready) return
-    if (!selectedId) return
-    const cycle = cycles.find((c) => c.id === selectedId)
-    if (!cycle) return
-    const intent = consumePrefire('activate')
-    if (intent) {
-      // Open predictive window immediately (so taps during the wait
-      // stage 'today'); delay the actual HT 500ms so the inbound HT
-      // plays out fully first.
-      setInAnimation('activate', true)
-      setTimeout(() => handleActivate(cycle, { fromTimer: true }), 50)
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ready, selectedId])
+  // Predictive-tap chain wiring — mount-clear, consume, skip-route in one
+  // place (lib/useChainPage.js). The 'activate' intent is always staged on
+  // the PRIOR page, so consume matches as soon as ready + a cycle is
+  // auto-selected. Manual taps only need ActivatePopup's own onTap —
+  // do NOT add subscribeStaged/polling (double-fire; see git history of
+  // this comment for the full trace).
+  useChainPage({
+    step: 'activate',
+    clearTag: 'load-mount',
+    ready: ready && !!selectedCycle,
+    onArrive: () => {
+      if (selectedCycle) setTimeout(() => handleActivate(selectedCycle, { fromTimer: true }), 50)
+    },
+    routeForward: () => skipNow(),
+  })
 
   const handleReview = (cycle) => {
     if (fireActiveRef.current) { skipNow(); return }

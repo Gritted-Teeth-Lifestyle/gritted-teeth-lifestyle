@@ -22,7 +22,8 @@ import DropPromptModal from '../../../../components/attune/DropPromptModal'
 import HeistTransition from '../../../../components/HeistTransition'
 import { chipsForDay, addChip } from '../../../../lib/attunement'
 import { getExerciseById } from '../../../../lib/exerciseLibrary'
-import { consumePrefire, setInAnimation, disarmChain, subscribeStaged, registerChainStep, clearChainTransient } from '../../../../lib/predictiveTap'
+import { setInAnimation, disarmChain } from '../../../../lib/predictiveTap'
+import { useChainPage } from '../../../../lib/useChainPage'
 import {
   computeProfileTotalXP,
   computeDailyReckoning,
@@ -2041,43 +2042,9 @@ function DayFocus({ iso, muscles, isLastDay, originRect, onClose, cycleId, onMus
   // exercise page (after tapping the muscle button), so the day overview
   // stays uncluttered.
 
-  // Predictive-tap chain — final hop. Mount-time consume only: catches
-  // the cross-page hop where the user predictive-tapped 'muscle' during
-  // the previous page's HT (intent staged before this route mounted).
-  // Direct taps on the BEGIN HERE button are handled by its onClick.
-  // No subscribeStaged: it caught direct-tap pointerdowns and double-fired
-  // with the click. The actual hop+HT lives on the page-export wrapper —
-  // we just call onMuscleHop and let the parent fire HeistTransition +
-  // router.push to /fitness/active/[iso]/[muscleId].
-  //
-  // Rest-day branch: NO REST sits in the canonical hero slot (see gtl3's
-  // 2333084 — rest day mirrors the muscle rolodex). The 'muscle' intent
-  // staged from /fitness/active's today HT still lands here; we just have
-  // no muscle to route to. Consume the intent anyway so it doesn't haunt
-  // the queue, then disarm — the chain naturally terminates at iso and
-  // the user picks NO REST / EAT / REST manually. Without consuming on
-  // rest day, the intent sits until TTL (10s) and may misfire if the user
-  // converts rest → workout within that window and a re-mount runs the
-  // consume effect a second time.
-  useEffect(() => {
-    const intent = consumePrefire('muscle')
-    if (!hasWork) {
-      if (intent) disarmChain('rest-day-terminal')
-      return
-    }
-    if (intent) {
-      // Use heroMuscle (first uncomplete) to match what the rolodex
-      // auto-centers on. Falls back to muscles[0] if all are complete.
-      const target = (() => {
-        for (const id of muscles) {
-          if (!isMuscleComplete(cycleId, iso, id)) return id
-        }
-        return muscles[0]
-      })()
-      if (target) setTimeout(() => onMuscleHop(target, { fromTimer: true }), 100)
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hasWork])
+  // Predictive-tap consume for the 'muscle' hop lives on the page-export
+  // wrapper (single owner via useChainPage) — see the bottom of this file.
+  // DayFocus only receives onMuscleHop for direct taps on the hero card.
 
   const [allReps, setAllReps]       = useState({})
   const [allWeights, setAllWeights] = useState({})
@@ -3074,14 +3041,6 @@ export default function ActiveDayPage() {
     setReady(true)
   }, [])
 
-  // Predictive-tap chain: clear stale transient state from the inbound hop
-  // on every mount. The consume effect below re-opens inAnim eagerly if a
-  // 'muscle' prefire was staged during the 'today' HT. Manual taps on the
-  // hero muscle card set 'muscle' state via handleMuscleHop's setInAnimation.
-  useEffect(() => {
-    clearChainTransient('iso-mount', 'muscle')
-  }, [])
-
   // Muscle-hop dispatch: fires HeistTransition then router.push to the
   // muscle exercise route. Mirrors handleDayHop on the parent active page —
   // synchronous skip flag so a fast follow-up tap routes immediately rather
@@ -3108,16 +3067,32 @@ export default function ActiveDayPage() {
     setFireMuscleHop(muscleId)
   }
 
-  // Register skip-route for the 'muscle' chain step. Module-level listener
-  // in lib/predictiveTap.js calls this when a tap arrives past
-  // SKIP_GRACE_MS during the muscle HT. Retreat-button exclusion + leaked-
-  // tap absorption are handled centrally.
-  useEffect(() => registerChainStep('muscle', () => {
-    if (skippedMuscleHopRef.current) return
-    if (!fireMuscleHopRef.current) return
-    skippedMuscleHopRef.current = true
-    router.push('/fitness/active/' + iso + '/' + fireMuscleHopRef.current)
-  }), [iso, router])
+  // Predictive-tap chain wiring — the wrapper is the SINGLE consumer of the
+  // 'muscle' intent (lib/useChainPage.js owns mount-clear + consume +
+  // skip-route ordering). On a consumed intent: rest day (no muscles for
+  // this iso) means the chain has nowhere to go — disarm and let the user
+  // pick NO REST / EAT / REST manually. Work day: hop to the first
+  // incomplete muscle (matches what the rolodex auto-centers on).
+  useChainPage({
+    step: 'muscle',
+    clearTag: 'iso-mount',
+    ready,
+    onArrive: () => {
+      const ms = dailyPlan[iso] || []
+      if (ms.length === 0) {
+        disarmChain('rest-day-terminal')
+        return
+      }
+      const target = ms.find((id) => !isMuscleComplete(cycleId, iso, id)) || ms[0]
+      if (target) setTimeout(() => handleMuscleHop(target, { fromTimer: true }), 100)
+    },
+    routeForward: () => {
+      if (skippedMuscleHopRef.current) return
+      if (!fireMuscleHopRef.current) return
+      skippedMuscleHopRef.current = true
+      router.push('/fitness/active/' + iso + '/' + fireMuscleHopRef.current)
+    },
+  })
 
   // Rest-day conversion handler — merges new muscles into dailyPlan[iso]
   // for this cycle, then persists to both pk('daily-plan') (legacy

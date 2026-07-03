@@ -6,7 +6,8 @@ import { useSound } from '../../lib/useSound'
 import HeistTransition from '../../components/HeistTransition'
 import RetreatButton from '../../components/RetreatButton'
 import { LogoStencil, LogoTarget } from '../../components/LogoHalf'
-import { armChain, setInAnimation, registerChainStep } from '../../lib/predictiveTap'
+import { armChain, setInAnimation } from '../../lib/predictiveTap'
+import { useChainPage } from '../../lib/useChainPage'
 import { pk } from '../../lib/storage'
 import { setUserDOB } from '../../lib/userPrefs'
 import BodyweightStep from '../../components/onboarding/BodyweightStep'
@@ -258,12 +259,16 @@ export default function ProfilePage() {
     router.push(HUB_TARGET)
   }
 
-  // Register skip-route for the 'profile' chain step. The module-level
-  // listener in lib/predictiveTap.js calls this when a tap arrives past
-  // SKIP_GRACE_MS during the profile HT, replacing the per-page window
-  // pointerdown listener pattern. Retreat-button exclusion is handled
-  // centrally.
-  useEffect(() => registerChainStep('profile', () => skipNow()), [])
+  // Predictive-tap chain wiring — entry page. Clears any stale chain state
+  // left by an abandoned run (e.g. retreat from hub mid-HT) on mount, and
+  // registers the 'profile' skip-route. No consume: the chain starts here
+  // via armChain() in selectProfile, not from a staged intent.
+  useChainPage({
+    step: 'profile',
+    clearTag: 'profile-mount',
+    entry: true,
+    routeForward: () => skipNow(),
+  })
 
   const selectProfile = (name) => {
     // Already transitioning → this rapid second tap is a skip.
