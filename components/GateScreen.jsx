@@ -663,7 +663,7 @@ export default function GateScreen({ onEnter, onCommit, onMusicStart, onSkip, on
           )}
         </div>
 
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.7rem' }}>
+        <div className="cta-idle-breathe" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.7rem' }}>
 
           {/* Brand-label slot — during loading hosts the chosen mantra
               (big diagonal white Anton, GTL-headline-style, no animation).

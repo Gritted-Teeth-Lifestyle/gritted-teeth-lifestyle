@@ -698,6 +698,7 @@ function ActivatePopup({ cycle, onTap, onSwipe }) {
       onPointerCancel={() => { startRef.current = null; dxRef.current = 0; swipeFiredRef.current = false; velocityTrackerRef.current = []; setDragX(0) }}
       onClick={handleClick}
       className={`
+        cta-idle-breathe
         fixed z-50 group flex items-center justify-center
         font-display tracking-[0.25em] uppercase overflow-visible
         px-24 py-5 min-h-[56px]
@@ -1120,7 +1121,7 @@ export default function LoadCyclePage() {
           <div className="flex flex-col items-start gap-6 py-20">
             <div className="font-display text-4xl text-gtl-ash -rotate-1">NO CYCLES FORGED</div>
             <div className="font-mono text-[10px] tracking-[0.3em] uppercase text-gtl-smoke">
-              Complete the new cycle flow to record your first program.
+              No war record starts itself. Go forge one.
             </div>
             <Link
               href="/fitness/new"

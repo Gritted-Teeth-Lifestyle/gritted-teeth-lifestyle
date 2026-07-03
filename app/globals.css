@@ -272,6 +272,14 @@ html, body {
   100% { opacity: 0;   transform: scale(1.3); }
 }
 
+/* Idle CTA breathing glow — drop-shadow survives clip-path, follows the
+ * clipped shape. 4s ease-in-out cycle (p5-ui: 3–6s for idle animations).
+ * Pause on press so the committed state reads as intentional. */
+@keyframes cta-idle-breathe {
+  0%, 100% { filter: drop-shadow(0 0 0px rgba(212, 24, 31, 0)); }
+  50%       { filter: drop-shadow(0 0 10px rgba(212, 24, 31, 0.55)) drop-shadow(0 0 24px rgba(212, 24, 31, 0.18)); }
+}
+
 /* ----- Utilities ----- */
 @layer utilities {
   /* Reverse mix-blend so we can put red text on red backgrounds where needed */
@@ -283,6 +291,17 @@ html, body {
   .gtl-focus-card:focus-visible {
     outline: 2px dashed #d4181f;
     outline-offset: 4px;
+  }
+
+  /* Primary CTA idle breathe — apply to any primary action button at rest.
+   * Pauses on :active for both the element itself and child targets whose
+   * parent button is pressed (button:active .cta-idle-breathe). */
+  .cta-idle-breathe {
+    animation: cta-idle-breathe 4s ease-in-out infinite;
+  }
+  .cta-idle-breathe:active,
+  button:active .cta-idle-breathe {
+    animation-play-state: paused;
   }
 }
 

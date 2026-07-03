@@ -698,7 +698,7 @@ export default function SettingsPage() {
           <div className="mt-12 flex items-center gap-4">
             <div className="h-px flex-1 bg-gtl-edge" />
             <div className="font-matisse text-[9px] tracking-[0.4em] uppercase text-gtl-smoke">
-              GRITTED TEETH LIFESTYLE / SETTINGS
+              <span className="hidden md:inline">GRITTED TEETH LIFESTYLE / </span>SETTINGS
             </div>
             <div className="h-px flex-1 bg-gtl-edge" />
           </div>

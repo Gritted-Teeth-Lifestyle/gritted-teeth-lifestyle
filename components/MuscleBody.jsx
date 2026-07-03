@@ -18,9 +18,9 @@ import { useSound } from '../lib/useSound'
 
 // Preload all four models so switching between them is instant
 useGLTF.preload('/models/goku.glb')
-useGLTF.preload('/models/super_saiyan_goku.glb')
+useGLTF.preload('/models/super_saiyan_goku_rigged.glb')
 useGLTF.preload('/models/gohan.glb')
-useGLTF.preload('/models/muscle_body.glb')
+useGLTF.preload('/models/muscle_body_rigged.glb')
 
 const TARGET_HEIGHT = 4.0
 
@@ -76,12 +76,12 @@ const MODELS = {
     ],
   },
   gokuSSJ: {
-    path: '/models/super_saiyan_goku.glb',
+    path: '/models/super_saiyan_goku_rigged.glb',
     rotationY: Math.PI,
     scaleMult: 1.0,
-    // Off-origin GLB — Center component re-centers at runtime.
-    // Hitboxes ported from goku (same body proportions, no bone names available for SSJ).
-    // Use debug mode + drag gizmos to fine-tune if needed.
+    // Now RIGGED via Mixamo (33-bone skeleton + idle clip) → muscles are
+    // bone-derived through the pipeline like Goku/Gohan. These hitboxes are the
+    // legacy static fallback, only used if the rig ever fails to resolve.
     hitboxes: [
       { group: 'chest',      position: [-0.22,  1.01, -0.23], rotation: [-0.554, 0,  0],     scale: [0.25, 0.16, 0.13] },
       { group: 'chest',      position: [ 0.22,  1.01, -0.23], rotation: [-0.554, 0,  0],     scale: [0.25, 0.16, 0.13] },
@@ -152,7 +152,7 @@ const MODELS = {
     ],
   },
   anatomy: {
-    path: '/models/muscle_body.glb',
+    path: '/models/muscle_body_rigged.glb',
     rotationY: 0,
     scaleMult: 1.0,
     // Calibrated from scratch against the actual anatomy GLB — do NOT
@@ -254,11 +254,6 @@ function buildStandardHitboxes({ bodyScale = 1.0 }) {
 // The overview camera (no selection) stays centered and unangled.
 const OVERVIEW_CAM = { pos: [0, 0.6, -8], target: [0, 0.6, 0] }
 
-const DIST_CLOSE = 2.4                        // radial distance from target
-const YAW_OFFSET = DIST_CLOSE * Math.sin(Math.PI / 6)  // sin(30°) ≈ 1.20
-const YAW_DEPTH  = DIST_CLOSE * Math.cos(Math.PI / 6)  // cos(30°) ≈ 2.08
-const PITCH_LIFT = 0.25                       // camera sits slightly above target
-
 // Alternating yaw sign per muscle group — keeps consecutive selections
 // feeling distinct (one comes from the left, the next from the right).
 const MUSCLE_YAW_SIGN = {
@@ -266,33 +261,93 @@ const MUSCLE_YAW_SIGN = {
   triceps: 1, glutes: -1, hamstrings: 1, calves: -1, back: -1,
 }
 
-// Compute per-muscle camera positions directly from a model's hitboxes.
-// Averages all hitbox centers for each group → derives target + camera pos
-// using the same angular formula that the old hardcoded table used.
-// This means every model auto-gets correct zoom-in positions for free —
-// no manual MUSCLE_CAMERA table needed per model.
+// How much of the frame the muscle should fill. >1 leaves breathing room
+// around the muscle; bump up for more margin, down for a tighter close-up.
+const VIEW_FILL  = 1.25
+const VIEW_YAW   = Math.PI / 7   // ~26° off the straight-on axis
+const VIEW_PITCH = 0.16          // ~9° downward tilt onto the target
+const MIN_DIST   = 1.2           // never jam the camera into the body
+// When a group's hitboxes are spread wider than this on X (arms held out in a
+// T-pose — biceps/triceps/forearms/shoulders), fitting BOTH limbs zooms way out
+// and reads as "no zoom". So for wide pairs we frame a SINGLE limb for a real
+// close-up; the glow still lights both. Compact pairs (chest/abs/calves/etc.)
+// stay framed together since their two sides nearly touch.
+const WIDE_HALF_X = 0.85
+
+// AABB over a list of hitboxes → { center:[x,y,z], half:[x,y,z] }. Each hitbox
+// is a unit sphere/box scaled by `scale`, so its half-extent on an axis is
+// |scale| (sphere radius 1 → extent = scale).
+function _bbox(boxes) {
+  let mnX = Infinity, mnY = Infinity, mnZ = Infinity
+  let mxX = -Infinity, mxY = -Infinity, mxZ = -Infinity
+  for (const h of boxes) {
+    const [px, py, pz] = h.position
+    const sx = Math.abs(h.scale[0]), sy = Math.abs(h.scale[1]), sz = Math.abs(h.scale[2])
+    mnX = Math.min(mnX, px - sx); mxX = Math.max(mxX, px + sx)
+    mnY = Math.min(mnY, py - sy); mxY = Math.max(mxY, py + sy)
+    mnZ = Math.min(mnZ, pz - sz); mxZ = Math.max(mxZ, pz + sz)
+  }
+  return {
+    center: [(mnX + mxX) / 2, (mnY + mxY) / 2, (mnZ + mxZ) / 2],
+    half:   [(mxX - mnX) / 2, (mxY - mnY) / 2, (mxZ - mnZ) / 2],
+  }
+}
+
+// Per-group camera target derived straight from hitbox geometry — no hardcoded
+// numbers, so ANY model with calibrated hitboxes gets correct size-aware framing
+// for free. Wide T-pose pairs collapse to the single limb the camera will face.
 function computeMuscleCameras(hitboxes) {
   const groups = {}
   for (const h of hitboxes) {
     if (!groups[h.group]) groups[h.group] = []
-    groups[h.group].push(h.position)
+    groups[h.group].push(h)
   }
 
   const cameras = {}
-  for (const [group, positions] of Object.entries(groups)) {
-    const avgY = positions.reduce((s, p) => s + p[1], 0) / positions.length
-    const avgZ = positions.reduce((s, p) => s + p[2], 0) / positions.length
+  for (const [group, boxes] of Object.entries(groups)) {
+    const full = _bbox(boxes)
+    // Front muscles sit on one Z hemisphere, back muscles the other — approach
+    // from the muscle's own side so we never look through the body.
+    const frontSign = full.center[2] >= 0 ? 1 : -1
 
-    const sign  = MUSCLE_YAW_SIGN[group] ?? 1
-    // Front muscles have positive Z, back muscles negative — approach from same side
-    const depth = avgZ >= 0 ? YAW_DEPTH : -YAW_DEPTH
-
-    cameras[group] = {
-      target: [0, avgY, avgZ],
-      pos:    [sign * YAW_OFFSET, avgY + PITCH_LIFT, avgZ + depth],
+    let box = full
+    if (full.half[0] > WIDE_HALF_X) {
+      // Pick the limb on the side the camera naturally swings to (frontSign ×
+      // yaw), so it frames the limb head-on instead of across the torso.
+      const pick = (frontSign * (MUSCLE_YAW_SIGN[group] ?? 1)) >= 0 ? 1 : -1
+      const side = boxes.filter((h) => (h.position[0] * pick) >= 0)
+      if (side.length) box = _bbox(side)
     }
+
+    cameras[group] = { group, center: box.center, half: box.half, frontSign }
   }
   return cameras
+}
+
+// Fit the camera to a muscle group: distance is solved from the live FOV +
+// aspect so the bounding box fills the frame to VIEW_FILL on whichever axis
+// is the tighter constraint. Works for a thin tall calf or a wide forearm
+// span alike, and adapts automatically when the canvas is resized.
+function framePose(cfg, camera) {
+  const center = new THREE.Vector3(...cfg.center)
+  const vFov = (camera.fov * Math.PI) / 180
+  const hFov = 2 * Math.atan(Math.tan(vFov / 2) * (camera.aspect || 1))
+  const [hx, hy, hz] = cfg.half
+
+  const distW = (hx * VIEW_FILL) / Math.tan(hFov / 2)   // fit width
+  const distH = (hy * VIEW_FILL) / Math.tan(vFov / 2)   // fit height
+  // Back off past the muscle's own depth so the near face isn't clipped.
+  const dist = Math.max(distW, distH, MIN_DIST) + hz
+
+  const yaw = (MUSCLE_YAW_SIGN[cfg.group] ?? 1) * VIEW_YAW
+  const fs  = cfg.frontSign
+  const dir = new THREE.Vector3(
+    fs * Math.sin(yaw) * Math.cos(VIEW_PITCH),
+    Math.sin(VIEW_PITCH),
+    fs * Math.cos(yaw) * Math.cos(VIEW_PITCH),
+  )
+
+  return { pos: center.clone().addScaledVector(dir, dist), target: center }
 }
 
 // Per-model glow position offsets — only needed if a model's hitboxes
@@ -309,8 +364,17 @@ function easeInOutCubic(t) {
 //   • Zoom in on new selection
 //   • Zoom out → pan in when switching muscles
 //   • Zoom out on dismiss
-function CameraRig({ focusGroup, muscleCameras, onSettled, play }) {
+function CameraRig({ focusGroup, muscleCameras, onSettled, play, poseFor }) {
   const { camera } = useThree()
+
+  // Resolve the camera pose for a group. `poseFor` (bone-driven, live) wins so
+  // rigged models target the real skeleton; otherwise fall back to the static
+  // hitbox-derived framing. Returns null → caller uses overview.
+  const resolveTo = (group) => {
+    if (poseFor) return poseFor(group, camera)
+    const cfg = muscleCameras && muscleCameras[group]
+    return cfg ? framePose(cfg, camera) : null
+  }
 
   // Continuously interpolated camera state (so we always know where we are mid-animation)
   const camPos    = useRef(new THREE.Vector3(...OVERVIEW_CAM.pos))
@@ -358,9 +422,14 @@ function CameraRig({ focusGroup, muscleCameras, onSettled, play }) {
       play('camera-swoosh')
     } else {
       // First selection from overview — zoom in directly
-      const cfg = muscleCameras[focusGroup] || OVERVIEW_CAM
-      animTo.current.pos.set(...cfg.pos)
-      animTo.current.target.set(...cfg.target)
+      const to = resolveTo(focusGroup)
+      if (to) {
+        animTo.current.pos.copy(to.pos)
+        animTo.current.target.copy(to.target)
+      } else {
+        animTo.current.pos.set(...OVERVIEW_CAM.pos)
+        animTo.current.target.set(...OVERVIEW_CAM.target)
+      }
       phase.current = 'in'
       pendingGroup.current = null
       play('camera-swoosh')
@@ -385,9 +454,14 @@ function CameraRig({ focusGroup, muscleCameras, onSettled, play }) {
           // Phase 1 (zoom-out) done — start phase 2 (zoom-in to pending group)
           animFrom.current.pos.copy(camPos.current)
           animFrom.current.target.copy(camTarget.current)
-          const cfg = muscleCameras[pendingGroup.current] || OVERVIEW_CAM
-          animTo.current.pos.set(...cfg.pos)
-          animTo.current.target.set(...cfg.target)
+          const to = resolveTo(pendingGroup.current)
+          if (to) {
+            animTo.current.pos.copy(to.pos)
+            animTo.current.target.copy(to.target)
+          } else {
+            animTo.current.pos.set(...OVERVIEW_CAM.pos)
+            animTo.current.target.set(...OVERVIEW_CAM.target)
+          }
           phase.current = 'in'
           progress.current = 0
           pendingGroup.current = null
@@ -412,6 +486,17 @@ function CameraRig({ focusGroup, muscleCameras, onSettled, play }) {
       camPos.current.set(x, OVERVIEW_CAM.pos[1], z)
       camera.position.copy(camPos.current)
       camera.lookAt(camTarget.current)
+    } else if (poseFor) {
+      // Settled on a muscle of a RIGGED model — keep tracking it live so the
+      // shot follows the skeleton during animation. Gentle lerp avoids jitter.
+      const to = resolveTo(focusGroup)
+      if (to) {
+        const k = Math.min(1, delta * 5)
+        camPos.current.lerp(to.pos, k)
+        camTarget.current.lerp(to.target, k)
+        camera.position.copy(camPos.current)
+        camera.lookAt(camTarget.current)
+      }
     }
   })
 
@@ -488,24 +573,19 @@ function GlowFlash({ settledGroup, hitboxes, modelKey }) {
     g.visible = true
 
     const elapsed = (Date.now() - focusTime.current) / 1000
-    const TOTAL      = 2.0
-    const FADE_START = 1.5
+    const RAMP = 0.4
 
-    let envelope = 1.0
-    if (elapsed >= TOTAL) {
-      envelope = 0
-    } else if (elapsed >= FADE_START) {
-      envelope = 1 - (elapsed - FADE_START) / (TOTAL - FADE_START)
-    }
-
-    // Opacity pulses while lit, then fades cleanly. Walk the group's
-    // children so every hitbox-derived volume shares the same envelope.
-    const opPulse = elapsed < FADE_START
-      ? (0.75 + Math.sin(Date.now() * 0.009) * 0.25)
-      : 1
-    const op = 0.85 * envelope * opPulse
+    // Ramp up fast, then HOLD while the muscle stays focused — the glow
+    // only clears when the user switches muscle or dismisses (settledGroup
+    // goes null upstream). A gentle pulse keeps it alive without fading out.
+    const envelope = elapsed < RAMP ? elapsed / RAMP : 1
+    const opPulse  = 0.78 + Math.sin(Date.now() * 0.006) * 0.22
+    // Scale each shell by ITS OWN base opacity (captured once) so the core and
+    // the fainter halo keep their relative strengths through the pulse.
     g.traverse((obj) => {
-      if (obj.material) obj.material.opacity = op
+      if (!obj.material) return
+      if (obj.material.userData.base === undefined) obj.material.userData.base = obj.material.opacity
+      obj.material.opacity = obj.material.userData.base * envelope * opPulse
     })
   })
 
@@ -513,12 +593,15 @@ function GlowFlash({ settledGroup, hitboxes, modelKey }) {
   const groupBoxes = hitboxes.filter((h) => h.group === settledGroup)
   if (groupBoxes.length === 0) return null
 
-  // XY inflation keeps the muscle silhouette mostly honest, but we blow
-  // up Z aggressively so every glow volume definitely punches all the
-  // way through the body surface — otherwise the GreaterDepth trick has
-  // nothing to draw against and the highlight vanishes on thin models.
-  const INFLATE_XY = 1.20
-  const INFLATE_Z  = 1.0
+  // Robust additive-shell glow. The old stencil-projection trick painted gold
+  // onto the body only where a hitbox volume punched through the surface — it
+  // worked on the chest but silently vanished on thin/rear muscles (calves) and
+  // depends on viewing angle. This instead renders each hitbox as an additive
+  // gold shell, slightly inflated so it pokes through the muscle surface toward
+  // the camera. depthTest stays ON so nearer body parts occlude it (it hugs the
+  // muscle instead of floating), depthWrite OFF so shells never block each other.
+  // No stencil, no depth-func games → it shows on EVERY muscle and EVERY model.
+  const INFLATE = 1.15
 
   const offsets = GLOW_OFFSETS[modelKey] || {}
   const muscleOffset = offsets[settledGroup] || [0, 0, 0]
@@ -526,127 +609,48 @@ function GlowFlash({ settledGroup, hitboxes, modelKey }) {
   return (
     <group ref={groupRef}>
       {groupBoxes.map((h, i) => {
-        // Negative scale components flip the geometry's face winding,
-        // which inverts BackSide ↔ FrontSide and breaks the two-pass
-        // depth logic. Spheres and boxes are visually symmetric, so we
-        // always use the absolute magnitude for the glow volume.
-        const absX = Math.abs(h.scale[0])
-        const absY = Math.abs(h.scale[1])
-        const absZ = Math.abs(h.scale[2])
-        const scale = [absX * INFLATE_XY, absY * INFLATE_XY, absZ * INFLATE_Z]
+        // abs() the scale — negative components only flip face winding, which
+        // is irrelevant for a symmetric additive shell. Some hitboxes are razor
+        // thin on one axis (a bicep is wide+flat) which would render as a
+        // FLOATING DISC instead of wrapping the limb, so clamp every axis to a
+        // minimum fraction of the largest — the glow becomes a rounded muscle
+        // volume embedded in the limb, not a plate hovering off it.
+        const ax = Math.abs(h.scale[0]), ay = Math.abs(h.scale[1]), az = Math.abs(h.scale[2])
+        const minThick = Math.max(ax, ay, az) * 0.55
+        const scale = [
+          Math.max(ax, minThick) * INFLATE,
+          Math.max(ay, minThick) * INFLATE,
+          Math.max(az, minThick) * INFLATE,
+        ]
         const position = [
           h.position[0] + muscleOffset[0],
           h.position[1] + muscleOffset[1],
           h.position[2] + muscleOffset[2],
         ]
-        // Three-pass stencil-masked projection, using 2 bits of stencil:
-        //   bit 0 = "gold already drawn at this pixel" — persists across
-        //           all volumes in the frame so overlapping volumes can't
-        //           double-brighten the same pixel.
-        //   bit 1 = "body is in front of this volume's front face" —
-        //           per-volume, cleared after Pass 3.
-        //
-        //   Pass 1 (front face, GreaterDepth, colorWrite off):
-        //     Set bit 1 where the body is closer to camera than the
-        //     volume's front face. These pixels are NOT inside the
-        //     sphere volume and must be skipped by Pass 2.
-        //
-        //   Pass 2 (back face, GreaterDepth, stencil == 0b00):
-        //     Draw gold + set bit 0 where stencil is clean (body inside
-        //     sphere AND no previous volume already drew here). The
-        //     Increment op plus writeMask=0b01 toggles bit 0 to 1 on
-        //     successful draw, leaving bit 1 alone.
-        //
-        //   Pass 3 (front face, depthTest off, writeMask=0b10):
-        //     Clear bit 1 everywhere the volume's silhouette covers so
-        //     the next volume's Pass 1 gets a fresh obstruction mask.
-        //     Bit 0 (the drawn marker) is left intact.
-        const renderGeom = () => h.shape === 'box'
+        const rotation = h.rotation || [0, 0, 0]
+        const geom = h.shape === 'box'
           ? <boxGeometry args={[1, 1, 1]} />
           : <sphereGeometry args={[1, 24, 24]} />
-        const rotation = h.rotation || [0, 0, 0]
-        const baseRO = 1000 + i * 3
         return (
           <group key={`${settledGroup}-${i}`}>
-            {/* Pass 1 — mark bit 1 where body is in front of front face.
-                `transparent` forces this into the same render phase as
-                the gold pass so renderOrder is actually honored. */}
-            <mesh
-              position={position}
-              rotation={rotation}
-              scale={scale}
-              renderOrder={baseRO}
-            >
-              {renderGeom()}
-              <meshBasicMaterial
-                transparent
-                opacity={0}
-                colorWrite={false}
-                depthWrite={false}
-                depthTest
-                depthFunc={THREE.GreaterDepth}
-                side={THREE.FrontSide}
-                stencilWrite
-                stencilWriteMask={0b10}
-                stencilFunc={THREE.AlwaysStencilFunc}
-                stencilRef={0b10}
-                stencilFail={THREE.KeepStencilOp}
-                stencilZFail={THREE.KeepStencilOp}
-                stencilZPass={THREE.ReplaceStencilOp}
-              />
-            </mesh>
-
-            {/* Pass 2 — draw gold + set bit 0 where stencil is 0b00 */}
-            <mesh
-              position={position}
-              rotation={rotation}
-              scale={scale}
-              renderOrder={baseRO + 1}
-            >
-              {renderGeom()}
+            {/* Paint-on-body glow, single pass. BackSide + GreaterDepth means a
+                back-face fragment only draws where the BODY is in front of it —
+                i.e. where the muscle volume actually overlaps the mesh. Over the
+                empty background (depth = far) the test fails, so NO floating disc
+                and no spill, even if a hitbox sits slightly off the limb. Works
+                on every muscle/model without stencil gymnastics. */}
+            <mesh position={position} rotation={rotation} scale={scale} renderOrder={1000 + i}>
+              {geom}
               <meshBasicMaterial
                 color="#ffcc00"
                 transparent
-                opacity={0.85}
+                opacity={0.9}
                 blending={THREE.AdditiveBlending}
                 depthWrite={false}
                 depthTest
                 depthFunc={THREE.GreaterDepth}
                 side={THREE.BackSide}
                 toneMapped={false}
-                stencilWrite
-                stencilWriteMask={0b01}
-                stencilFunc={THREE.EqualStencilFunc}
-                stencilRef={0b00}
-                stencilFail={THREE.KeepStencilOp}
-                stencilZFail={THREE.KeepStencilOp}
-                stencilZPass={THREE.IncrementStencilOp}
-              />
-            </mesh>
-
-            {/* Pass 3 — clear bit 1 so the next volume starts clean.
-                Also marked transparent so it renders after Pass 2. */}
-            <mesh
-              position={position}
-              rotation={rotation}
-              scale={scale}
-              renderOrder={baseRO + 2}
-            >
-              {renderGeom()}
-              <meshBasicMaterial
-                transparent
-                opacity={0}
-                colorWrite={false}
-                depthWrite={false}
-                depthTest={false}
-                side={THREE.FrontSide}
-                stencilWrite
-                stencilWriteMask={0b10}
-                stencilFunc={THREE.AlwaysStencilFunc}
-                stencilRef={0b00}
-                stencilFail={THREE.ReplaceStencilOp}
-                stencilZFail={THREE.ReplaceStencilOp}
-                stencilZPass={THREE.ReplaceStencilOp}
               />
             </mesh>
           </group>
@@ -657,10 +661,51 @@ function GlowFlash({ settledGroup, hitboxes, modelKey }) {
 }
 
 // ── The displayed model ─────────────────────────────────────────────
-function ModelDisplay({ modelKey }) {
+function ModelDisplay({ modelKey, onReady }) {
   const config = MODELS[modelKey] || MODELS.goku
   const { scene, animations } = useGLTF(config.path)
   const cloned = useMemo(() => SkeletonUtils.clone(scene), [scene])
+
+  // Hand the live clone (with its skeleton) up to SceneContent so it can
+  // drive bone-based muscles. Runs after mount so the primitive transform is
+  // applied and bone world-matrices are valid.
+  useEffect(() => {
+    if (onReady) onReady(cloned)
+    return () => { if (onReady) onReady(null) }
+  }, [cloned, onReady])
+
+  // Animation playback — plays the model's first clip BY DEFAULT for rigged
+  // models (Goku Idle, Gohan Kamehameha, SSJ, etc.). The bone-driven muscles +
+  // camera track the moving skeleton automatically. Opt out with ?anim=0.
+  const mixerRef = useRef(null)
+  const hipsRef = useRef(null)
+  const hipsRest = useRef(null)
+  useEffect(() => {
+    // Find the Hips/root bone so we can plant horizontal root motion (below).
+    let hips = null
+    cloned.traverse((o) => { if (o.isBone && !hips && /hips$/i.test(_stripBone(o.name))) hips = o })
+    hipsRef.current = hips
+    hipsRest.current = hips ? { x: hips.position.x, z: hips.position.z } : null
+  }, [cloned])
+  useEffect(() => {
+    const off = typeof window !== 'undefined' &&
+      new URLSearchParams(window.location.search).get('anim') === '0'
+    if (off || !animations || !animations.length) return
+    const mixer = new THREE.AnimationMixer(cloned)
+    const action = mixer.clipAction(animations[0])
+    action.reset().play()
+    mixerRef.current = mixer
+    return () => { mixer.stopAllAction(); mixerRef.current = null }
+  }, [cloned, animations])
+  useFrame((_, dt) => {
+    if (!mixerRef.current) return
+    mixerRef.current.update(dt)
+    // Strip horizontal ROOT MOTION — pin the Hips to its rest X/Z so clips that
+    // stride (e.g. Mixamo "Blocking") idle in place instead of wandering off
+    // the overview. Vertical bob (Y) is kept. Works for any model/clip.
+    const h = hipsRef.current, r = hipsRest.current
+    if (h && r) { h.position.x = r.x; h.position.z = r.z }
+  })
 
   const modelLayout = useMemo(() => {
     // ── Selective bind-pose restore for arm/spine bones ───────────────
@@ -1262,6 +1307,218 @@ function BackgroundPlane({ onDismiss }) {
   )
 }
 
+// ── BONE-DRIVEN MUSCLES (any rigged humanoid) ────────────────────────
+// For models with a standard mixamo skeleton, derive every muscle's position +
+// size from the SKELETON instead of hand-placed hitboxes. ONE map below works
+// for every such model → zero per-model calibration. Volumes are recomputed
+// from live bone world-matrices each frame, so the glow AND the camera target
+// follow ANIMATION automatically — which static hitboxes can never do.
+//
+// Limb muscles: a capsule between two bones, pushed to the front(+1)/back(-1)
+// face of the limb. t = where along the bone span it centers; rFrac = radius as
+// a fraction of the span length.
+const LIMB_MUSCLES = {
+  shoulders:  { from: 'Shoulder', to: 'Arm',     t: 0.55, rFrac: 0.7,  zBias: 0  },
+  biceps:     { from: 'Arm',      to: 'ForeArm', t: 0.5,  rFrac: 0.36, zBias: 1  },
+  triceps:    { from: 'Arm',      to: 'ForeArm', t: 0.5,  rFrac: 0.36, zBias: -1 },
+  forearms:   { from: 'ForeArm',  to: 'Hand',    t: 0.42, rFrac: 0.34, zBias: 1  },
+  quads:      { from: 'UpLeg',    to: 'Leg',     t: 0.5,  rFrac: 0.36, zBias: 1  },
+  hamstrings: { from: 'UpLeg',    to: 'Leg',     t: 0.5,  rFrac: 0.36, zBias: -1 },
+  calves:     { from: 'Leg',      to: 'Foot',    t: 0.4,  rFrac: 0.38, zBias: -1 },
+  // glutes span the (sided) UpLeg up to the CENTRAL Hips bone — centerTo means
+  // the "to" bone has no Left/Right prefix. Without this both entries look for a
+  // non-existent LeftHips/RightHips bone and silently vanish.
+  glutes:     { from: 'UpLeg',    to: 'Hips',    t: 0.18, rFrac: 0.5,  zBias: -1, centerTo: true },
+}
+// Central torso muscles ride the spine; width comes from shoulder span.
+const TORSO_MUSCLES = {
+  chest: { from: 'Spine1', to: 'Spine2', t: 0.75, zBias: 1  },
+  abs:   { from: 'Spine',  to: 'Spine1', t: 0.5,  zBias: 1  },
+  back:  { from: 'Spine1', to: 'Spine2', t: 0.55, zBias: -1 },
+}
+
+// Normalize any mixamo bone name to its bare base: strips the `mixamorig`
+// prefix plus whatever separator follows (`:` from raw Mixamo, `_` from some
+// GLB exporters, a space, or nothing) and any trailing dedupe index.
+// e.g. "mixamorig:LeftArm" / "mixamorigLeftArm_09" / "mixamorig_LeftArm.001" → "LeftArm"
+const _stripBone = (n) => n.replace(/^mixamorig[^A-Za-z]*/i, '').replace(/[_.]\d+$/, '')
+
+function collectBones(root) {
+  const map = {}
+  root.traverse((o) => { if (o.isBone) { const b = _stripBone(o.name); if (!map[b]) map[b] = o } })
+  return map
+}
+
+// Returns { entries, leftArm, rightArm, hips } for a rigged model, or null.
+function buildBoneRig(root) {
+  const B = collectBones(root)
+  if (!B.Hips && !B.Spine) return null
+  const entries = []
+  for (const [group, s] of Object.entries(LIMB_MUSCLES)) {
+    for (const side of ['Left', 'Right']) {
+      const a = B[side + s.from]
+      const b = B[(s.centerTo ? '' : side) + s.to]
+      if (a && b) entries.push({ group, side, a, b, kind: 'limb', ...s })
+    }
+  }
+  for (const [group, s] of Object.entries(TORSO_MUSCLES)) {
+    const a = B[s.from], b = B[s.to]
+    if (a && b) entries.push({ group, side: 'C', a, b, kind: 'torso', ...s })
+  }
+  if (!entries.length) return null
+  return { entries, leftArm: B.LeftArm, rightArm: B.RightArm, hips: B.Hips || B.Spine }
+}
+
+// Scratch vectors — reused each frame to avoid per-frame allocation churn.
+const _bA = new THREE.Vector3(), _bB = new THREE.Vector3()
+const _bFwd = new THREE.Vector3(), _bLA = new THREE.Vector3(), _bRA = new THREE.Vector3()
+const _bUp = new THREE.Vector3(0, 1, 0), _bQ = new THREE.Quaternion(), _bAxis = new THREE.Vector3()
+
+// Anterior (body-forward) direction in WORLD space, taken live from the Hips
+// bone so it stays correct as the character turns during animation.
+function bodyForward(rig, out) {
+  rig.hips.getWorldQuaternion(_bQ)
+  return out.set(0, 0, 1).applyQuaternion(_bQ).setY(0).normalize()
+}
+
+// Compute a muscle's world frame from its bones. Writes into `f` and returns it.
+function muscleFrame(e, rig, fwd, f) {
+  e.a.getWorldPosition(_bA); e.b.getWorldPosition(_bB)
+  f.center.lerpVectors(_bA, _bB, e.t)
+  _bAxis.subVectors(_bB, _bA)
+  const len = _bAxis.length() || 0.001
+  let radius
+  if (e.kind === 'limb') {
+    radius = len * e.rFrac
+  } else {
+    let w = 0.35
+    if (rig.leftArm && rig.rightArm) {
+      rig.leftArm.getWorldPosition(_bLA); rig.rightArm.getWorldPosition(_bRA)
+      w = _bLA.distanceTo(_bRA)
+    }
+    radius = w * 0.27
+  }
+  if (e.zBias) f.center.addScaledVector(fwd, e.zBias * radius * 0.7)
+  _bAxis.normalize()
+  f.quat.setFromUnitVectors(_bUp, _bAxis)
+  const halfLen = Math.max(len * 0.5, radius)
+  if (e.kind === 'limb') f.scale.set(radius, halfLen, radius)
+  else f.scale.set(radius * 1.25, halfLen, radius * 0.8)
+  f.radius = Math.max(radius, halfLen)
+  return f
+}
+
+const _newFrame = () => ({ center: new THREE.Vector3(), quat: new THREE.Quaternion(), scale: new THREE.Vector3(), radius: 0 })
+
+// Live camera pose for a rigged muscle group, computed from current bones.
+// Wide limb pairs collapse to a single side (real close-up); torso/compact
+// groups use the union. Mirrors the static framePose math but bone-sourced.
+function makeBonePoseFor(rig) {
+  const f = _newFrame()
+  const fwd = new THREE.Vector3()
+  const c = new THREE.Vector3()
+  const dir = new THREE.Vector3()
+  return (group, camera) => {
+    const all = rig.entries.filter((e) => e.group === group)
+    if (!all.length) return null
+    bodyForward(rig, fwd)
+    let chosen = all
+    if (all.length > 1 && all[0].kind === 'limb') {
+      const wantLeft = (MUSCLE_YAW_SIGN[group] ?? 1) < 0
+      chosen = all.filter((e) => (e.side === 'Left') === wantLeft)
+      if (!chosen.length) chosen = [all[0]]
+    }
+    c.set(0, 0, 0)
+    let R = 0.001, zb = 0
+    for (const e of chosen) {
+      muscleFrame(e, rig, fwd, f)
+      c.add(f.center); R = Math.max(R, f.radius); zb = e.zBias
+    }
+    c.multiplyScalar(1 / chosen.length)
+
+    const vFov = (camera.fov * Math.PI) / 180
+    const hFov = 2 * Math.atan(Math.tan(vFov / 2) * (camera.aspect || 1))
+    let dist = (R * VIEW_FILL) / Math.sin(Math.min(vFov, hFov) / 2)
+    dist = Math.max(dist, R + MIN_DIST)
+
+    // Approach from the muscle's own face (front/back), offset by the cinematic
+    // yaw + a touch of downward pitch.
+    const approach = zb !== 0 ? Math.sign(zb) : 1
+    dir.copy(fwd).multiplyScalar(approach)
+    dir.applyAxisAngle(_bUp, (MUSCLE_YAW_SIGN[group] ?? 1) * VIEW_YAW)
+    dir.y += Math.sin(VIEW_PITCH)
+    dir.normalize()
+
+    return { pos: c.clone().addScaledVector(dir, dist), target: c.clone() }
+  }
+}
+
+// Renders the invisible click hitboxes (always) + the gold paint-on-body glow
+// (focused group only), positioning every volume from live bone matrices each
+// frame so they ride the skeleton through animation.
+function BoneMuscleLayer({ rig, settledGroup, onFocus }) {
+  const hitRefs = useRef([])
+  const glowRefs = useRef([])
+  const frame = useRef(_newFrame())
+  const fwd = useRef(new THREE.Vector3())
+  const focusTime = useRef(null)
+  useEffect(() => { focusTime.current = settledGroup ? Date.now() : null }, [settledGroup])
+
+  useFrame(() => {
+    bodyForward(rig, fwd.current)
+    let op = 0
+    if (focusTime.current) {
+      const elapsed = (Date.now() - focusTime.current) / 1000
+      const env = elapsed < 0.4 ? elapsed / 0.4 : 1
+      op = 0.9 * env * (0.78 + Math.sin(Date.now() * 0.006) * 0.22)
+    }
+    rig.entries.forEach((e, i) => {
+      const f = muscleFrame(e, rig, fwd.current, frame.current)
+      const h = hitRefs.current[i]
+      if (h) { h.position.copy(f.center); h.quaternion.copy(f.quat); h.scale.copy(f.scale) }
+      const g = glowRefs.current[i]
+      if (g) {
+        const on = e.group === settledGroup
+        g.visible = on
+        if (on) { g.position.copy(f.center); g.quaternion.copy(f.quat); g.scale.copy(f.scale); g.material.opacity = op }
+      }
+    })
+  })
+
+  return (
+    <group>
+      {rig.entries.map((e, i) => (
+        <mesh
+          key={`hit-${i}`}
+          ref={(el) => { hitRefs.current[i] = el }}
+          onClick={(ev) => { ev.stopPropagation(); onFocus(e.group) }}
+          onPointerOver={(ev) => { ev.stopPropagation(); document.body.style.cursor = 'pointer' }}
+          onPointerOut={() => { document.body.style.cursor = 'default' }}
+        >
+          <sphereGeometry args={[1, 12, 12]} />
+          <meshBasicMaterial transparent opacity={0} depthWrite={false} />
+        </mesh>
+      ))}
+      {rig.entries.map((e, i) => (
+        <mesh key={`glow-${i}`} ref={(el) => { glowRefs.current[i] = el }} renderOrder={1000 + i} visible={false}>
+          <sphereGeometry args={[1, 24, 24]} />
+          <meshBasicMaterial
+            color="#ffcc00"
+            transparent
+            opacity={0}
+            blending={THREE.AdditiveBlending}
+            depthWrite={false}
+            depthTest
+            depthFunc={THREE.GreaterDepth}
+            side={THREE.BackSide}
+            toneMapped={false}
+          />
+        </mesh>
+      ))}
+    </group>
+  )
+}
+
 function SceneContent({ modelKey, focusedGroup, onFocus, debugMode, play }) {
   const config = MODELS[modelKey] || MODELS.goku
 
@@ -1271,6 +1528,13 @@ function SceneContent({ modelKey, focusedGroup, onFocus, debugMode, play }) {
     () => computeMuscleCameras(config.hitboxes),
     [config.hitboxes]
   )
+
+  // Lifted from ModelDisplay once the GLB clone exists. If the model is rigged
+  // (mixamo skeleton) we drive muscles from BONES — zero hand calibration and
+  // animation-ready. Non-rigged models (static meshes) keep the hitbox path.
+  const [clonedScene, setClonedScene] = useState(null)
+  const rig = useMemo(() => (clonedScene ? buildBoneRig(clonedScene) : null), [clonedScene])
+  const bonePoseFor = useMemo(() => (rig ? makeBonePoseFor(rig) : null), [rig])
 
   // `settledGroup` lags `focusedGroup` by the camera animation duration —
   // it only becomes non-null once CameraRig finishes easing into the muscle.
@@ -1293,41 +1557,54 @@ function SceneContent({ modelKey, focusedGroup, onFocus, debugMode, play }) {
       <pointLight position={[0, 5, 5]} intensity={0.8} color="#ffaa66" />
       <pointLight position={[0, -2, 4]} intensity={0.4} color="#4488ff" />
 
-      {/* Gold additive glow — fires only after the camera settles */}
-      <GlowFlash
-        settledGroup={settledGroup}
-        hitboxes={config.hitboxes}
-        modelKey={modelKey}
-      />
+      {/* Static-hitbox glow — only for NON-rigged models (rigged use bones) */}
+      {!rig && (
+        <GlowFlash
+          settledGroup={settledGroup}
+          hitboxes={config.hitboxes}
+          modelKey={modelKey}
+        />
+      )}
 
       {/* Background click-to-dismiss plane */}
       <BackgroundPlane onDismiss={() => onFocus(null)} />
 
       <Suspense fallback={null}>
-        <ModelDisplay key={modelKey} modelKey={modelKey} />
+        <ModelDisplay key={modelKey} modelKey={modelKey} onReady={setClonedScene} />
       </Suspense>
 
       {/* Debug wireframe overlay for hitbox calibration */}
       {debugMode && <DebugHitboxes hitboxes={config.hitboxes} modelKey={modelKey} />}
 
-      {/* Hitboxes — invisible click zones only, no visual shape */}
-      {config.hitboxes.map((h, i) => (
-        <Hitbox
-          key={`${modelKey}-${h.group}-${i}`}
-          group={h.group}
-          position={h.position}
-          rotation={h.rotation}
-          scale={h.scale}
-          shape={h.shape}
-          onFocus={onFocus}
-        />
-      ))}
+      {/* RIGGED model → bone-driven muscles (auto, animation-ready).
+          NON-rigged → static hand-calibrated hitboxes. */}
+      {rig ? (
+        <BoneMuscleLayer rig={rig} settledGroup={settledGroup} onFocus={onFocus} />
+      ) : (
+        config.hitboxes.map((h, i) => (
+          <Hitbox
+            key={`${modelKey}-${h.group}-${i}`}
+            group={h.group}
+            position={h.position}
+            rotation={h.rotation}
+            scale={h.scale}
+            shape={h.shape}
+            onFocus={onFocus}
+          />
+        ))
+      )}
 
       {/* Calibration mode: free orbit + no auto camera. Production: P5 camera rig. */}
       {debugMode ? (
         <OrbitControls makeDefault enableDamping={false} />
       ) : (
-        <CameraRig focusGroup={focusedGroup} muscleCameras={muscleCameras} onSettled={setSettledGroup} play={play} />
+        <CameraRig
+          focusGroup={focusedGroup}
+          muscleCameras={muscleCameras}
+          poseFor={bonePoseFor}
+          onSettled={setSettledGroup}
+          play={play}
+        />
       )}
     </group>
   )
