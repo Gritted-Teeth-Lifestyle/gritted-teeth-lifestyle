@@ -8,6 +8,7 @@ import RetreatButton from '../../components/RetreatButton'
 import { LogoStencil, LogoTarget } from '../../components/LogoHalf'
 import { armChain, setInAnimation, registerChainStep } from '../../lib/predictiveTap'
 import { pk } from '../../lib/storage'
+import { setUserDOB } from '../../lib/userPrefs'
 import BodyweightStep from '../../components/onboarding/BodyweightStep'
 import DateOfBirthStep from '../../components/onboarding/DateOfBirthStep'
 
@@ -338,8 +339,10 @@ export default function ProfilePage() {
 
   const handleDOBConfirm = (iso) => {
     if (!pendingDOBName) return
+    // DOB is app-level (not profile-scoped). One human → one birthday,
+    // even with multiple warrior save slots. See lib/userPrefs.js.
     if (/^\d{4}-\d{2}-\d{2}$/.test(iso)) {
-      try { localStorage.setItem(pk('user-dob'), iso) } catch (_) {}
+      setUserDOB(iso)
     }
     const name = pendingDOBName
     setPendingDOBName(null)

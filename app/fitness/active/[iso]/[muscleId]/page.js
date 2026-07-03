@@ -18,6 +18,7 @@ import { useParams, useRouter } from 'next/navigation'
 import { useSound } from '../../../../../lib/useSound'
 import { useProfileGuard } from '../../../../../lib/useProfileGuard'
 import { pk } from '../../../../../lib/storage'
+import { getUserDOB } from '../../../../../lib/userPrefs'
 import PickerSheet from '../../../../../components/attune/PickerSheet'
 import HeistTransition from '../../../../../components/HeistTransition'
 import { chipsForDay, addChip, useChipsForDay, replaceExercise } from '../../../../../lib/attunement'
@@ -1677,8 +1678,8 @@ function ExercisePanel({ muscleId, dayIso, originRect, onClose, cycleId, onAddMo
         if (Number.isFinite(n)) bodyweight = n
         sex = (localStorage.getItem(pk('user-sex')) === 'f') ? 'f' : 'm'
       } catch (_) {}
-      let dob = null
-      try { dob = localStorage.getItem(pk('user-dob')) } catch (_) {}
+      // DOB is app-level (not profile-scoped) — see lib/userPrefs.js.
+      const dob = getUserDOB()
       const tierMult     = getTierMultiplier(getTierCount())
       const prestigeMult = getPrestigeMultiplier(getRibbonCount())
       const holidayMult  = getHolidayMultiplier(new Date(), dob)

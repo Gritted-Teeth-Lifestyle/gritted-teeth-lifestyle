@@ -9,6 +9,7 @@ import NumberRow from '../../components/settings/NumberRow'
 import SexToggle from '../../components/settings/SexToggle'
 import DateRow from '../../components/settings/DateRow'
 import { canVibrate } from '../../lib/platform'
+import { getUserDOB, setUserDOB as writeUserDOB } from '../../lib/userPrefs'
 import {
   BGM_TRACKS,
   BGM_VOLUME_KEY,
@@ -131,6 +132,27 @@ function DangerButton({ label, armedLabel, onConfirm }) {
   )
 }
 
+// TabPlate — chunky P5-style tab button. Active tab is solid red on paper;
+// inactive tab is outlined ash that lights to red on hover. Clip-path matches
+// the chip/Toggle vocabulary so it sits in the same visual family as the rest
+// of the settings page.
+function TabPlate({ active, label, onClick }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      className={`flex-1 py-3 font-mono text-[12px] tracking-[0.35em] uppercase font-bold transition-colors duration-200 outline-none
+        ${active
+          ? 'bg-gtl-red text-gtl-paper border border-transparent'
+          : 'bg-gtl-surface text-gtl-chalk border border-gtl-edge [@media(hover:hover)]:hover:border-gtl-red [@media(hover:hover)]:hover:text-gtl-red'}`}
+      style={{ clipPath: 'polygon(6% 0%, 100% 0%, 94% 100%, 0% 100%)' }}
+    >
+      {label}
+    </button>
+  )
+}
+
 export default function SettingsPage() {
   const router = useRouter()
   const { play } = useSound()
@@ -145,7 +167,11 @@ export default function SettingsPage() {
   const hapticsSupported = ready && canVibrate()
   const [userBW, setUserBW]       = useState(null)   // R1a: lb integer, profile-scoped
   const [userSex, setUserSex]     = useState('m')    // R1a: 'm' | 'f', default 'm'
-  const [userDOB, setUserDOB]     = useState(null)   // R16: ISO 'YYYY-MM-DD' | null, optional
+  const [userDOB, setUserDOB]     = useState(null)   // R16: ISO 'YYYY-MM-DD' | null, optional. App-level — one human, one DOB.
+  // Two-tab structure: APP (audio/haptics/BGM/personal/defaults) vs PROFILE
+  // (warrior identity + scoped data + danger). Reflects the underlying data
+  // boundary: app-level `gtl-*` keys vs profile-scoped `gtl-{name}-*` keys.
+  const [activeTab, setActiveTab] = useState('app')
 
   useEffect(() => {
     setActiveProfile(typeof window !== 'undefined' ? (localStorage.getItem('gtl-active-profile') || null) : null)
@@ -163,10 +189,9 @@ export default function SettingsPage() {
       const rawSex = localStorage.getItem(pk('user-sex'))
       setUserSex(rawSex === 'f' ? 'f' : 'm')
     } catch (_) {}
-    try {
-      const rawDOB = localStorage.getItem(pk('user-dob'))
-      setUserDOB(/^\d{4}-\d{2}-\d{2}$/.test(rawDOB || '') ? rawDOB : null)
-    } catch (_) {}
+    // DOB is app-level (not pk()-scoped). lib/userPrefs.js owns the read,
+    // including the one-time migration from per-profile keys.
+    setUserDOB(getUserDOB())
     // Title only — used by the "BGM TRACK → /settings/music" entry to show
     // a hint of what's currently selected.
     const live = getCurrentBgmTrack()
@@ -293,16 +318,17 @@ export default function SettingsPage() {
   }
 
   // R16: ISO 'YYYY-MM-DD' string from the native date picker, or null to
-  // clear. Lets getHolidayMultiplier fire the birthday Tier-1 holiday.
+  // clear. App-level (lib/userPrefs.js) so the birthday Tier-1 holiday fires
+  // regardless of which warrior is active.
   const handleDOB = (iso) => {
     if (iso == null) {
       setUserDOB(null)
-      try { localStorage.removeItem(pk('user-dob')) } catch (_) {}
+      writeUserDOB(null)
       return
     }
     if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) return
     setUserDOB(iso)
-    try { localStorage.setItem(pk('user-dob'), iso) } catch (_) {}
+    writeUserDOB(iso)
   }
 
   const handleHaptics = (next) => {
@@ -449,178 +475,224 @@ export default function SettingsPage() {
               </span>
             </h1>
             <p className="font-matisse text-xs tracking-[0.25em] uppercase text-gtl-ash mt-6 max-w-md">
-              Tune the ritual. Audio, haptics, and the levers that hold your warrior's record.
+              Tune the ritual. The app on one tab, the warrior on the other.
             </p>
-            {activeProfile && (
-              <p className="font-matisse text-[10px] tracking-[0.3em] uppercase text-gtl-smoke mt-3">
-                ACTIVE WARRIOR — <span className="text-gtl-chalk">{activeProfile}</span>
-              </p>
-            )}
           </div>
 
-          {/* AUDIO */}
-          <div className="mb-8">
-            <div className="flex items-center gap-4 mb-3">
-              <div className="h-px w-8 bg-gtl-edge" />
-              <span className="font-matisse text-[9px] tracking-[0.4em] uppercase text-gtl-smoke">AUDIO</span>
-              <div className="h-px flex-1 bg-gtl-edge" />
-            </div>
-            <div className="flex flex-col gap-3">
-              {ready && <VolumeSlider value={sfxVolume} onChange={handleSfxVolume} onPreview={previewSfx} />}
+          {/* TABS — APP (audio/BGM/haptics/personal/defaults) vs PROFILE
+              (warrior identity + scoped data + danger). */}
+          <div className="flex gap-3 mb-8">
+            <TabPlate
+              active={activeTab === 'app'}
+              label="APP"
+              onClick={() => { if (activeTab !== 'app') { setActiveTab('app'); play('menu-open') } }}
+            />
+            <TabPlate
+              active={activeTab === 'profile'}
+              label="PROFILE"
+              onClick={() => { if (activeTab !== 'profile') { setActiveTab('profile'); play('menu-open') } }}
+            />
+          </div>
+
+          {/* ─────────── APP TAB ─────────── */}
+          {activeTab === 'app' && (
+            <div className="flex flex-col flex-1">
+              {/* AUDIO */}
+              <div className="mb-8">
+                <div className="flex items-center gap-4 mb-3">
+                  <div className="h-px w-8 bg-gtl-edge" />
+                  <span className="font-matisse text-[9px] tracking-[0.4em] uppercase text-gtl-smoke">AUDIO</span>
+                  <div className="h-px flex-1 bg-gtl-edge" />
+                </div>
+                <div className="flex flex-col gap-3">
+                  {ready && <VolumeSlider value={sfxVolume} onChange={handleSfxVolume} onPreview={previewSfx} />}
+                  {ready && (
+                    <div className="bg-gtl-surface border border-gtl-edge px-5 py-4" style={{ clipPath: 'polygon(2% 0%, 100% 0%, 98% 100%, 0% 100%)' }}>
+                      <div className="flex items-center justify-between mb-3">
+                        <span className="font-mono text-[11px] tracking-[0.3em] uppercase font-bold text-gtl-chalk">BGM VOLUME</span>
+                        <span className="font-mono text-[10px] tracking-[0.3em] uppercase text-gtl-red">{Math.round(bgmVolume * 100)}%</span>
+                      </div>
+                      <input
+                        type="range"
+                        min="0"
+                        max="100"
+                        step="1"
+                        value={Math.round(bgmVolume * 100)}
+                        onChange={(e) => handleBgmVolume(parseInt(e.target.value, 10) / 100)}
+                        className="w-full accent-gtl-red py-3"
+                        style={{ touchAction: 'pan-x' }}
+                        aria-label="BGM volume"
+                      />
+                    </div>
+                  )}
+                  {ready && <Toggle label="BACKGROUND MUSIC" value={bgMusicOn} onChange={handleBgMusic} />}
+                </div>
+              </div>
+
+              {/* BGM TRACK */}
               {ready && (
-                <div className="bg-gtl-surface border border-gtl-edge px-5 py-4" style={{ clipPath: 'polygon(2% 0%, 100% 0%, 98% 100%, 0% 100%)' }}>
-                  <div className="flex items-center justify-between mb-3">
-                    <span className="font-mono text-[11px] tracking-[0.3em] uppercase font-bold text-gtl-chalk">BGM VOLUME</span>
-                    <span className="font-mono text-[10px] tracking-[0.3em] uppercase text-gtl-red">{Math.round(bgmVolume * 100)}%</span>
-                  </div>
-                  <input
-                    type="range"
-                    min="0"
-                    max="100"
-                    step="1"
-                    value={Math.round(bgmVolume * 100)}
-                    onChange={(e) => handleBgmVolume(parseInt(e.target.value, 10) / 100)}
-                    className="w-full accent-gtl-red py-3"
-                    style={{ touchAction: 'pan-x' }}
-                    aria-label="BGM volume"
-                  />
+                <div className="mb-8">
+                  <Link
+                    href="/settings/music"
+                    onClick={() => play('menu-open')}
+                    className="group w-full flex items-center justify-between gap-4 px-5 py-4 bg-gtl-surface border border-gtl-edge [@media(hover:hover)]:hover:border-gtl-red transition-colors duration-200 outline-none"
+                    style={{ clipPath: 'polygon(2% 0%, 100% 0%, 98% 100%, 0% 100%)' }}
+                  >
+                    <span className="flex flex-col items-start gap-1 min-w-0">
+                      <span className="font-mono text-[11px] tracking-[0.3em] uppercase font-bold text-gtl-chalk [@media(hover:hover)]:group-hover:text-gtl-paper transition-colors duration-200">
+                        BGM TRACK
+                      </span>
+                      {bgmTrackTitle && (
+                        <span className="font-mono text-[9px] tracking-[0.3em] uppercase text-gtl-ash">
+                          {bgmTrackTitle}
+                        </span>
+                      )}
+                    </span>
+                    <span aria-hidden="true" className="font-display text-base leading-none text-gtl-red [@media(hover:hover)]:group-hover:text-gtl-paper transition-colors duration-200">
+                      ➤︎
+                    </span>
+                  </Link>
                 </div>
               )}
-              {ready && <Toggle label="BACKGROUND MUSIC" value={bgMusicOn} onChange={handleBgMusic} />}
-            </div>
-          </div>
 
-          {/* BGM TRACK — link to subpage so the giant track list doesn't
-              dominate this page. */}
-          {ready && (
-            <div className="mb-8">
-              <Link
-                href="/settings/music"
-                onClick={() => play('menu-open')}
-                className="group w-full flex items-center justify-between gap-4 px-5 py-4 bg-gtl-surface border border-gtl-edge [@media(hover:hover)]:hover:border-gtl-red transition-colors duration-200 outline-none"
-                style={{ clipPath: 'polygon(2% 0%, 100% 0%, 98% 100%, 0% 100%)' }}
-              >
-                <span className="flex flex-col items-start gap-1 min-w-0">
-                  <span className="font-mono text-[11px] tracking-[0.3em] uppercase font-bold text-gtl-chalk [@media(hover:hover)]:group-hover:text-gtl-paper transition-colors duration-200">
-                    BGM TRACK
-                  </span>
-                  {bgmTrackTitle && (
-                    <span className="font-mono text-[9px] tracking-[0.3em] uppercase text-gtl-ash">
-                      {bgmTrackTitle}
-                    </span>
-                  )}
-                </span>
-                <span aria-hidden="true" className="font-display text-base leading-none text-gtl-red [@media(hover:hover)]:group-hover:text-gtl-paper transition-colors duration-200">
-                  ➤︎
-                </span>
-              </Link>
-            </div>
-          )}
+              {/* HAPTICS — only on platforms that actually vibrate (iOS no-ops). */}
+              {hapticsSupported && (
+                <div className="mb-8">
+                  <div className="flex items-center gap-4 mb-3">
+                    <div className="h-px w-8 bg-gtl-edge" />
+                    <span className="font-matisse text-[9px] tracking-[0.4em] uppercase text-gtl-smoke">HAPTICS</span>
+                    <div className="h-px flex-1 bg-gtl-edge" />
+                  </div>
+                  <Toggle label="VIBRATION" value={hapticsOn} onChange={handleHaptics} />
+                </div>
+              )}
 
-          {/* HAPTICS — only rendered on platforms that actually vibrate. iOS
-              Safari / Chrome iOS PWA expose navigator.vibrate but it's a
-              no-op there, so canVibrate() hides the toggle entirely rather
-              than letting the user toggle a dead setting. */}
-          {hapticsSupported && (
-            <div className="mb-8">
-              <div className="flex items-center gap-4 mb-3">
-                <div className="h-px w-8 bg-gtl-edge" />
-                <span className="font-matisse text-[9px] tracking-[0.4em] uppercase text-gtl-smoke">HAPTICS</span>
-                <div className="h-px flex-1 bg-gtl-edge" />
+              {/* PERSONAL — birthday is app-level (one human, one DOB) so the
+                  birthday holiday EXP fires regardless of which warrior is
+                  active. See lib/userPrefs.js. */}
+              {ready && (
+                <div className="mb-8">
+                  <div className="flex items-center gap-4 mb-3">
+                    <div className="h-px w-8 bg-gtl-edge" />
+                    <span className="font-matisse text-[9px] tracking-[0.4em] uppercase text-gtl-smoke">PERSONAL</span>
+                    <div className="h-px flex-1 bg-gtl-edge" />
+                  </div>
+                  <DateRow label="BIRTHDAY" value={userDOB} onChange={handleDOB} optional />
+                </div>
+              )}
+
+              {/* DEFAULTS — preferences-only reset. Doesn't touch profile data. */}
+              <div className="mb-8">
+                <div className="flex items-center gap-4 mb-3">
+                  <div className="h-px w-8 bg-gtl-edge" />
+                  <span className="font-matisse text-[9px] tracking-[0.4em] uppercase text-gtl-smoke">DEFAULTS</span>
+                  <div className="h-px flex-1 bg-gtl-edge" />
+                </div>
+                {ready && (
+                  <DangerButton
+                    label="RESET TO DEFAULTS"
+                    armedLabel="TAP AGAIN — RESETS VOLUME / TRACK / TOGGLES"
+                    onConfirm={resetSettingsDefaults}
+                  />
+                )}
               </div>
-              <Toggle label="VIBRATION" value={hapticsOn} onChange={handleHaptics} />
-            </div>
-          )}
 
-          {/* WARRIOR DATA — R1a IPF GL inputs: bodyweight + sex. Profile-scoped via pk(). */}
-          {ready && activeProfile && (
-            <div className="mb-8">
-              <div className="flex items-center gap-4 mb-3">
-                <div className="h-px w-8 bg-gtl-edge" />
-                <span className="font-matisse text-[9px] tracking-[0.4em] uppercase text-gtl-smoke">WARRIOR DATA</span>
-                <div className="h-px flex-1 bg-gtl-edge" />
-              </div>
-              <div className="flex flex-col gap-3">
-                <NumberRow
-                  label="BODY WEIGHT"
-                  value={userBW}
-                  unit="LBS"
-                  onChange={handleBodyweight}
-                  onCommit={commitBodyweight}
-                  min={60}
-                  max={500}
-                  step={1}
-                  placeholder="LBS"
-                />
-                <SexToggle value={userSex} onChange={handleSex} />
-                <DateRow label="BIRTHDAY" value={userDOB} onChange={handleDOB} optional />
+              {/* CREDITS — pinned to bottom of APP tab */}
+              <div className="mt-auto">
+                <div className="flex items-center gap-4 mb-3">
+                  <div className="h-px w-8 bg-gtl-edge" />
+                  <span className="font-matisse text-[9px] tracking-[0.4em] uppercase text-gtl-smoke">CREDITS</span>
+                  <div className="h-px flex-1 bg-gtl-edge" />
+                </div>
+                <div className="bg-gtl-surface border border-gtl-edge px-5 py-4" style={{ clipPath: 'polygon(2% 0%, 100% 0%, 98% 100%, 0% 100%)' }}>
+                  <p className="font-matisse text-2xl text-gtl-chalk leading-tight mb-2">GRITTED TEETH LIFESTYLE</p>
+                  <p className="font-matisse text-[10px] tracking-[0.25em] uppercase text-gtl-ash leading-relaxed">
+                    BUILT BY JORDAN HILLMAN<br />
+                    WITH ALEXANDER THUKU<br />
+                    INSPIRED BY PERSONA 5 + GURREN LAGANN<br />
+                    FORGED WITH GRITTED TEETH<br />
+                    EXERCISE DATA — WGER (CC-BY-SA 4.0)
+                  </p>
+                </div>
               </div>
             </div>
           )}
 
-          {/* DEFAULTS — preferences-only reset. Doesn't touch profile data. */}
-          <div className="mb-8">
-            <div className="flex items-center gap-4 mb-3">
-              <div className="h-px w-8 bg-gtl-edge" />
-              <span className="font-matisse text-[9px] tracking-[0.4em] uppercase text-gtl-smoke">DEFAULTS</span>
-              <div className="h-px flex-1 bg-gtl-edge" />
-            </div>
-            {ready && (
-              <DangerButton
-                label="RESET TO DEFAULTS"
-                armedLabel="TAP AGAIN — RESETS VOLUME / TRACK / TOGGLES"
-                onConfirm={resetSettingsDefaults}
-              />
-            )}
-          </div>
+          {/* ─────────── PROFILE TAB ─────────── */}
+          {activeTab === 'profile' && (
+            <div className="flex flex-col flex-1">
+              {/* Active warrior banner */}
+              {activeProfile ? (
+                <div className="mb-8">
+                  <p className="font-matisse text-[10px] tracking-[0.3em] uppercase text-gtl-smoke">
+                    ACTIVE WARRIOR
+                  </p>
+                  <p className="font-matisse text-3xl text-gtl-chalk leading-none mt-2">
+                    {activeProfile}
+                  </p>
+                </div>
+              ) : (
+                <div className="mb-8">
+                  <p className="font-matisse text-[10px] tracking-[0.3em] uppercase text-gtl-smoke">
+                    NO ACTIVE WARRIOR — RETURN TO IDENTITY
+                  </p>
+                </div>
+              )}
 
-          {/* DANGER */}
-          <div className="mb-8">
-            <div className="flex items-center gap-4 mb-3">
-              <div className="h-px w-8 bg-gtl-red" />
-              <span className="font-matisse text-[9px] tracking-[0.4em] uppercase text-gtl-red">DANGER ZONE</span>
-              <div className="h-px flex-1 bg-gtl-red" />
-            </div>
-            <p className="font-matisse text-[10px] tracking-[0.25em] uppercase text-gtl-ash mb-3">
-              TAP ONCE TO ARM · TAP AGAIN TO CONFIRM
-            </p>
-            <div className="flex flex-col gap-3">
-              <DangerButton
-                label="RESET PROFILE DATA"
-                armedLabel="TAP AGAIN — WIPES CYCLES + LOGS"
-                onConfirm={resetActiveProfileData}
-              />
-              <DangerButton
-                label="DELETE PROFILE"
-                armedLabel="TAP AGAIN — REMOVES WARRIOR ENTIRELY"
-                onConfirm={deleteActiveProfile}
-              />
-            </div>
-            {!activeProfile && (
-              <p className="font-matisse text-[9px] tracking-[0.3em] uppercase text-gtl-smoke mt-3">
-                NO ACTIVE WARRIOR — RETURN TO IDENTITY
-              </p>
-            )}
-          </div>
+              {/* PROFILE SETTINGS — R1a IPF GL inputs: bodyweight + sex.
+                  Profile-scoped via pk() — different warriors can hold
+                  different bulk/cut weights. */}
+              {ready && activeProfile && (
+                <div className="mb-8">
+                  <div className="flex items-center gap-4 mb-3">
+                    <div className="h-px w-8 bg-gtl-edge" />
+                    <span className="font-matisse text-[9px] tracking-[0.4em] uppercase text-gtl-smoke">PROFILE SETTINGS</span>
+                    <div className="h-px flex-1 bg-gtl-edge" />
+                  </div>
+                  <div className="flex flex-col gap-3">
+                    <NumberRow
+                      label="BODY WEIGHT"
+                      value={userBW}
+                      unit="LBS"
+                      onChange={handleBodyweight}
+                      onCommit={commitBodyweight}
+                      min={60}
+                      max={500}
+                      step={1}
+                      placeholder="LBS"
+                    />
+                    <SexToggle value={userSex} onChange={handleSex} />
+                  </div>
+                </div>
+              )}
 
-          {/* CREDITS */}
-          <div className="mt-auto">
-            <div className="flex items-center gap-4 mb-3">
-              <div className="h-px w-8 bg-gtl-edge" />
-              <span className="font-matisse text-[9px] tracking-[0.4em] uppercase text-gtl-smoke">CREDITS</span>
-              <div className="h-px flex-1 bg-gtl-edge" />
+              {/* DANGER — profile-scoped destructive actions only. */}
+              {activeProfile && (
+                <div className="mb-8">
+                  <div className="flex items-center gap-4 mb-3">
+                    <div className="h-px w-8 bg-gtl-red" />
+                    <span className="font-matisse text-[9px] tracking-[0.4em] uppercase text-gtl-red">DANGER ZONE</span>
+                    <div className="h-px flex-1 bg-gtl-red" />
+                  </div>
+                  <p className="font-matisse text-[10px] tracking-[0.25em] uppercase text-gtl-ash mb-3">
+                    TAP ONCE TO ARM · TAP AGAIN TO CONFIRM
+                  </p>
+                  <div className="flex flex-col gap-3">
+                    <DangerButton
+                      label="RESET PROFILE DATA"
+                      armedLabel="TAP AGAIN — WIPES CYCLES + LOGS"
+                      onConfirm={resetActiveProfileData}
+                    />
+                    <DangerButton
+                      label="DELETE PROFILE"
+                      armedLabel="TAP AGAIN — REMOVES WARRIOR ENTIRELY"
+                      onConfirm={deleteActiveProfile}
+                    />
+                  </div>
+                </div>
+              )}
             </div>
-            <div className="bg-gtl-surface border border-gtl-edge px-5 py-4" style={{ clipPath: 'polygon(2% 0%, 100% 0%, 98% 100%, 0% 100%)' }}>
-              <p className="font-matisse text-2xl text-gtl-chalk leading-tight mb-2">GRITTED TEETH LIFESTYLE</p>
-              <p className="font-matisse text-[10px] tracking-[0.25em] uppercase text-gtl-ash leading-relaxed">
-                BUILT BY JORDAN HILLMAN<br />
-                WITH ALEXANDER THUKU<br />
-                INSPIRED BY PERSONA 5 + GURREN LAGANN<br />
-                FORGED WITH GRITTED TEETH<br />
-                EXERCISE DATA — WGER (CC-BY-SA 4.0)
-              </p>
-            </div>
-          </div>
+          )}
 
           {/* Decorative footer slash — same vocabulary as /fitness/hub. */}
           <div className="mt-12 flex items-center gap-4">
