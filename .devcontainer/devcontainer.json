@@ -1,7 +1,20 @@
 {
   "name": "Gritted Teeth Lifestyle",
   "image": "mcr.microsoft.com/devcontainers/javascript-node:20",
-  "postCreateCommand": "npm install -g @anthropic-ai/claude-code",
+  "features": {
+    "ghcr.io/devcontainers/features/sshd:1": {
+      "version": "latest"
+    }
+  },
+  "postCreateCommand": "npm install -g @anthropic-ai/claude-code && npm install",
+  "postStartCommand": "nohup bash scripts/codespace-serve.sh > /tmp/gtl-start.log 2>&1 &",
+  "forwardPorts": [3000],
+  "portsAttributes": {
+    "3000": {
+      "label": "GTL dev server",
+      "onAutoForward": "silent"
+    }
+  },
   "remoteEnv": {
     "ANTHROPIC_API_KEY": "${localEnv:ANTHROPIC_API_KEY}"
   },
