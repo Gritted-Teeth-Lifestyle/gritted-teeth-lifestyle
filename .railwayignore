@@ -1,0 +1,10 @@
+github-recovery-codes.txt
+screenshots/
+node_modules/
+.next/
+.git/
+my-marketplace/
+dispatches/
+docs/
+__tests__/
+tools/
