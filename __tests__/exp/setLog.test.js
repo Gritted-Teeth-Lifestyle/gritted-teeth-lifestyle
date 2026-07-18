@@ -136,6 +136,44 @@ describe('sumDayRegionXP', () => {
     expect(r[3]).toBeCloseTo(720, 5)
     expect(r[1]).toBeCloseTo(480, 5)
   })
+  // Stars gate region EXP (2026-07-18): only star-earning sets move the
+  // transmutation circle. Sub-floor sets keep full profile EXP.
+  test('starless sets contribute ZERO region EXP but full profile EXP', () => {
+    upsertSetSnapshot(CYCLE_ID, ISO, sampleSnapshot({
+      exerciseName: 'LIGHT BENCH', setIndex: 0,
+      totalXP: 1000, regionWeights: [0, 0.4, 0, 0.6, 0],
+      earnsStars: false, regionStars: [0, 0, 0, 0, 0],
+    }))
+    expect(sumDayRegionXP(CYCLE_ID, ISO)).toEqual([0, 0, 0, 0, 0])
+    expect(sumDayXP(CYCLE_ID, ISO)).toBe(1000)
+  })
+  test('mixed day: only starred sets bind region EXP and consistency credit', () => {
+    upsertSetSnapshot(CYCLE_ID, ISO, sampleSnapshot({
+      exerciseName: 'HEAVY BENCH', setIndex: 0,
+      totalXP: 1000, regionWeights: [0, 0.4, 0, 0.6, 0],
+      earnsStars: true,
+    }))
+    upsertSetSnapshot(CYCLE_ID, ISO, sampleSnapshot({
+      exerciseName: 'LIGHT CURLS', setIndex: 0,
+      totalXP: 500, regionWeights: [0, 1.0, 0, 0, 0],
+      earnsStars: false, regionStars: [0, 0, 0, 0, 0],
+    }))
+    appendSetLog(CYCLE_ID, ISO, { type: 'consistency-credit', ts: 2, value: 200 })
+    const r = sumDayRegionXP(CYCLE_ID, ISO)
+    // Only HEAVY BENCH binds: FRONT 600, ARMS 400. Credit follows the
+    // starred split (60/40), ignoring LIGHT CURLS entirely.
+    expect(r[3]).toBeCloseTo(720, 5)
+    expect(r[1]).toBeCloseTo(480, 5)
+    expect(r[0]).toBe(0); expect(r[2]).toBe(0); expect(r[4]).toBe(0)
+  })
+  test('all-starless day: consistency credit binds to no region', () => {
+    upsertSetSnapshot(CYCLE_ID, ISO, sampleSnapshot({
+      exerciseName: 'LIGHT BENCH', setIndex: 0,
+      totalXP: 1000, earnsStars: false, regionStars: [0, 0, 0, 0, 0],
+    }))
+    appendSetLog(CYCLE_ID, ISO, { type: 'consistency-credit', ts: 2, value: 200 })
+    expect(sumDayRegionXP(CYCLE_ID, ISO)).toEqual([0, 0, 0, 0, 0])
+  })
 })
 
 describe('hasSnapshots', () => {

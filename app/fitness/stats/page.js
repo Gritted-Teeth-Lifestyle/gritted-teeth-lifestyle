@@ -293,8 +293,13 @@ const REGION_ANGLES = BODY_REGIONS.map((_, i) => -Math.PI / 2 + STAR_TILT + i * 
 // 5 inner angles sit halfway between outer angles
 const INNER_ANGLES = REGION_ANGLES.map(a => a + Math.PI / 5)
 
-// XP thresholds for levels 1–6 per region
-const REGION_XP_LEVELS = [0, 90000, 300000, 750000, 1800000, 4500000]
+// XP thresholds for levels 1–6 per region. Values are in DISPLAY-scale
+// EXP (the ÷100 scale from 9898c32) — the original [0, 90k, 300k, 750k,
+// 1.8M, 4.5M] were pre-scale and left every region pinned at VICTIM
+// (~3,600 sets to reach level 2). Rescaled ÷100 on 2026-07-18. Note that
+// region EXP now only accrues from star-earning sets (see sumDayRegionXP),
+// so these are thresholds on starred work.
+const REGION_XP_LEVELS = [0, 900, 3000, 7500, 18000, 45000]
 
 // Tier label per level (levels 1–6)
 const REGION_TIER_LABELS = ['VICTIM', 'SKINNY FAT', 'STACKED', 'YOLKED', 'DICED', 'SHREDDED']
