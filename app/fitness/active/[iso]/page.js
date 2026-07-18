@@ -28,11 +28,13 @@ import {
   computeProfileTotalXP,
   computeDailyReckoning,
   replaceConsistencyCredit,
+  groupDayStarsByExercise,
   tickTier,
   getTierCount,
   getTier,
 } from '../../../../lib/exp'
 import TierUpFlourish from '../../../../components/exp/TierUpFlourish'
+import DayStarRecap from '../../../../components/exp/DayStarRecap'
 
 const MUSCLE_LABELS = {
   chest: 'CHEST', back: 'BACK', shoulders: 'SHOULDERS',
@@ -2071,6 +2073,10 @@ function DayFocus({ iso, muscles, isLastDay, originRect, onClose, cycleId, onMus
   // on mount for any already-done day and close DayFocus on the user's first
   // tap (e.g. tapping a muscle to open ExercisePanel).
   const [justStamped, setJustStamped] = useState(false)
+  // Day-star recap (roll call + stars flying to region vertices). Set to
+  // the grouped per-exercise star entries when the stamped day earned at
+  // least one star; the cinematic owns the close (onDone → handleClose).
+  const [starRecap, setStarRecap] = useState(null)
   const handleStamp = () => {
     if (stamped) return
     play('option-select')
@@ -2103,11 +2109,24 @@ function DayFocus({ iso, muscles, isLastDay, originRect, onClose, cycleId, onMus
     } catch (_) {}
     setStamped(true)
     setJustStamped(true)
-    stampCloseTimerRef.current = setTimeout(() => handleClose(), 900)
+    // Day-star recap: if any exercise earned stars today, play the roll
+    // call instead of the plain 900ms dim-and-close. The recap calls
+    // handleClose itself when it finishes (or is tap-skipped).
+    let recapEntries = null
+    try {
+      const entries = groupDayStarsByExercise(cycleId, iso)
+      if (entries.some(e => e.starred)) recapEntries = entries
+    } catch (_) {}
+    if (recapEntries) {
+      setStarRecap(recapEntries)
+    } else {
+      stampCloseTimerRef.current = setTimeout(() => handleClose(), 900)
+    }
   }
   // Tap during THIS session's post-stamp 900ms wait → close immediately.
+  // Suspended while the star recap is up — the recap owns taps (skip).
   useEffect(() => {
-    if (!justStamped || closing) return
+    if (!justStamped || closing || starRecap) return
     const handler = () => {
       if (stampCloseTimerRef.current) clearTimeout(stampCloseTimerRef.current)
       handleClose()
@@ -2118,7 +2137,7 @@ function DayFocus({ iso, muscles, isLastDay, originRect, onClose, cycleId, onMus
       window.removeEventListener('pointerdown', handler, { capture: true })
       window.removeEventListener('touchstart',  handler, { capture: true })
     }
-  }, [justStamped, closing, handleClose])
+  }, [justStamped, closing, starRecap, handleClose])
 
   const handleUnlogMuscle = (muscleId) => {
     play('menu-close')
@@ -2947,6 +2966,12 @@ function DayFocus({ iso, muscles, isLastDay, originRect, onClose, cycleId, onMus
             />
           )
         })()}
+
+        {/* Day-star recap — roll call + stars flying to region vertices.
+            Owns the post-stamp close (onDone → handleClose). */}
+        {starRecap && (
+          <DayStarRecap entries={starRecap} onDone={handleClose} />
+        )}
       </div>
     </>
   )
