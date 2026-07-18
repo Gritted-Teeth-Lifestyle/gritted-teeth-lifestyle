@@ -15,6 +15,13 @@
 cd "$(dirname "$0")/.." || exit 1
 
 if [ "$1" = "--daemon" ]; then
+  # Codespaces can fire postStart while postCreate's npm install is still
+  # running (the container reports ready early). Wait for deps so the
+  # server doesn't die at first boot and strand a stale pidfile.
+  until [ -x node_modules/.bin/next ]; do
+    echo "waiting for npm install..." >> /tmp/gtl-dev.log
+    sleep 10
+  done
   (
     while true; do
       git pull --ff-only >> /tmp/gtl-pull.log 2>&1
