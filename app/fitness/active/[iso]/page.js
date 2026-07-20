@@ -2967,10 +2967,10 @@ function DayFocus({ iso, muscles, isLastDay, originRect, onClose, cycleId, onMus
           )
         })()}
 
-        {/* Day-star recap — roll call + stars flying to region vertices.
-            Owns the post-stamp close (onDone → handleClose). */}
+        {/* Day-star recap — roll call + stars flying into the live WAR
+            RECORD transmutation circle. Owns the post-stamp close. */}
         {starRecap && (
-          <DayStarRecap entries={starRecap} onDone={handleClose} />
+          <DayStarRecap entries={starRecap} cycleId={cycleId} iso={iso} onDone={handleClose} />
         )}
       </div>
     </>
