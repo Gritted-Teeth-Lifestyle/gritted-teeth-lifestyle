@@ -29,13 +29,13 @@ import { computeProfileStats, sumDayRegionXP, getRegionStars } from '../../lib/e
 const TITLE_MS = 800
 const ROW_IN_MS = 300
 const STAR_POP_MS = 170     // per-star spawn stagger on the row
-const FLIGHT_MS = 640       // row → badge arc
+const FLIGHT_MS = 760       // row → badge arc
 const ROW_SETTLE_MS = 260
 const STARLESS_MS = 500
 const HOLD_MS = 1600
 
-const CHART_TOP = 44
-const ROWS_TOP = 396
+const CHART_TOP = 84
+const ROWS_TOP = 542        // wide gap under the chart so flights read as travel
 const ROW_H = 48
 
 const sub5 = (a, b) => a.map((v, i) => Math.max(0, v - (b[i] || 0)))
@@ -124,7 +124,10 @@ export default function DayStarRecap({ entries, cycleId, iso, onDone }) {
       const ghosts = [0.10, 0.2]
         .map(d => Math.max(0, e - d))
         .map(u => at(u))
-      frame.push({ id: f.id, x: pos.x, y: pos.y, ghosts, scale: 1 - 0.3 * e, rot: 540 * e })
+      // Dynamic spin: steady rotation early (linear t) that whips faster
+      // as the eased position accelerates into the badge.
+      const rot = f.spinDir * 360 * f.spinTurns * (0.35 * t + 0.65 * e)
+      frame.push({ id: f.id, x: pos.x, y: pos.y, ghosts, scale: 1.25 - 0.45 * e, rot })
       if (t >= 1) landed.push(f)
     }
     if (landed.length) {
@@ -168,6 +171,8 @@ export default function DayStarRecap({ entries, cycleId, iso, onDone }) {
     flightsRef.current.push({
       id: `${rowIdx}-${starIdx}-${region}`,
       region, p0, p1: target, c, t0: performance.now(),
+      spinDir: starIdx % 2 === 0 ? 1 : -1,
+      spinTurns: 1.5 + Math.random() * 1.5,   // 1.5–3 full turns, varies per star
     })
     if (!rafRef.current) rafRef.current = requestAnimationFrame(tick)
   }
@@ -306,20 +311,22 @@ export default function DayStarRecap({ entries, cycleId, iso, onDone }) {
                 key={gi}
                 className="absolute"
                 style={{
-                  transform: `translate(${g.x - 11}px, ${g.y - 13}px) scale(${f.scale * (0.7 - gi * 0.2)})`,
+                  left: g.x, top: g.y,
+                  transform: `translate(-50%, -50%) rotate(${f.rot * (0.85 - gi * 0.1)}deg) scale(${f.scale * (0.7 - gi * 0.2)})`,
                   color: '#e4b022',
                   opacity: 0.35 - gi * 0.15,
-                  fontSize: '1.6rem',
+                  fontSize: '2.4rem',
                 }}
               >★</div>
             ))}
             <div
               className="absolute"
               style={{
-                transform: `translate(${f.x - 11}px, ${f.y - 13}px) rotate(${f.rot}deg) scale(${f.scale})`,
+                left: f.x, top: f.y,
+                transform: `translate(-50%, -50%) rotate(${f.rot}deg) scale(${f.scale})`,
                 color: '#e4b022',
-                fontSize: '1.6rem',
-                textShadow: '0 0 10px rgba(228,176,34,0.9)',
+                fontSize: '2.4rem',
+                textShadow: '0 0 14px rgba(228,176,34,0.9)',
               }}
             >★</div>
           </div>
