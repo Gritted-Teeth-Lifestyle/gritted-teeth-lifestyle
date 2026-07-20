@@ -37,7 +37,7 @@ const POST_FLY_DISMISS_MS = 250
 const MOUNT_TAP_GRACE_MS  = 150
 
 const CLASS_LABEL = {
-  king_compound: 'KING',
+  king_compound: 'POWER LIFT',
   compound:      'COMPOUND',
   isolation:     'ISOLATION',
 }
