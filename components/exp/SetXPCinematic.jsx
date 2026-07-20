@@ -87,16 +87,20 @@ export default function SetXPCinematic({ snapshot, tierName, onComplete }) {
     // Informational — strikes, no accumulate (running unchanged).
     chips.push({ label: tierName || 'TIER', detail: mfmt(consistencyMult), running: stackBase })
   }
+  // Running totals follow the R2 formula: stackBase × (classMult +
+  // prestigeMult + holidayMult) — the base is NOT added on top, or the
+  // counter overshoots the true total and visibly rolls back down at
+  // the slash.
   chips.push({
     label: CLASS_LABEL[classification] || 'COMPOUND',
     detail: mfmt(classMult),
-    running: stackBase + stackBase * classMult,
+    running: stackBase * classMult,
   })
   if (prestigeMult > 0.0001) {
-    chips.push({ label: 'RIBBONS', detail: mfmt(prestigeMult), running: stackBase + stackBase * classMult + stackBase * prestigeMult })
+    chips.push({ label: 'RIBBONS', detail: mfmt(prestigeMult), running: stackBase * (classMult + prestigeMult) })
   }
   if (holidayMult > 0.0001) {
-    chips.push({ label: 'HOLIDAY', detail: mfmt(holidayMult), running: stackBase + stackBase * classMult + stackBase * prestigeMult + stackBase * holidayMult })
+    chips.push({ label: 'HOLIDAY', detail: mfmt(holidayMult), running: stackBase * (classMult + prestigeMult + holidayMult) })
   }
 
   const later = (fn, ms) => { const id = setTimeout(fn, ms); timersRef.current.push(id); return id }
