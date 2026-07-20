@@ -132,6 +132,36 @@ function DangerButton({ label, armedLabel, onConfirm }) {
   )
 }
 
+// ManualRow — expandable tutorial entry for the MANUAL section. Same
+// surface/clip vocabulary as Toggle; body text is plain-language on
+// purpose (the tutorial exists so the EXP system isn't a black box).
+function ManualRow({ title, children }) {
+  const [open, setOpen] = useState(false)
+  const { play } = useSound()
+  return (
+    <div className="bg-gtl-surface border border-gtl-edge" style={{ clipPath: 'polygon(1% 0%, 100% 0%, 99% 100%, 0% 100%)' }}>
+      <button
+        type="button"
+        onClick={() => { setOpen(o => !o); play(open ? 'menu-close' : 'menu-open') }}
+        className="group w-full flex items-center justify-between gap-4 px-5 py-4 outline-none"
+        aria-expanded={open}
+      >
+        <span className="font-mono text-[11px] tracking-[0.3em] uppercase font-bold text-gtl-chalk [@media(hover:hover)]:group-hover:text-gtl-red transition-colors duration-200 text-left">
+          {title}
+        </span>
+        <span aria-hidden="true" className={`font-display text-base leading-none text-gtl-red transition-transform duration-200 ${open ? 'rotate-90' : ''}`}>
+          ➤︎
+        </span>
+      </button>
+      {open && (
+        <div className="px-5 pb-4 font-matisse text-[11px] tracking-[0.12em] uppercase text-gtl-ash leading-relaxed">
+          {children}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // TabPlate — chunky P5-style tab button. Active tab is solid red on paper;
 // inactive tab is outlined ash that lights to red on hover. Clip-path matches
 // the chip/Toggle vocabulary so it sits in the same visual family as the rest
@@ -595,6 +625,47 @@ export default function SettingsPage() {
                     onConfirm={resetSettingsDefaults}
                   />
                 )}
+              </div>
+
+              {/* MANUAL — how the EXP system works. Plain language on
+                  purpose; the honesty layer is described in behavior
+                  (reduced EXP for implausible claims) without exposing
+                  band math or internal names. */}
+              <div className="mb-8">
+                <div className="flex items-center gap-4 mb-3">
+                  <div className="h-px w-8 bg-gtl-edge" />
+                  <span className="font-matisse text-[9px] tracking-[0.4em] uppercase text-gtl-smoke">MANUAL</span>
+                  <div className="h-px flex-1 bg-gtl-edge" />
+                </div>
+                <div className="flex flex-col gap-3">
+                  <ManualRow title="EARNING EXP">
+                    Every set earns EXP from the weight on the bar times the reps you grind out.
+                    Reps 5 through 15 count in full — fewer or more count less, so half-rep maxes
+                    and endless burnouts don&apos;t farm. Power lifts (squats, deadlifts) carry the
+                    biggest multiplier, compound lifts the next, isolation work the smallest.
+                    Lifting lighter relative to your bodyweight earns less; push a lift heavy for
+                    your size and a HEAVY LIFT bonus fires on the set.
+                  </ManualRow>
+                  <ManualRow title="STARS + WAR RECORD">
+                    Real working sets — at genuine working weight — earn stars for the five body
+                    regions on your WAR RECORD. Warm-up weight logs EXP but earns no stars. Region
+                    EXP only flows from starred sets, so the transmutation circle grows from real
+                    work only.
+                  </ManualRow>
+                  <ManualRow title="THE OVERLOAD BONUS">
+                    GTL tracks your proven best on every exercise. Train near it — matching your
+                    working weight or nudging past your record — and the set earns an OVERLOAD
+                    bonus. Small honest steps, every session. Progressive overload is the best
+                    EXP strategy in the game, on purpose, because it&apos;s the best strategy in the
+                    gym.
+                  </ManualRow>
+                  <ManualRow title="HONEST STEEL">
+                    The forge knows real strength standards. Weights beyond human possibility are
+                    rejected outright. Claims that leap far past your own proven record earn
+                    reduced EXP until you prove them again in later sessions — your record only
+                    moves when you stamp the day. Log what you actually lift; the blade knows.
+                  </ManualRow>
+                </div>
               </div>
 
               {/* CREDITS — pinned to bottom of APP tab */}
