@@ -39,6 +39,8 @@ import {
   addRegionStars,
   computeDailyReckoning,
   replaceConsistencyCredit,
+  assessSetForExercise,
+  getProvenBest,
 } from '../../../../../lib/exp'
 import { getExerciseById, exercisesByMuscle } from '../../../../../lib/exerciseLibrary'
 import { byNotoriety } from '../../../../../lib/exerciseNotoriety'
@@ -1064,10 +1066,25 @@ function WeightPopup({ exerciseName, initialWeight, rowRect, onClose, onSave }) 
           </div>
 
           <div className="relative font-mono text-[13px] tracking-[0.7em] uppercase text-gtl-red mb-1">WEIGHT</div>
-          <div className="relative font-display text-gtl-smoke leading-none mb-6 text-center"
+          <div className="relative font-display text-gtl-smoke leading-none mb-1 text-center"
             style={{ fontSize: 'clamp(0.9rem, 2vw, 1.4rem)', transform: 'rotate(0.4deg)' }}>
             {exerciseName}
           </div>
+          {/* STATUS QUO guidance: proven max + plausible next target. The
+              CLIMB bonus zone is 0.9–1.1× proven, so the target is a
+              nudge past the record, rounded to a real plate load. */}
+          {(() => {
+            let proven = null
+            try { proven = getProvenBest(exerciseName) } catch (_) {}
+            if (!proven) return <div className="mb-5" />
+            const target = Math.round((proven * 1.02) / 5) * 5
+            return (
+              <div className="relative font-mono mb-5 text-center"
+                style={{ fontSize: '0.6rem', letterSpacing: '0.22em', color: '#e4b022' }}>
+                PROVEN MAX ≈ {Math.round(proven)} · TARGET ≈ {target}
+              </div>
+            )
+          })()}
 
           {/* UP + FLAME */}
           <div className="relative flex flex-col items-center mb-2">
@@ -1654,6 +1671,42 @@ function ExercisePanel({ muscleId, dayIso, originRect, onClose, cycleId, onAddMo
   // produces a new XP snapshot. Cleared on the cinematic's onComplete.
   const [activeCinematic, setActiveCinematic] = useState(null)
 
+  // STATUS QUO banners: impossible-weight reject + TOO LIGHT nudge.
+  // {kind: 'reject'|'light', text} — auto-clears. TOO LIGHT fires at
+  // most once per exercise per visit (lightNudgedRef).
+  const [sqBanner, setSqBanner] = useState(null)
+  const sqBannerTimer = useRef(null)
+  const lightNudgedRef = useRef(new Set())
+  const showSqBanner = (kind, text, ms) => {
+    setSqBanner({ kind, text })
+    if (sqBannerTimer.current) clearTimeout(sqBannerTimer.current)
+    sqBannerTimer.current = setTimeout(() => setSqBanner(null), ms)
+  }
+
+  const readBodyweight = () => {
+    try {
+      const n = parseInt(localStorage.getItem(pk('user-bodyweight')), 10)
+      return Number.isFinite(n) ? n : null
+    } catch (_) { return null }
+  }
+
+  // Impossible-weight gate: claim ≥ 2× the advanced standard is beyond
+  // any recorded human — treat as a typo and refuse the save entirely.
+  const isImpossible = (name, repsForSet, weightForSet) => {
+    try {
+      const exercise = getExerciseById(name)
+      const bw = readBodyweight()
+      if (!exercise || !bw) return false
+      const a = assessSetForExercise(exercise, weightForSet || 0, repsForSet || 1, bw)
+      if (a.kind === 'reject') {
+        play('menu-close')
+        showSqBanner('reject', 'IMPOSSIBLE WEIGHT — RE-ENTER', 2400)
+        return true
+      }
+    } catch (_) {}
+    return false
+  }
+
   // Returns true and queues the save when BW is required but unset.
   const needsBWGate = (name) => {
     let bw = null
@@ -1684,11 +1737,21 @@ function ExercisePanel({ muscleId, dayIso, originRect, onClose, cycleId, onAddMo
       const tierMult     = getTierMultiplier(getTierCount())
       const prestigeMult = getPrestigeMultiplier(getRibbonCount())
       const holidayMult  = getHolidayMultiplier(new Date(), dob)
+
+      // STATUS QUO assessment: CLIMB bonus / plausibility tax on the
+      // multiplier stack, TOO LIGHT nudge (once per exercise per visit).
+      // 'reject' can't reach here — saveReps/saveWeight gate it.
+      const sq = assessSetForExercise(exercise, weightForSet || 0, repsForSet || 0, bodyweight)
+      if (sq.light && !lightNudgedRef.current.has(name)) {
+        lightNudgedRef.current.add(name)
+        showSqBanner('light', 'TOO LIGHT — GRIT YOUR TEETH', 2000)
+      }
+
       const snapshot = calculateSetXP(
         { reps: repsForSet || 0, weight: weightForSet || 0 },
         exercise,
         { bodyweight, sex },
-        { tierMult, prestigeMult, holidayMult },
+        { tierMult, prestigeMult, holidayMult, statusQuoMult: sq.mult, statusQuoKind: sq.kind },
       )
       // Annotate so we can dedup re-edits.
       snapshot.exerciseName = name
@@ -1725,6 +1788,11 @@ function ExercisePanel({ muscleId, dayIso, originRect, onClose, cycleId, onAddMo
       setPendingBWGate({ kind: 'reps', name, value, setIndex })
       return
     }
+    {
+      const wArr = weights[name]
+      const w = Array.isArray(wArr) ? wArr[setIndex] : 0
+      if (value > 0 && isImpossible(name, value, w || 0)) return
+    }
     setReps((prev) => {
       const arr = Array.isArray(prev[name]) ? [...prev[name]] : [0, 0]
       arr[setIndex] = value
@@ -1749,6 +1817,11 @@ function ExercisePanel({ muscleId, dayIso, originRect, onClose, cycleId, onAddMo
     if (needsBWGate(name)) {
       setPendingBWGate({ kind: 'weight', name, value, setIndex })
       return
+    }
+    {
+      const rArr = reps[name]
+      const r = Array.isArray(rArr) ? rArr[setIndex] : 0
+      if ((value || 0) > 0 && isImpossible(name, r || 1, value)) return
     }
     setWeights((prev) => {
       const arr = Array.isArray(prev[name]) ? [...prev[name]] : [0, 0]
@@ -2042,6 +2115,28 @@ function ExercisePanel({ muscleId, dayIso, originRect, onClose, cycleId, onAddMo
     </div>
     </div>
     {pendingBWGate && <BodyweightModal onSaved={handleBodyweightSaved} />}
+    {/* STATUS QUO banner — impossible-weight reject / TOO LIGHT nudge.
+        z 9996: above the cinematic so a reject is readable mid-flow. */}
+    {sqBanner && (
+      <div
+        className="fixed left-1/2 font-display uppercase px-6 py-2"
+        style={{
+          top: 'max(3.5rem, env(safe-area-inset-top))',
+          zIndex: 9996,
+          transform: 'translateX(-50%) rotate(-1.5deg)',
+          background: sqBanner.kind === 'reject' ? '#d4181f' : '#1c1c1f',
+          color: sqBanner.kind === 'reject' ? '#f4ede0' : '#8a8a92',
+          border: sqBanner.kind === 'reject' ? 'none' : '1px solid #3a3a42',
+          clipPath: 'polygon(3% 0%, 100% 0%, 97% 100%, 0% 100%)',
+          boxShadow: '4px 4px 0 rgba(0,0,0,0.55)',
+          fontSize: '0.95rem',
+          letterSpacing: '0.14em',
+          whiteSpace: 'nowrap',
+        }}
+      >
+        {sqBanner.text}
+      </div>
+    )}
     {activeCinematic && (
       <SetXPCinematic
         snapshot={activeCinematic.snapshot}

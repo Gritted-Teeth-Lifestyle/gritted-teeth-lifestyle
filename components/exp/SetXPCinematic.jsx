@@ -102,6 +102,20 @@ export default function SetXPCinematic({ snapshot, tierName, onComplete }) {
   if (holidayMult > 0.0001) {
     chips.push({ label: 'HOLIDAY', detail: mfmt(holidayMult), running: stackBase * (classMult + prestigeMult + holidayMult) })
   }
+  // STATUS QUO honesty layer: gold CLIMB chip (on pace with your proven
+  // record) or dark STATUS QUO chip (claim outran your history — taxed).
+  // Scales the running total multiplicatively, matching calculateSetXP.
+  const statusQuoMult = Number(snapshot?.statusQuoMult) || 1.0
+  const statusQuoKind = snapshot?.statusQuoKind || 'none'
+  if (statusQuoKind === 'climb' || statusQuoKind === 'tax') {
+    const preSQ = stackBase * (classMult + prestigeMult + holidayMult)
+    chips.push({
+      label: statusQuoKind === 'climb' ? 'CLIMB' : 'STATUS QUO',
+      detail: `×${statusQuoMult.toFixed(2)}`,
+      running: preSQ * statusQuoMult,
+      tone: statusQuoKind === 'climb' ? 'gold' : 'dark',
+    })
+  }
 
   const later = (fn, ms) => { const id = setTimeout(fn, ms); timersRef.current.push(id); return id }
 
@@ -331,11 +345,12 @@ export default function SetXPCinematic({ snapshot, tierName, onComplete }) {
                     display: 'inline-flex',
                     alignItems: 'baseline',
                     gap: 10,
-                    background: '#d4181f',
-                    color: '#f4ede0',
+                    background: chip.tone === 'gold' ? '#e4b022' : chip.tone === 'dark' ? '#0d0d10' : '#d4181f',
+                    color: chip.tone === 'gold' ? '#141414' : chip.tone === 'dark' ? '#d4181f' : '#f4ede0',
+                    border: chip.tone === 'dark' ? '1px solid #d4181f' : 'none',
                     clipPath: 'polygon(3% 0%, 100% 0%, 97% 100%, 0% 100%)',
                     padding: '5px 18px 5px 14px',
-                    boxShadow: '4px 4px 0 #2a0507',
+                    boxShadow: chip.tone === 'gold' ? '4px 4px 0 #4d3a08' : '4px 4px 0 #2a0507',
                   }}
                 >
                   <span style={{ fontFamily: '"JetBrains Mono", monospace', fontSize: '0.66rem', fontWeight: 700, letterSpacing: '0.3em', textTransform: 'uppercase' }}>

@@ -32,6 +32,7 @@ import {
   tickTier,
   getTierCount,
   getTier,
+  updateProvenBestsFromDay,
 } from '../../../../lib/exp'
 import TierUpFlourish from '../../../../components/exp/TierUpFlourish'
 import DayStarRecap from '../../../../components/exp/DayStarRecap'
@@ -2107,6 +2108,10 @@ function DayFocus({ iso, muscles, isLastDay, originRect, onClose, cycleId, onMus
         }
       }
     } catch (_) {}
+    // STATUS QUO baseline: fold today's best est-1RMs into the per-
+    // exercise proven records (growth capped ×1.3 per stamp). Stamp-time
+    // only — mid-session sets never move the baseline they're judged by.
+    try { updateProvenBestsFromDay(cycleId, iso, { getExerciseById }) } catch (_) {}
     setStamped(true)
     setJustStamped(true)
     // Day-star recap: if any exercise earned stars today, play the roll
