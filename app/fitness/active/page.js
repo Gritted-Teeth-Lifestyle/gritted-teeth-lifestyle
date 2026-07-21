@@ -29,6 +29,7 @@ import {
 import { consumePrefire, setInAnimation, disarmChain, subscribeStaged } from '../../../lib/predictiveTap'
 import { useChainPage } from '../../../lib/useChainPage'
 import TierUpFlourish from '../../../components/exp/TierUpFlourish'
+import RankUpSlam from '../../../components/exp/RankUpSlam'
 // Day-hop and BEGIN HERE muscle-hop now navigate to /fitness/active/[iso]
 // (Stage 1 of App Router refactor) so HeistTransition fires naturally and
 // plays transition-slash — matching the sound profile of the chain's first
@@ -3028,28 +3029,11 @@ export default function ActiveCyclePage() {
       const levelAfter = getLevelInfo(newXP).level
       setBarXP(newXP)
       if (levelAfter > levelBefore) {
+        // RankUpSlam is self-timed — mount it, and its onDone clears the
+        // state + resets the bar. (Sparkle/stream cascade retired
+        // 2026-07-21 with the RankUpSlam rebuild.)
         setTimeout(() => {
-          const rect = xpBarRef.current?.getBoundingClientRect()
-          const rnd = (a, b) => a + Math.random() * (b - a)
-          const sparkles = Array.from({ length: 36 }, () => ({
-            x: rnd(3, 97), y: rnd(5, 90),
-            size: rnd(6, 22), delay: rnd(0, 900),
-            rot: rnd(0, 45), color: Math.random() > 0.3 ? '#e4b022' : '#fff',
-          }))
-          // Continuous stream particles — staggered so they always appear to be flowing
-          const streamParticles = Array.from({ length: 60 }, (_, i) => {
-            const angle = rnd(-32, 32)
-            const dist  = rnd(200, window.innerWidth - (rect?.right || 0) - 20)
-            const size  = rnd(4, 18)
-            const delay = rnd(0, 650) // spread across full shatter phase
-            return { angle, dist, size, delay, i }
-          })
-          setLevelUpAnim({ phase: 'shatter', newLevel: levelAfter, sparkles, streamParticles, barRect: rect })
-          play('stamp')
-          setTimeout(() => setLevelUpAnim(p => p ? { ...p, phase: 'flood'   } : null),  750)
-          setTimeout(() => setLevelUpAnim(p => p ? { ...p, phase: 'sparkle' } : null), 1300)
-          setTimeout(() => setLevelUpAnim(p => p ? { ...p, phase: 'fade'    } : null), 3600)
-          setTimeout(() => { setLevelUpAnim(null); setBarXP(0) },                       5000)
+          setLevelUpAnim({ newLevel: levelAfter })
         }, 1900)
       }
     }, 3100)
@@ -3435,162 +3419,16 @@ export default function ActiveCyclePage() {
         )
       })()}
 
-      {/* ── LEVEL UP OVERLAY ── */}
-      {levelUpAnim && (() => {
-        const { phase, newLevel, sparkles, streamParticles, barRect } = levelUpAnim
-        const bx = barRect ? barRect.right : window.innerWidth * 0.7
-        const by = barRect ? barRect.top + barRect.height / 2 : 50
-        const coneW = window.innerWidth - bx + 40
-        const isFlood   = phase === 'flood' || phase === 'sparkle' || phase === 'fade'
-        const isSparkle = phase === 'sparkle' || phase === 'fade'
-        const isFade    = phase === 'fade'
-
-        return (
-          <div style={{ position: 'fixed', inset: 0, zIndex: 10000, pointerEvents: 'none' }}>
-            <style>{`
-              @keyframes lvlup-cone-in {
-                0%   { transform: scaleX(0); opacity: 0.9; }
-                8%   { transform: scaleX(1); opacity: 0.85; }
-                85%  { opacity: 0.7; }
-                100% { opacity: 0; }
-              }
-              @keyframes lvlup-stream {
-                0%   { transform: rotate(var(--sa)) translateX(0px) scale(1); opacity: 1; }
-                70%  { opacity: 0.8; }
-                100% { transform: rotate(var(--sa)) translateX(var(--sd)) scale(0.15); opacity: 0; }
-              }
-              @keyframes lvlup-flood-in {
-                0%   { clip-path: polygon(100% 0%, 100% 0%, 100% 100%, 100% 100%); }
-                100% { clip-path: polygon(0% 0%, 100% 0%, 100% 100%, 0% 100%); }
-              }
-              @keyframes lvlup-flood-out {
-                0%   { clip-path: polygon(0% 0%, 100% 0%, 100% 100%, 0% 100%); opacity: 1; }
-                100% { clip-path: polygon(0% 0%, 0% 0%, 0% 100%, 0% 100%); opacity: 0; }
-              }
-              @keyframes lvlup-sparkle-in {
-                0%   { transform: translate(-50%, -50%) rotate(var(--sr)) scale(0); opacity: 0; }
-                40%  { opacity: 1; transform: translate(-50%, -50%) rotate(var(--sr)) scale(1.2); }
-                100% { transform: translate(-50%, -50%) rotate(var(--sr)) scale(1); opacity: 0.9; }
-              }
-              @keyframes lvlup-sparkle-out {
-                0%   { opacity: 0.9; transform: translate(-50%, -50%) rotate(var(--sr)) scale(1); }
-                100% { opacity: 0;   transform: translate(-50%, -50%) rotate(var(--sr)) scale(0.2); }
-              }
-              @keyframes lvlup-label {
-                0%   { transform: translate(-50%, -50%) rotate(-3deg) scale(3); opacity: 0; filter: blur(12px); }
-                50%  { transform: translate(-50%, -50%) rotate(-3deg) scale(0.95); opacity: 1; filter: blur(0); }
-                65%  { transform: translate(-50%, -50%) rotate(-3deg) scale(1.05); }
-                100% { transform: translate(-50%, -50%) rotate(-3deg) scale(1); opacity: 1; }
-              }
-              @keyframes lvlup-num {
-                0%   { transform: translate(-50%, -50%) rotate(2deg) scale(4); opacity: 0; filter: blur(16px); }
-                55%  { transform: translate(-50%, -50%) rotate(2deg) scale(0.92); opacity: 1; filter: blur(0); }
-                70%  { transform: translate(-50%, -50%) rotate(2deg) scale(1.08); }
-                100% { transform: translate(-50%, -50%) rotate(2deg) scale(1); opacity: 1; }
-              }
-            `}</style>
-
-            {/* Firehose — cone body */}
-            {phase === 'shatter' && (
-              <div style={{
-                position: 'fixed',
-                left: bx,
-                top: by - 80,
-                width: coneW,
-                height: 160,
-                transformOrigin: 'left center',
-                background: 'linear-gradient(90deg, rgba(255,248,180,0.95) 0%, rgba(228,176,34,0.75) 20%, rgba(228,176,34,0.3) 60%, transparent 100%)',
-                clipPath: 'polygon(0 48%, 100% 0%, 100% 100%, 0 52%)',
-                animation: `lvlup-cone-in 750ms ease-out both`,
-                boxShadow: '0 0 40px rgba(228,176,34,0.6)',
-              }} />
-            )}
-
-            {/* Firehose — streaming particles flowing through the cone */}
-            {phase === 'shatter' && streamParticles && streamParticles.map((p) => (
-              <div key={p.i} style={{
-                position: 'fixed',
-                left: bx,
-                top: by,
-                width: p.size * 2.5,
-                height: p.size,
-                borderRadius: '50%',
-                background: p.i % 5 === 0
-                  ? 'radial-gradient(ellipse, #ffffff 0%, #f5d060 50%, transparent 100%)'
-                  : 'radial-gradient(ellipse, #f5d060 0%, #e4b022 60%, transparent 100%)',
-                transformOrigin: 'left center',
-                '--sa': `${p.angle}deg`,
-                '--sd': `${p.dist}px`,
-                animation: `lvlup-stream 380ms cubic-bezier(0.1, 0.6, 0.4, 1) ${p.delay}ms both`,
-                filter: 'blur(1px)',
-                boxShadow: '0 0 8px rgba(228,176,34,0.8)',
-              }} />
-            ))}
-
-            {/* Gold flood */}
-            {isFlood && (
-              <div style={{
-                position: 'fixed', inset: 0,
-                background: 'linear-gradient(135deg, #b8860b 0%, #e4b022 35%, #f5d060 60%, #e4b022 100%)',
-                animation: isFade
-                  ? 'lvlup-flood-out 1400ms cubic-bezier(0.4, 0, 1, 1) both'
-                  : 'lvlup-flood-in 550ms cubic-bezier(0.2, 0.9, 0.3, 1) both',
-              }} />
-            )}
-
-            {/* Sparkles */}
-            {isSparkle && sparkles.map((s, i) => (
-              <div key={i} style={{
-                position: 'fixed',
-                left: `${s.x}vw`,
-                top:  `${s.y}vh`,
-                width: s.size,
-                height: s.size,
-                background: s.color,
-                clipPath: 'polygon(50% 0%, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%)',
-                '--sr': `${s.rot}deg`,
-                animation: isFade
-                  ? `lvlup-sparkle-out 1200ms ease-in ${s.delay * 0.3}ms both`
-                  : `lvlup-sparkle-in 600ms cubic-bezier(0.2, 0.9, 0.3, 1.3) ${s.delay}ms both`,
-                filter: s.color === '#fff' ? 'drop-shadow(0 0 6px #fff)' : 'drop-shadow(0 0 8px #e4b022)',
-              }} />
-            ))}
-
-            {/* LEVEL UP label */}
-            {isSparkle && !isFade && (
-              <>
-                <div style={{
-                  position: 'fixed',
-                  left: '50%', top: '38%',
-                  fontFamily: 'var(--font-display, Anton, sans-serif)',
-                  fontSize: 'clamp(3rem, 8vw, 6rem)',
-                  color: '#070708',
-                  letterSpacing: '0.05em',
-                  whiteSpace: 'nowrap',
-                  lineHeight: 1,
-                  textShadow: '4px 4px 0 rgba(0,0,0,0.3)',
-                  animation: 'lvlup-label 700ms cubic-bezier(0.2, 0.9, 0.3, 1.2) 200ms both',
-                }}>
-                  LEVEL UP
-                </div>
-                <div style={{
-                  position: 'fixed',
-                  left: '50%', top: '58%',
-                  fontFamily: 'var(--font-display, Anton, sans-serif)',
-                  fontSize: 'clamp(6rem, 20vw, 16rem)',
-                  color: '#070708',
-                  lineHeight: 1,
-                  opacity: 0.85,
-                  textShadow: '6px 6px 0 rgba(0,0,0,0.25)',
-                  animation: 'lvlup-num 800ms cubic-bezier(0.2, 0.9, 0.3, 1.2) 500ms both',
-                }}>
-                  {newLevel}
-                </div>
-              </>
-            )}
-          </div>
-        )
-      })()}
+      {/* ── LEVEL UP OVERLAY — shared RankUpSlam (hard-edge P5 slam;
+          the gold-flood/sparkle cascade is retired). Self-timed; onDone
+          clears state and resets the bar for the new level. ── */}
+      {levelUpAnim && (
+        <RankUpSlam
+          label="LEVEL UP"
+          value={String(levelUpAnim.newLevel)}
+          onDone={() => { setLevelUpAnim(null); setBarXP(0) }}
+        />
+      )}
 
       </div>
 

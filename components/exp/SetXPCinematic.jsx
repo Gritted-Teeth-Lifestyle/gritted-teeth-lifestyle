@@ -111,9 +111,9 @@ export default function SetXPCinematic({ snapshot, tierName, onComplete }) {
   const statusQuoMult = Number(snapshot?.statusQuoMult) || 1.0
   const statusQuoKind = snapshot?.statusQuoKind || 'none'
   const hiddenScale = statusQuoKind === 'tax' ? statusQuoMult : 1.0
-  if (statusQuoKind === 'climb') {
+  if (statusQuoKind === 'climb' || statusQuoKind === 'fresh') {
     chips.push({
-      label: 'OVERLOAD',
+      label: statusQuoKind === 'fresh' ? 'NEW CYCLE' : 'OVERLOAD',
       detail: `×${statusQuoMult.toFixed(2)}`,
       running: stackBase * (classMult + prestigeMult + holidayMult) * statusQuoMult,
     })
