@@ -293,11 +293,6 @@ export default function DayStarRecap({ entries, cycleId, iso, onDone }) {
                 }}
               >
                 {entry.name}
-                {starless && (
-                  <span className="font-mono" style={{ fontSize: '0.55rem', letterSpacing: '0.28em', marginLeft: 10, color: '#6a6a72' }}>
-                    TOO LIGHT
-                  </span>
-                )}
               </div>
             </div>
           )

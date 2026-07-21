@@ -1070,18 +1070,19 @@ function WeightPopup({ exerciseName, initialWeight, rowRect, onClose, onSave }) 
             style={{ fontSize: 'clamp(0.9rem, 2vw, 1.4rem)', transform: 'rotate(0.4deg)' }}>
             {exerciseName}
           </div>
-          {/* STATUS QUO guidance: proven max + plausible next target. The
-              CLIMB bonus zone is 0.9–1.1× proven, so the target is a
-              nudge past the record, rounded to a real plate load. */}
+          {/* STATUS QUO guidance, working-set terms per Jordan: the stored
+              record is an est-1RM, so convert it back to a 10-rep working
+              weight (÷ Epley factor 1.333) and suggest one plate-nudge up.
+              No 1RM numbers shown anywhere. */}
           {(() => {
             let proven = null
             try { proven = getProvenBest(exerciseName) } catch (_) {}
             if (!proven) return <div className="mb-5" />
-            const target = Math.round((proven * 1.02) / 5) * 5
+            const rec = Math.max(5, Math.round((proven / (1 + 10 / 30)) / 5) * 5)
             return (
               <div className="relative font-mono mb-5 text-center"
                 style={{ fontSize: '0.6rem', letterSpacing: '0.22em', color: '#e4b022' }}>
-                PROVEN MAX ≈ {Math.round(proven)} · TARGET ≈ {target}
+                RECORD ≈ {rec}×10 · TRY {rec + 5}×10
               </div>
             )
           })()}
