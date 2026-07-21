@@ -639,31 +639,17 @@ export default function SettingsPage() {
                 </div>
                 <div className="flex flex-col gap-3">
                   <ManualRow title="EARNING EXP">
-                    Every set earns EXP from the weight on the bar times the reps you grind out.
-                    Reps 5 through 15 count in full — fewer or more count less, so half-rep maxes
-                    and endless burnouts don&apos;t farm. Power lifts (squats, deadlifts) carry the
-                    biggest multiplier, compound lifts the next, isolation work the smallest.
-                    Lifting lighter relative to your bodyweight earns less; push a lift heavy for
-                    your size and a HEAVY LIFT bonus fires on the set.
+                    Weight times reps is EXP. Reps 5 to 15 count in full. Power lifts pay most,
+                    isolation least. Lift heavy for your size and a HEAVY LIFT bonus fires.
                   </ManualRow>
                   <ManualRow title="STARS + WAR RECORD">
-                    Real working sets — at genuine working weight — earn stars for the five body
-                    regions on your WAR RECORD. Warm-up weight logs EXP but earns no stars. Region
-                    EXP only flows from starred sets, so the transmutation circle grows from real
-                    work only.
-                  </ManualRow>
-                  <ManualRow title="THE OVERLOAD BONUS">
-                    GTL tracks your proven best on every exercise. Train near it — matching your
-                    working weight or nudging past your record — and the set earns an OVERLOAD
-                    bonus. Small honest steps, every session. Progressive overload is the best
-                    EXP strategy in the game, on purpose, because it&apos;s the best strategy in the
-                    gym.
+                    Real working sets earn stars for your body regions. Warm-ups don&apos;t.
+                    The WAR RECORD grows from real work only.
                   </ManualRow>
                   <ManualRow title="HONEST STEEL">
-                    The forge knows real strength standards. Weights beyond human possibility are
-                    rejected outright. Claims that leap far past your own proven record earn
-                    reduced EXP until you prove them again in later sessions — your record only
-                    moves when you stamp the day. Log what you actually lift; the blade knows.
+                    GTL knows real strength standards. Train near your proven record and earn
+                    bonus EXP. Claims far beyond your record earn less until you prove them.
+                    Impossible weights don&apos;t count.
                   </ManualRow>
                 </div>
               </div>

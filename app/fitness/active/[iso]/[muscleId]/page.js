@@ -1744,7 +1744,7 @@ function ExercisePanel({ muscleId, dayIso, originRect, onClose, cycleId, onAddMo
       const sq = assessSetForExercise(exercise, weightForSet || 0, repsForSet || 0, bodyweight)
       if (sq.light && !lightNudgedRef.current.has(name)) {
         lightNudgedRef.current.add(name)
-        showSqBanner('light', 'TOO LIGHT — GRIT YOUR TEETH', 2000)
+        showSqBanner('light', "IS THAT ALL YOU'VE GOT?", 2000)
       }
 
       const snapshot = calculateSetXP(
