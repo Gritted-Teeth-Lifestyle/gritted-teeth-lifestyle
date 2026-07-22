@@ -651,6 +651,11 @@ export default function SettingsPage() {
                     bonus EXP. Claims far beyond your record earn less until you prove them.
                     Impossible weights don&apos;t count.
                   </ManualRow>
+                  <ManualRow title="THE BASELINE">
+                    Your first sets on each exercise become your baseline. All EXP growth is
+                    measured from there. Records only lock in when you stamp the day. Start
+                    honest — the forge remembers.
+                  </ManualRow>
                 </div>
               </div>
 
