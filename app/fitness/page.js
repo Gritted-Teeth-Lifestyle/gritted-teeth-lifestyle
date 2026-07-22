@@ -10,8 +10,7 @@ import { armChain, setInAnimation } from '../../lib/predictiveTap'
 import { useChainPage } from '../../lib/useChainPage'
 import { pk } from '../../lib/storage'
 import { setUserDOB } from '../../lib/userPrefs'
-import BodyweightStep from '../../components/onboarding/BodyweightStep'
-import DateOfBirthStep from '../../components/onboarding/DateOfBirthStep'
+import VitalsStep from '../../components/onboarding/VitalsStep'
 import ExperienceStep from '../../components/onboarding/ExperienceStep'
 import { setClaimedExperience } from '../../lib/exp'
 
@@ -230,7 +229,6 @@ export default function ProfilePage() {
   const [ready, setReady] = useState(false)
   const [transitioning, setTransitioning] = useState(false)
   const [pendingNewName, setPendingNewName] = useState(null)
-  const [pendingDOBName, setPendingDOBName] = useState(null)
   const [pendingExpName, setPendingExpName] = useState(null)
   const inputRef = useRef(null)
   const skippedRef = useRef(false)
@@ -311,33 +309,19 @@ export default function ProfilePage() {
     selectProfile(name)
   }
 
-  const handleBodyweightConfirm = (bw) => {
+  // Body weight (required) + birthday (optional, null when the wheels
+  // were left on '—') from the single VitalsStep card. DOB is app-level
+  // (not profile-scoped): one human → one birthday, even with multiple
+  // warrior save slots. See lib/userPrefs.js.
+  const handleVitalsConfirm = (bw, iso) => {
     if (!pendingNewName) return
     try { localStorage.setItem(pk('user-bodyweight'), String(bw)) } catch (_) {}
+    if (iso && /^\d{4}-\d{2}-\d{2}$/.test(iso)) {
+      setUserDOB(iso)
+    }
     const name = pendingNewName
     setPendingNewName(null)
     play('card-confirm')
-    setPendingDOBName(name)
-  }
-
-  const handleDOBConfirm = (iso) => {
-    if (!pendingDOBName) return
-    // DOB is app-level (not profile-scoped). One human → one birthday,
-    // even with multiple warrior save slots. See lib/userPrefs.js.
-    if (/^\d{4}-\d{2}-\d{2}$/.test(iso)) {
-      setUserDOB(iso)
-    }
-    const name = pendingDOBName
-    setPendingDOBName(null)
-    play('card-confirm')
-    setPendingExpName(name)
-  }
-
-  const handleDOBSkip = () => {
-    if (!pendingDOBName) return
-    const name = pendingDOBName
-    setPendingDOBName(null)
-    play('menu-close')
     setPendingExpName(name)
   }
 
@@ -617,21 +601,9 @@ export default function ProfilePage() {
           style={{ background: 'rgba(8,8,12,0.78)', backdropFilter: 'blur(4px)' }}
           role="dialog"
           aria-modal="true"
-          aria-label="Enter body weight"
+          aria-label="Enter body weight and birthday"
         >
-          <BodyweightStep onConfirm={handleBodyweightConfirm} />
-        </div>
-      )}
-
-      {pendingDOBName && (
-        <div
-          className="fixed inset-0 z-[10000] flex items-center justify-center px-6"
-          style={{ background: 'rgba(8,8,12,0.78)', backdropFilter: 'blur(4px)' }}
-          role="dialog"
-          aria-modal="true"
-          aria-label="Enter birthday"
-        >
-          <DateOfBirthStep onConfirm={handleDOBConfirm} onSkip={handleDOBSkip} />
+          <VitalsStep onConfirm={handleVitalsConfirm} />
         </div>
       )}
 

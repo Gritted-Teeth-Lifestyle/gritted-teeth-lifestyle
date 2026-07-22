@@ -2,7 +2,7 @@
 /**
  * ExperienceStep — inline onboarding card for first-time profile creation.
  *
- * Mounted by app/fitness/page.js after DateOfBirthStep resolves. Captures
+ * Mounted by app/fitness/page.js after VitalsStep confirms. Captures
  * the lifting-experience claim (days / weeks / months / years / decades)
  * that seeds the STATUS QUO honesty bands (lib/exp/experience.js). The
  * answer only sets expectations — it can never earn extra EXP — and the

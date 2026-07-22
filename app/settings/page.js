@@ -8,12 +8,6 @@ import { pk } from '../../lib/storage'
 import NumberRow from '../../components/settings/NumberRow'
 import SexToggle from '../../components/settings/SexToggle'
 import DateRow from '../../components/settings/DateRow'
-import ExperienceRow from '../../components/settings/ExperienceRow'
-import {
-  getClaimedExperience,
-  setClaimedExperience,
-  getEffectiveExperience,
-} from '../../lib/exp'
 import { canVibrate } from '../../lib/platform'
 import { getUserDOB, setUserDOB as writeUserDOB } from '../../lib/userPrefs'
 import {
@@ -203,8 +197,6 @@ export default function SettingsPage() {
   const hapticsSupported = ready && canVibrate()
   const [userBW, setUserBW]       = useState(null)   // R1a: lb integer, profile-scoped
   const [userSex, setUserSex]     = useState('m')    // R1a: 'm' | 'f', default 'm'
-  const [expClaim, setExpClaim]   = useState(null)   // lifting-experience claim, profile-scoped
-  const [expEffective, setExpEffective] = useState(null) // max(claimed, earned)
   const [userDOB, setUserDOB]     = useState(null)   // R16: ISO 'YYYY-MM-DD' | null, optional. App-level — one human, one DOB.
   // Two-tab structure: APP (audio/haptics/BGM/personal/defaults) vs PROFILE
   // (warrior identity + scoped data + danger). Reflects the underlying data
@@ -227,8 +219,6 @@ export default function SettingsPage() {
       const rawSex = localStorage.getItem(pk('user-sex'))
       setUserSex(rawSex === 'f' ? 'f' : 'm')
     } catch (_) {}
-    setExpClaim(getClaimedExperience())
-    setExpEffective(getEffectiveExperience())
     // DOB is app-level (not pk()-scoped). lib/userPrefs.js owns the read,
     // including the one-time migration from per-profile keys.
     setUserDOB(getUserDOB())
@@ -354,16 +344,6 @@ export default function SettingsPage() {
     const v = next === 'f' ? 'f' : 'm'
     setUserSex(v)
     try { localStorage.setItem(pk('user-sex'), v) } catch (_) {}
-    play('option-select')
-  }
-
-  // Lifting-experience claim. The earned tier still wins if higher —
-  // getEffectiveExperience() re-resolves after every change, so the
-  // EARNED badge shows when a lowered claim is moot.
-  const handleExperience = (tier) => {
-    setClaimedExperience(tier)
-    setExpClaim(tier)
-    setExpEffective(getEffectiveExperience())
     play('option-select')
   }
 
@@ -746,11 +726,6 @@ export default function SettingsPage() {
                       placeholder="LBS"
                     />
                     <SexToggle value={userSex} onChange={handleSex} />
-                    <ExperienceRow
-                      value={expClaim}
-                      effective={expEffective}
-                      onChange={handleExperience}
-                    />
                   </div>
                 </div>
               )}
