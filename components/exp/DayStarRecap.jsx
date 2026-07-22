@@ -294,24 +294,6 @@ export default function DayStarRecap({ entries, cycleId, iso, onDone }) {
               >
                 {entry.name}
               </div>
-              {/* Explicit verdict on starless rows — grey alone reads as
-                  styling, not failure (Jordan 2026-07-22). */}
-              {starless && (
-                <div
-                  className="self-center ml-2 font-mono uppercase font-bold px-2 py-1"
-                  style={{
-                    fontSize: 8,
-                    letterSpacing: '0.22em',
-                    color: '#d4181f',
-                    border: '1px solid #d4181f',
-                    clipPath: 'polygon(6% 0%, 100% 0%, 94% 100%, 0% 100%)',
-                    transform: `rotate(${rowIdx % 2 === 0 ? -1.2 : 0.9}deg)`,
-                    whiteSpace: 'nowrap',
-                  }}
-                >
-                  TOO LIGHT ✕ NO STARS
-                </div>
-              )}
             </div>
           )
         })}
