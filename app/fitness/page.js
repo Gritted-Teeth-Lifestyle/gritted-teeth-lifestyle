@@ -12,6 +12,8 @@ import { pk } from '../../lib/storage'
 import { setUserDOB } from '../../lib/userPrefs'
 import BodyweightStep from '../../components/onboarding/BodyweightStep'
 import DateOfBirthStep from '../../components/onboarding/DateOfBirthStep'
+import ExperienceStep from '../../components/onboarding/ExperienceStep'
+import { setClaimedExperience } from '../../lib/exp'
 
 function ProfileChip({ name, onSelect, onSwipeSelect }) {
   const { play } = useSound()
@@ -229,6 +231,7 @@ export default function ProfilePage() {
   const [transitioning, setTransitioning] = useState(false)
   const [pendingNewName, setPendingNewName] = useState(null)
   const [pendingDOBName, setPendingDOBName] = useState(null)
+  const [pendingExpName, setPendingExpName] = useState(null)
   const inputRef = useRef(null)
   const skippedRef = useRef(false)
   const transitioningRef = useRef(false)
@@ -327,13 +330,33 @@ export default function ProfilePage() {
     const name = pendingDOBName
     setPendingDOBName(null)
     play('card-confirm')
-    selectProfile(name)
+    setPendingExpName(name)
   }
 
   const handleDOBSkip = () => {
     if (!pendingDOBName) return
     const name = pendingDOBName
     setPendingDOBName(null)
+    play('menu-close')
+    setPendingExpName(name)
+  }
+
+  // Lifting experience — profile-scoped claim seeding the honesty bands
+  // (lib/exp/experience.js). pk() works here because the new profile was
+  // already made active in handleSubmit. Skip leaves it unset → 'years'.
+  const handleExperienceConfirm = (tier) => {
+    if (!pendingExpName) return
+    setClaimedExperience(tier)
+    const name = pendingExpName
+    setPendingExpName(null)
+    play('card-confirm')
+    selectProfile(name)
+  }
+
+  const handleExperienceSkip = () => {
+    if (!pendingExpName) return
+    const name = pendingExpName
+    setPendingExpName(null)
     play('menu-close')
     selectProfile(name)
   }
@@ -609,6 +632,18 @@ export default function ProfilePage() {
           aria-label="Enter birthday"
         >
           <DateOfBirthStep onConfirm={handleDOBConfirm} onSkip={handleDOBSkip} />
+        </div>
+      )}
+
+      {pendingExpName && (
+        <div
+          className="fixed inset-0 z-[10000] flex items-center justify-center px-6"
+          style={{ background: 'rgba(8,8,12,0.78)', backdropFilter: 'blur(4px)' }}
+          role="dialog"
+          aria-modal="true"
+          aria-label="How long have you been lifting"
+        >
+          <ExperienceStep onConfirm={handleExperienceConfirm} onSkip={handleExperienceSkip} />
         </div>
       )}
     </>
