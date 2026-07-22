@@ -21,8 +21,8 @@ describe('getExerciseById', () => {
     expect(getExerciseById('NOT A REAL EXERCISE')).toBeUndefined()
   })
 
-  test('library contains 263 entries (post-R10 curation)', () => {
-    expect(ALL_EXERCISES.length).toBe(263)
+  test('library contains 262 entries (post-R10 curation, minus BODYWEIGHT BICEPS CURL)', () => {
+    expect(ALL_EXERCISES.length).toBe(262)
   })
 
   test('every entry has primaryMuscles + heavy_lift_threshold', () => {
