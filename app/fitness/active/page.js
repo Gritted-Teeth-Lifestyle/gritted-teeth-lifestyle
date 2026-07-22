@@ -30,6 +30,8 @@ import { consumePrefire, setInAnimation, disarmChain, subscribeStaged } from '..
 import { useChainPage } from '../../../lib/useChainPage'
 import TierUpFlourish from '../../../components/exp/TierUpFlourish'
 import RankUpSlam from '../../../components/exp/RankUpSlam'
+import LevelUpCard from '../../../components/exp/LevelUpCard'
+import { summarizeDayForLevelCard } from '../../../lib/exp/levelSummary'
 // Day-hop and BEGIN HERE muscle-hop now navigate to /fitness/active/[iso]
 // (Stage 1 of App Router refactor) so HeistTransition fires naturally and
 // plays transition-slash — matching the sound profile of the chain's first
@@ -2741,7 +2743,8 @@ export default function ActiveCyclePage() {
   const [barXP, setBarXP]                   = useState(0)
   const [allCyclesDays, setAllCyclesDays]   = useState(0)
   const [xpAnim, setXpAnim]                 = useState(null) // null | { phase, particles, total, barRect }
-  const [levelUpAnim, setLevelUpAnim]       = useState(null) // null | { phase, newLevel, sparkles, barRect }
+  const [levelUpAnim, setLevelUpAnim]       = useState(null) // null | { newLevel, closingDay }
+  const [levelCard, setLevelCard]           = useState(null) // null | { level, summary } — results card after the slam
   const xpBarRef                            = useRef(null)
   const barXPRef                            = useRef(0)
   const rolodexRef                          = useRef(null)
@@ -3033,7 +3036,7 @@ export default function ActiveCyclePage() {
         // state + resets the bar. (Sparkle/stream cascade retired
         // 2026-07-21 with the RankUpSlam rebuild.)
         setTimeout(() => {
-          setLevelUpAnim({ newLevel: levelAfter })
+          setLevelUpAnim({ newLevel: levelAfter, closingDay })
         }, 1900)
       }
     }, 3100)
@@ -3426,7 +3429,24 @@ export default function ActiveCyclePage() {
         <RankUpSlam
           label="LEVEL UP"
           value={String(levelUpAnim.newLevel)}
-          onDone={() => { setLevelUpAnim(null); setBarXP(0) }}
+          onDone={() => {
+            // Hand off to the results card (where the EXP came from —
+            // the day that pushed the bar over). No summary (edge case:
+            // empty log) → just clean up like before.
+            let summary = null
+            try { summary = summarizeDayForLevelCard(cycleId, levelUpAnim.closingDay) } catch (_) {}
+            const level = levelUpAnim.newLevel
+            setLevelUpAnim(null)
+            setBarXP(0)
+            if (summary) setLevelCard({ level, summary })
+          }}
+        />
+      )}
+      {levelCard && (
+        <LevelUpCard
+          level={levelCard.level}
+          summary={levelCard.summary}
+          onDone={() => setLevelCard(null)}
         />
       )}
 
