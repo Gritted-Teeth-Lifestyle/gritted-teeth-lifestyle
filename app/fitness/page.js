@@ -12,9 +12,9 @@ import { pk } from '../../lib/storage'
 import { setUserDOB } from '../../lib/userPrefs'
 import VitalsStep from '../../components/onboarding/VitalsStep'
 import ExperienceStep from '../../components/onboarding/ExperienceStep'
-import { setClaimedExperience } from '../../lib/exp'
+import { setClaimedExperience, profileSlotStats } from '../../lib/exp'
 
-function ProfileChip({ name, onSelect, onSwipeSelect }) {
+function ProfileChip({ name, stats, onSelect, onSwipeSelect }) {
   const { play } = useSound()
   const startRef = useRef(null)
   const dxRef = useRef(0)
@@ -142,10 +142,21 @@ function ProfileChip({ name, onSelect, onSwipeSelect }) {
         }}
       >
         <span
-          className="relative inline-block leading-none tracking-tight"
+          className="relative flex flex-col items-center"
           style={{ userSelect: 'none', WebkitUserSelect: 'none', WebkitTouchCallout: 'none' }}
         >
-          {name.toUpperCase()}
+          <span className="inline-block leading-none tracking-tight">
+            {name.toUpperCase()}
+          </span>
+          {/* Save-slot line: level · EXP tier · days trained. */}
+          {stats && (
+            <span
+              className="mt-2 font-mono text-[9px] tracking-[0.25em] uppercase font-bold whitespace-nowrap"
+              style={{ color: (hovered || pressed) ? '#f4ede0' : '#8a8a92', transition: 'color 200ms ease-out' }}
+            >
+              LV {stats.level} · {stats.tier} · {stats.daysTrained} {stats.daysTrained === 1 ? 'DAY' : 'DAYS'}
+            </span>
+          )}
         </span>
         {(() => {
           const rollFactor = 360 / SWIPE_THRESHOLD
@@ -225,6 +236,7 @@ export default function ProfilePage() {
   const router = useRouter()
   const { play } = useSound()
   const [profiles, setProfiles] = useState([])
+  const [slotStats, setSlotStats] = useState({})
   const [input, setInput] = useState('')
   const [ready, setReady] = useState(false)
   const [transitioning, setTransitioning] = useState(false)
@@ -238,7 +250,15 @@ export default function ProfilePage() {
   useEffect(() => {
     try {
       const raw = localStorage.getItem('gtl-profiles')
-      if (raw) setProfiles(JSON.parse(raw))
+      if (raw) {
+        const list = JSON.parse(raw)
+        setProfiles(list)
+        // Save-slot stats per chip. Sync localStorage scans — cheap for a
+        // handful of warriors.
+        const map = {}
+        for (const p of list) map[p] = profileSlotStats(p)
+        setSlotStats(map)
+      }
     } catch (_) {}
     setReady(true)
   }, [])
@@ -297,6 +317,7 @@ export default function ProfilePage() {
         const updated = [name, ...existing]
         localStorage.setItem('gtl-profiles', JSON.stringify(updated))
         setProfiles(updated)
+        setSlotStats(s => ({ ...s, [name]: { level: 0, tier: 'RELAXED', daysTrained: 0 } }))
         createdNew = true
       }
     } catch (_) {}
@@ -570,6 +591,7 @@ export default function ProfilePage() {
                     <ProfileChip
                       key={name}
                       name={name}
+                      stats={slotStats[name]}
                       onSelect={selectProfile}
                       onSwipeSelect={swipeSelectProfile}
                     />
