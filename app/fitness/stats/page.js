@@ -21,6 +21,7 @@ import {
   getTierCount,
   getNextTierThreshold,
   getRibbonCount,
+  countTrainingDays,
 } from '../../../lib/exp'
 import BodyStarChart from '../../../components/stats/BodyStarChart'
 import RibbonRow from '../../../components/profile/RibbonRow'
@@ -396,9 +397,11 @@ export default function StatsPage() {
   // R20a: tier counter + ribbon count for the progress bar + ribbon history.
   const [tierCount, setTierCount] = useState(0)
   const [ribbons, setRibbons] = useState(0)
+  const [daysTrained, setDaysTrained] = useState(0)
 
   useEffect(() => {
     setStats(loadStats())
+    setDaysTrained(countTrainingDays())
     const current = getRegionStars()
     const lastSeen = readRegionStarsLastSeen()
     const delta = current.map((c, i) => Math.max(0, c - (lastSeen[i] || 0)))
@@ -536,7 +539,8 @@ export default function StatsPage() {
             </div>
 
             {/* ── Key stats ───────────────────────────────────────── */}
-            <div className="grid grid-cols-3 gap-3 mb-5 md:mb-10">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5 md:mb-10">
+              <StatBox label="DAYS TRAINED" value={daysTrained} />
               <StatBox label="CYCLES FORGED" value={stats.cycles} />
               <StatBox label="DAYS COMPLETED" value={stats.daysCompleted} />
               <StatBox label="COMPLETION RATE" value={`${completionPct}%`} />
