@@ -25,6 +25,8 @@
  */
 import { useEffect, useRef, useState } from 'react'
 import { useSound } from '../../lib/useSound'
+import { isBirthdayToday } from '../../lib/exp'
+import { getUserDOB } from '../../lib/userPrefs'
 
 const SLAM_AT_MS   = 120    // counter slam after mount
 const CHIPS_FROM_MS = 640   // first chip launch
@@ -94,7 +96,12 @@ export default function SetXPCinematic({ snapshot, tierName, onComplete }) {
     chips.push({ label: 'RIBBONS', running: stackBase * (classMult + prestigeMult) })
   }
   if (holidayMult > 0.0001) {
-    chips.push({ label: 'HOLIDAY', running: stackBase * (classMult + prestigeMult + holidayMult) })
+    // The birthday reads BIRTHDAY, not the generic HOLIDAY (Jordan
+    // 2026-07-22). Live date check — the cinematic plays the same day
+    // the set was logged.
+    let holidayLabel = 'HOLIDAY'
+    try { if (isBirthdayToday(new Date(), getUserDOB())) holidayLabel = 'BIRTHDAY' } catch (_) {}
+    chips.push({ label: holidayLabel, running: stackBase * (classMult + prestigeMult + holidayMult) })
   }
   // STATUS QUO honesty layer (hidden-tax form, Jordan 2026-07-20):
   // a taxed set shows NO chip and no label — every displayed number is
@@ -107,7 +114,7 @@ export default function SetXPCinematic({ snapshot, tierName, onComplete }) {
   const hiddenScale = statusQuoKind === 'tax' ? statusQuoMult : 1.0
   if (statusQuoKind === 'climb' || statusQuoKind === 'fresh') {
     chips.push({
-      label: statusQuoKind === 'fresh' ? 'NEW CYCLE' : 'OVERLOAD',
+      label: statusQuoKind === 'fresh' ? 'NEW MOVE' : 'OVERLOAD',
       running: stackBase * (classMult + prestigeMult + holidayMult) * statusQuoMult,
     })
   }
@@ -121,7 +128,11 @@ export default function SetXPCinematic({ snapshot, tierName, onComplete }) {
   // so its delta is 0 and it carries no number at all.
   let prevRunning = rawBase * hiddenScale
   for (const c of chips) {
-    const delta = Math.round(c.running - prevRunning)
+    const raw = c.running - prevRunning
+    // Any bonus that genuinely adds EXP shows at least +1 (Jordan
+    // 2026-07-22) — a real contribution never reads as nothing. Only the
+    // informational tier chip (raw exactly 0) stays numberless.
+    const delta = raw > 0.0001 ? Math.max(1, Math.round(raw)) : 0
     c.detail = delta > 0 ? `+${delta.toLocaleString()}` : null
     prevRunning = c.running
   }

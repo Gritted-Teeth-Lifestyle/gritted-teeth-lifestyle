@@ -1628,6 +1628,13 @@ function DayFocus({ iso, muscles, isLastDay, originRect, onClose, cycleId, onMus
   // paying its number (the R8a credit lands here, not per set). Plays
   // BEFORE the star recap; onDone chains into proceedToRecap.
   const [dayClose, setDayClose] = useState(null)
+  // Armed incomplete-day warning ({logged, planned}) — disarms after 6s.
+  const [stampWarn, setStampWarn] = useState(null)
+  useEffect(() => {
+    if (!stampWarn) return
+    const t = setTimeout(() => setStampWarn(null), 6000)
+    return () => clearTimeout(t)
+  }, [stampWarn])
   const proceedToRecap = () => {
     let recapEntries = null
     try {
@@ -1642,6 +1649,21 @@ function DayFocus({ iso, muscles, isLastDay, originRect, onClose, cycleId, onMus
   }
   const handleStamp = () => {
     if (stamped) return
+    // Incomplete-day warning (Jordan 2026-07-22): first press with
+    // planned sets still unlogged arms a warning instead of stamping —
+    // the day pays partial EXP and no session tick, and the user should
+    // know before sealing it. Pressing again brings tomorrow anyway.
+    if (!stampWarn) {
+      try {
+        const preview = computeDailyReckoning(cycleId, iso, { [iso]: muscles })
+        if (preview.sets_planned > 0 && preview.sets_logged < preview.sets_planned) {
+          setStampWarn({ logged: preview.sets_logged, planned: preview.sets_planned })
+          play('menu-open')
+          return
+        }
+      } catch (_) {}
+    }
+    setStampWarn(null)
     play('option-select')
     try { localStorage.setItem(pk(`done-${cycleId}-${iso}`), 'true') } catch (_) {}
     // R8 / R8a: end-of-day reckoning. Append (or replace, idempotent) the
@@ -2470,7 +2492,7 @@ function DayFocus({ iso, muscles, isLastDay, originRect, onClose, cycleId, onMus
                   className="font-display leading-none"
                   style={{ fontSize: 'clamp(1rem, 1.8vw, 1.4rem)', color: '#f5f0e8', textShadow: '2px 2px 0 #070708' }}
                 >
-                  {stamped ? 'TOMORROW WILL COME' : isLastDay ? 'ASCEND TO THE NEXT LEVEL' : 'BRING ON TOMORROW'}
+                  {stamped ? 'TOMORROW WILL COME' : stampWarn ? 'BRING IT ANYWAY' : isLastDay ? 'ASCEND TO THE NEXT LEVEL' : 'BRING ON TOMORROW'}
                 </span>
                 {!stamped && (
                   <span className="font-display text-gtl-paper leading-none" style={{ fontSize: '1.2rem' }}>▶︎</span>
@@ -2478,6 +2500,29 @@ function DayFocus({ iso, muscles, isLastDay, originRect, onClose, cycleId, onMus
               </div>
             </button>
           </div>
+
+          {/* Incomplete-day warning — armed by the first stamp press when
+              planned sets are unlogged. Grey day = partial EXP, no
+              session tick. */}
+          {stampWarn && !stamped && (
+            <div
+              className="mt-3 px-4 py-3"
+              style={{
+                background: '#111115',
+                border: '1px solid #d4181f',
+                clipPath: 'polygon(1% 0%, 100% 0%, 99% 100%, 0% 100%)',
+              }}
+            >
+              <p className="font-mono text-[10px] tracking-[0.25em] uppercase font-bold text-gtl-red leading-relaxed">
+                {stampWarn.logged} OF {stampWarn.planned} SETS LOGGED
+              </p>
+              <p className="font-mono text-[9px] tracking-[0.2em] uppercase text-gtl-ash mt-1 leading-relaxed">
+                YOU&apos;RE LEAVING EXP ON THE FLOOR — A PART-DONE DAY PAYS
+                PARTIAL CREDIT AND COUNTS NO SESSION. FINISH THE PLAN, OR
+                TAP AGAIN TO BRING IT ANYWAY.
+              </p>
+            </div>
+          )}
         </div>
 
         {/* BEGIN HERE muscle button removed — replaced by the muscle

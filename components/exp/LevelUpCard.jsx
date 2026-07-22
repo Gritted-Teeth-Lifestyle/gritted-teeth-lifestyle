@@ -41,7 +41,7 @@ export default function LevelUpCard({ level, summary, onDone }) {
   const bonuses = [
     summary.heavy    > 0 && { label: 'HEAVY LIFT', n: summary.heavy },
     summary.overload > 0 && { label: 'OVERLOAD',   n: summary.overload },
-    summary.fresh    > 0 && { label: 'NEW CYCLE',  n: summary.fresh },
+    summary.fresh    > 0 && { label: 'NEW MOVE',   n: summary.fresh },
     summary.power    > 0 && { label: 'POWER LIFT', n: summary.power },
   ].filter(Boolean)
 
