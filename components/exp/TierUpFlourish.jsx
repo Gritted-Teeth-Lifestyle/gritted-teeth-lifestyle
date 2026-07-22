@@ -17,20 +17,28 @@ import RankUpSlam from './RankUpSlam'
 
 const KEY_PENDING = 'tier-cross-pending'
 
+const KEY_PREV = 'tier-cross-prev'
+
 export default function TierUpFlourish() {
-  const [tierName, setTierName] = useState(null)
+  const [cross, setCross] = useState(null)   // { to, from }
 
   useEffect(() => {
     if (typeof window === 'undefined') return
-    let pending = ''
-    try { pending = localStorage.getItem(pk(KEY_PENDING)) || '' } catch (_) {}
+    let pending = '', prev = ''
+    try {
+      pending = localStorage.getItem(pk(KEY_PENDING)) || ''
+      prev    = localStorage.getItem(pk(KEY_PREV)) || ''
+    } catch (_) {}
     if (!pending) return
-    setTierName(pending)
+    setCross({ to: pending, from: prev || null })
     // Clear immediately — prevents a re-fire if the route re-mounts
     // mid-animation.
-    try { localStorage.setItem(pk(KEY_PENDING), '') } catch (_) {}
+    try {
+      localStorage.setItem(pk(KEY_PENDING), '')
+      localStorage.setItem(pk(KEY_PREV), '')
+    } catch (_) {}
   }, [])
 
-  if (!tierName) return null
-  return <RankUpSlam label="TIER UP" value={tierName} onDone={() => setTierName(null)} />
+  if (!cross) return null
+  return <RankUpSlam label="TIER UP" value={cross.to} prevValue={cross.from} onDone={() => setCross(null)} />
 }

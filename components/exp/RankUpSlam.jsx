@@ -32,26 +32,42 @@ const RIBBONS = [
   { top: '66%', h: 18, delay: 130, rot: -6 },
 ]
 
-export default function RankUpSlam({ label, value, onDone }) {
+// Sticker-slap variant (prevValue set — tier crossings): the OLD title
+// appears first as the standing record, then the NEW title slams on top
+// as a red nameplate sticker and knocks the old one tumbling off-screen.
+export default function RankUpSlam({ label, value, prevValue, onDone }) {
   const { play } = useSound()
-  const [stage, setStage] = useState('enter')  // enter | band | value | out
+  const hasPrev = prevValue != null && prevValue !== ''
+  // enter | band | value (number form) | prev | sticker | out
+  const [stage, setStage] = useState('enter')
   const [kick, setKick] = useState(0)
+  const [slapped, setSlapped] = useState(false)
   const onDoneRef = useRef(onDone)
   onDoneRef.current = onDone
 
   useEffect(() => {
     const t = []
     t.push(setTimeout(() => { setStage('band'); play('stamp') }, BAND_AT_MS))
-    t.push(setTimeout(() => setStage('value'), VALUE_AT_MS))
-    t.push(setTimeout(() => { setKick(1); play('card-confirm') }, VALUE_LAND_MS))
-    t.push(setTimeout(() => setStage('out'), OUT_AT_MS))
-    t.push(setTimeout(() => onDoneRef.current?.(), OUT_AT_MS + OUT_MS))
+    if (hasPrev) {
+      t.push(setTimeout(() => setStage('prev'), VALUE_AT_MS))
+      t.push(setTimeout(() => setStage('sticker'), VALUE_AT_MS + 380))
+      t.push(setTimeout(() => { setSlapped(true); setKick(1); play('card-confirm') }, VALUE_AT_MS + 620))
+      t.push(setTimeout(() => setStage('out'), OUT_AT_MS + 420))
+      t.push(setTimeout(() => onDoneRef.current?.(), OUT_AT_MS + 420 + OUT_MS))
+    } else {
+      t.push(setTimeout(() => setStage('value'), VALUE_AT_MS))
+      t.push(setTimeout(() => { setKick(1); play('card-confirm') }, VALUE_LAND_MS))
+      t.push(setTimeout(() => setStage('out'), OUT_AT_MS))
+      t.push(setTimeout(() => onDoneRef.current?.(), OUT_AT_MS + OUT_MS))
+    }
     return () => t.forEach(clearTimeout)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  const showBand  = stage === 'band' || stage === 'value' || stage === 'out'
-  const showValue = stage === 'value' || stage === 'out'
+  const showBand    = stage !== 'enter'
+  const showValue   = !hasPrev && (stage === 'value' || stage === 'out')
+  const showPrev    = hasPrev && (stage === 'prev' || stage === 'sticker' || stage === 'out')
+  const showSticker = hasPrev && (stage === 'sticker' || stage === 'out')
 
   return (
     <div
@@ -86,6 +102,19 @@ export default function RankUpSlam({ label, value, onDone }) {
           65%  { transform: translate(-2px, 3px); }
           100% { transform: translate(0, 0); }
         }
+        @keyframes gtl-rankup-prev-in {
+          0%   { transform: translateX(-50%) rotate(-1deg) translateY(10px); opacity: 0; }
+          100% { transform: translateX(-50%) rotate(-1deg) translateY(0); opacity: 1; }
+        }
+        @keyframes gtl-rankup-tumble {
+          0%   { transform: translateX(-50%) rotate(-1deg); opacity: 1; }
+          100% { transform: translate(calc(-50% + 70vw), 70vh) rotate(65deg); opacity: 0; }
+        }
+        @keyframes gtl-rankup-sticker {
+          0%   { transform: translateX(-50%) rotate(-3deg) scale(2.1); opacity: 0; }
+          55%  { transform: translateX(-50%) rotate(-3deg) scale(0.94); opacity: 1; }
+          100% { transform: translateX(-50%) rotate(-3deg) scale(1); opacity: 1; }
+        }
       `}</style>
 
       {/* Kanji watermark — 昇 (rise) */}
@@ -102,8 +131,53 @@ export default function RankUpSlam({ label, value, onDone }) {
 
       <div key={`rk-${kick}`} style={{ position: 'absolute', inset: 0, animation: kick ? 'gtl-rankup-kick 220ms cubic-bezier(0.2, 0.9, 0.3, 1)' : 'none' }}>
 
+        {/* Old tier title — the standing record, about to be dethroned */}
+        {showPrev && (
+          <div style={{
+            position: 'absolute', left: '50%', top: '46%',
+            fontFamily: 'Anton, Impact, sans-serif',
+            fontSize: 'clamp(2.4rem, 12vw, 5.4rem)',
+            color: '#8a8a92',
+            lineHeight: 1,
+            whiteSpace: 'nowrap',
+            textShadow: '4px 4px 0 #101012',
+            animation: slapped
+              ? 'gtl-rankup-tumble 560ms cubic-bezier(0.5, 0, 1, 0.5) both'
+              : 'gtl-rankup-prev-in 200ms ease-out both',
+            zIndex: 2,
+          }}>
+            {prevValue}
+          </div>
+        )}
+
+        {/* New tier title — red nameplate sticker slamming over the old */}
+        {showSticker && (
+          <div style={{
+            position: 'absolute', left: '50%', top: '43%',
+            animation: 'gtl-rankup-sticker 240ms cubic-bezier(0.18, 1.1, 0.35, 1) both',
+            zIndex: 3,
+          }}>
+            <div style={{
+              background: '#d4181f',
+              clipPath: 'polygon(3% 0%, 100% 0%, 97% 100%, 0% 100%)',
+              padding: '10px 28px 12px 24px',
+              boxShadow: '7px 7px 0 #2a0507',
+              whiteSpace: 'nowrap',
+            }}>
+              <span style={{
+                fontFamily: 'Anton, Impact, sans-serif',
+                fontSize: 'clamp(2.4rem, 12vw, 5.4rem)',
+                color: '#f4ede0',
+                lineHeight: 1,
+              }}>
+                {value}
+              </span>
+            </div>
+          </div>
+        )}
+
         {/* Accent ribbons — behind the value */}
-        {showValue && RIBBONS.map((r, i) => (
+        {(showValue || showSticker) && RIBBONS.map((r, i) => (
           <div key={i} style={{
             position: 'absolute', left: '-10%', right: '-10%', top: r.top,
             height: r.h, background: '#d4181f',
