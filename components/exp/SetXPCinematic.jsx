@@ -47,11 +47,6 @@ function fmt(n) {
   return Math.round(n).toLocaleString()
 }
 
-function mfmt(m) {
-  if (!Number.isFinite(m)) return '×0'
-  return `+${m.toFixed(2)}×`
-}
-
 const easeOutCubic = (t) => 1 - Math.pow(1 - t, 3)
 
 export default function SetXPCinematic({ snapshot, tierName, onComplete }) {
@@ -81,11 +76,11 @@ export default function SetXPCinematic({ snapshot, tierName, onComplete }) {
 
   const chips = []
   if (heavyLiftBonus > 0) {
-    chips.push({ label: 'HEAVY LIFT', detail: `+${fmt(heavyLiftBonus)}`, running: rawBase + heavyLiftBonus })
+    chips.push({ label: 'HEAVY LIFT', running: rawBase + heavyLiftBonus })
   }
   if (consistencyMult > 1.0001) {
     // Informational — strikes, no accumulate (running unchanged).
-    chips.push({ label: tierName || 'TIER', detail: mfmt(consistencyMult), running: stackBase })
+    chips.push({ label: tierName || 'TIER', running: stackBase })
   }
   // Running totals follow the R2 formula: stackBase × (classMult +
   // prestigeMult + holidayMult) — the base is NOT added on top, or the
@@ -93,14 +88,13 @@ export default function SetXPCinematic({ snapshot, tierName, onComplete }) {
   // the slash.
   chips.push({
     label: CLASS_LABEL[classification] || 'COMPOUND',
-    detail: mfmt(classMult),
     running: stackBase * classMult,
   })
   if (prestigeMult > 0.0001) {
-    chips.push({ label: 'RIBBONS', detail: mfmt(prestigeMult), running: stackBase * (classMult + prestigeMult) })
+    chips.push({ label: 'RIBBONS', running: stackBase * (classMult + prestigeMult) })
   }
   if (holidayMult > 0.0001) {
-    chips.push({ label: 'HOLIDAY', detail: mfmt(holidayMult), running: stackBase * (classMult + prestigeMult + holidayMult) })
+    chips.push({ label: 'HOLIDAY', running: stackBase * (classMult + prestigeMult + holidayMult) })
   }
   // STATUS QUO honesty layer (hidden-tax form, Jordan 2026-07-20):
   // a taxed set shows NO chip and no label — every displayed number is
@@ -114,11 +108,23 @@ export default function SetXPCinematic({ snapshot, tierName, onComplete }) {
   if (statusQuoKind === 'climb' || statusQuoKind === 'fresh') {
     chips.push({
       label: statusQuoKind === 'fresh' ? 'NEW CYCLE' : 'OVERLOAD',
-      detail: `×${statusQuoMult.toFixed(2)}`,
       running: stackBase * (classMult + prestigeMult + holidayMult) * statusQuoMult,
     })
   }
   for (const c of chips) c.running *= hiddenScale
+
+  // Whole numbers only (Jordan 2026-07-22): each chip shows the EXP it
+  // added to the counter — the delta between its landing value and the
+  // previous one — never a multiplier. Deltas come from the scaled
+  // runnings so a taxed set's chips stay consistent with the counter.
+  // The tier chip is informational (R8a defers its credit to day close)
+  // so its delta is 0 and it carries no number at all.
+  let prevRunning = rawBase * hiddenScale
+  for (const c of chips) {
+    const delta = Math.round(c.running - prevRunning)
+    c.detail = delta > 0 ? `+${delta.toLocaleString()}` : null
+    prevRunning = c.running
+  }
 
   const later = (fn, ms) => { const id = setTimeout(fn, ms); timersRef.current.push(id); return id }
 
@@ -360,9 +366,11 @@ export default function SetXPCinematic({ snapshot, tierName, onComplete }) {
                   <span style={{ fontFamily: '"JetBrains Mono", monospace', fontSize: '0.66rem', fontWeight: 700, letterSpacing: '0.3em', textTransform: 'uppercase' }}>
                     {chip.label}
                   </span>
-                  <span style={{ fontFamily: 'Anton, Impact, sans-serif', fontSize: '1.05rem', letterSpacing: '0.04em' }}>
-                    {chip.detail}
-                  </span>
+                  {chip.detail && (
+                    <span style={{ fontFamily: 'Anton, Impact, sans-serif', fontSize: '1.05rem', letterSpacing: '0.04em' }}>
+                      {chip.detail}
+                    </span>
+                  )}
                 </div>
               </div>
             )

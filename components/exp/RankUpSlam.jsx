@@ -25,6 +25,12 @@ const VALUE_AT_MS = 420
 const VALUE_LAND_MS = 680
 const OUT_AT_MS   = 2050
 const OUT_MS      = 360
+// Sticker variant pacing: how long the OLD title stands alone before the
+// new one slams over it (Jordan 2026-07-22 — 380ms read as no change at
+// all), sticker flight time, and how long the settled sticker holds.
+const PREV_HOLD_MS    = 1100
+const STICKER_FLY_MS  = 240
+const STICKER_HOLD_MS = 1430
 
 const RIBBONS = [
   { top: '46%', h: 12, delay: 0,   rot: -6 },
@@ -49,11 +55,14 @@ export default function RankUpSlam({ label, value, prevValue, onDone }) {
     const t = []
     t.push(setTimeout(() => { setStage('band'); play('stamp') }, BAND_AT_MS))
     if (hasPrev) {
+      const stickerAt = VALUE_AT_MS + PREV_HOLD_MS
+      const slapAt = stickerAt + STICKER_FLY_MS
+      const outAt = slapAt + STICKER_HOLD_MS
       t.push(setTimeout(() => setStage('prev'), VALUE_AT_MS))
-      t.push(setTimeout(() => setStage('sticker'), VALUE_AT_MS + 380))
-      t.push(setTimeout(() => { setSlapped(true); setKick(1); play('card-confirm') }, VALUE_AT_MS + 620))
-      t.push(setTimeout(() => setStage('out'), OUT_AT_MS + 420))
-      t.push(setTimeout(() => onDoneRef.current?.(), OUT_AT_MS + 420 + OUT_MS))
+      t.push(setTimeout(() => setStage('sticker'), stickerAt))
+      t.push(setTimeout(() => { setSlapped(true); setKick(1); play('card-confirm') }, slapAt))
+      t.push(setTimeout(() => setStage('out'), outAt))
+      t.push(setTimeout(() => onDoneRef.current?.(), outAt + OUT_MS))
     } else {
       t.push(setTimeout(() => setStage('value'), VALUE_AT_MS))
       t.push(setTimeout(() => { setKick(1); play('card-confirm') }, VALUE_LAND_MS))

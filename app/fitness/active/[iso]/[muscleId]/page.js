@@ -2270,6 +2270,7 @@ function DayFocus({ iso, muscles, isLastDay, originRect, onClose, cycleId, onMus
         if (after !== before) {
           try {
             localStorage.setItem(pk('tier-cross-pending'), after)
+            localStorage.setItem(pk('tier-cross-prev'), before)
             localStorage.setItem(pk('last-seen-tier'), after)
           } catch (_) {}
         }
