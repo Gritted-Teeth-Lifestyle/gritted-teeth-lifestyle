@@ -646,7 +646,7 @@ export default function SettingsPage() {
                     Real working sets earn stars for your body regions. Warm-ups don&apos;t.
                     The WAR RECORD grows from real work only.
                   </ManualRow>
-                  <ManualRow title="STRENGTH STANDARDS">
+                  <ManualRow title="OVERLOAD">
                     GTL knows real strength standards. Train near your proven record and earn
                     bonus EXP. Claims far beyond your record earn less until you prove them.
                     Impossible weights don&apos;t count.
