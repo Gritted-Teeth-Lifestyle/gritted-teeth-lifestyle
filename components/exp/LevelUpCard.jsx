@@ -82,24 +82,18 @@ export default function LevelUpCard({ level, summary, onDone }) {
           animation: 'gtl-lvlcard-in 280ms cubic-bezier(0.18, 1.1, 0.35, 1) both',
         }}
       >
-        {/* Day rank — giant letter overhanging the panel's top-right.
-            S is gold; everything else red. */}
+        {/* Rank — just a giant letter overhanging the panel's top-right.
+            S is gold; everything else red. No caption. */}
         {summary.rank && (
-          <div style={{
-            position: 'absolute', top: -34, right: -8, zIndex: 3,
-            textAlign: 'center', transform: 'rotate(7deg)',
+          <div className="font-display" style={{
+            position: 'absolute', top: -42, right: -10, zIndex: 3,
+            fontSize: '5.4rem', lineHeight: 1,
+            transform: 'rotate(7deg)',
+            color: summary.rank === 'S' ? '#e4b022' : '#d4181f',
+            textShadow: summary.rank === 'S' ? '5px 5px 0 #1a1104' : '5px 5px 0 #2a0507',
             pointerEvents: 'none',
           }}>
-            <div className="font-display" style={{
-              fontSize: '4.6rem', lineHeight: 1,
-              color: summary.rank === 'S' ? '#e4b022' : '#d4181f',
-              textShadow: summary.rank === 'S' ? '4px 4px 0 #1a1104' : '4px 4px 0 #2a0507',
-            }}>
-              {summary.rank}
-            </div>
-            <div className="font-mono" style={{ fontSize: '0.5rem', letterSpacing: '0.3em', color: '#8a8a92', marginTop: 2 }}>
-              DAY RANK
-            </div>
+            {summary.rank}
           </div>
         )}
 
