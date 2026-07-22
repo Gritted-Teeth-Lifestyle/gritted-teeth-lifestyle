@@ -139,6 +139,7 @@ export default function LevelUpCard({ level, summary, onDone }) {
           )}
           {summary.stars > 0 && <StatRow label="STARS CLAIMED" value={`${summary.stars} ★`} />}
           {summary.consistencyXP > 0 && <StatRow label="CONSISTENCY CREDIT" value={`+${fmt(summary.consistencyXP)}`} />}
+          {summary.leftOnTable > 0.5 && <StatRow label="LEFT ON THE TABLE" value={`−${fmt(summary.leftOnTable)}`} />}
 
           {/* Bonus ribbons */}
           {bonuses.length > 0 && (
