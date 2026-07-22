@@ -29,6 +29,7 @@ import {
   computeDailyReckoning,
   replaceConsistencyCredit,
   groupDayStarsByExercise,
+  sumDayXP,
   tickTier,
   getTierCount,
   getTier,
@@ -36,6 +37,7 @@ import {
 } from '../../../../lib/exp'
 import TierUpFlourish from '../../../../components/exp/TierUpFlourish'
 import DayStarRecap from '../../../../components/exp/DayStarRecap'
+import DayCloseCinematic from '../../../../components/exp/DayCloseCinematic'
 
 const MUSCLE_LABELS = {
   chest: 'CHEST', back: 'BACK', shoulders: 'SHOULDERS',
@@ -1622,6 +1624,22 @@ function DayFocus({ iso, muscles, isLastDay, originRect, onClose, cycleId, onMus
   // the grouped per-exercise star entries when the stamped day earned at
   // least one star; the cinematic owns the close (onDone → handleClose).
   const [starRecap, setStarRecap] = useState(null)
+  // Day-close reckoning beat: TODAY'S EXP counter + the tier chip finally
+  // paying its number (the R8a credit lands here, not per set). Plays
+  // BEFORE the star recap; onDone chains into proceedToRecap.
+  const [dayClose, setDayClose] = useState(null)
+  const proceedToRecap = () => {
+    let recapEntries = null
+    try {
+      const entries = groupDayStarsByExercise(cycleId, iso)
+      if (entries.some(e => e.starred)) recapEntries = entries
+    } catch (_) {}
+    if (recapEntries) {
+      setStarRecap(recapEntries)
+    } else {
+      stampCloseTimerRef.current = setTimeout(() => handleClose(), 900)
+    }
+  }
   const handleStamp = () => {
     if (stamped) return
     play('option-select')
@@ -1630,6 +1648,7 @@ function DayFocus({ iso, muscles, isLastDay, originRect, onClose, cycleId, onMus
     // consistency-credit setLog entry, and tick the tier counter on 100%.
     // R7 trigger: detect tier crossing and write pk('tier-cross-pending')
     // for gtl3's TierUpFlourish to pick up.
+    let closeBeat = null
     try {
       const reckoning = computeDailyReckoning(cycleId, iso, { [iso]: muscles })
       replaceConsistencyCredit(cycleId, iso, {
@@ -1640,6 +1659,17 @@ function DayFocus({ iso, muscles, isLastDay, originRect, onClose, cycleId, onMus
         sets_planned: reckoning.sets_planned,
         sets_logged: reckoning.sets_logged,
       })
+      if (reckoning.consistency_credit > 0) {
+        // Chip label = the tier that priced the credit (pre-tick).
+        // sumDayXP includes the credit just written — subtract it back
+        // out so the counter starts at the sets-only total and the chip
+        // strike visibly adds the credit.
+        closeBeat = {
+          dayXP: sumDayXP(cycleId, iso) - reckoning.consistency_credit,
+          credit: reckoning.consistency_credit,
+          tierName: getTier(getTierCount()),
+        }
+      }
       if (reckoning.shouldTick) {
         const before = getTier(getTierCount())
         tickTier()
@@ -1659,24 +1689,19 @@ function DayFocus({ iso, muscles, isLastDay, originRect, onClose, cycleId, onMus
     try { updateProvenBestsFromDay(cycleId, iso, { getExerciseById }) } catch (_) {}
     setStamped(true)
     setJustStamped(true)
-    // Day-star recap: if any exercise earned stars today, play the roll
-    // call instead of the plain 900ms dim-and-close. The recap calls
-    // handleClose itself when it finishes (or is tap-skipped).
-    let recapEntries = null
-    try {
-      const entries = groupDayStarsByExercise(cycleId, iso)
-      if (entries.some(e => e.starred)) recapEntries = entries
-    } catch (_) {}
-    if (recapEntries) {
-      setStarRecap(recapEntries)
+    // Day-close reckoning beat first (when a credit landed), then the
+    // star recap / plain close.
+    if (closeBeat) {
+      setDayClose(closeBeat)
     } else {
-      stampCloseTimerRef.current = setTimeout(() => handleClose(), 900)
+      proceedToRecap()
     }
   }
   // Tap during THIS session's post-stamp 900ms wait → close immediately.
-  // Suspended while the star recap is up — the recap owns taps (skip).
+  // Suspended while the day-close beat or star recap is up — those own
+  // taps (skip).
   useEffect(() => {
-    if (!justStamped || closing || starRecap) return
+    if (!justStamped || closing || starRecap || dayClose) return
     const handler = () => {
       if (stampCloseTimerRef.current) clearTimeout(stampCloseTimerRef.current)
       handleClose()
@@ -2516,6 +2541,17 @@ function DayFocus({ iso, muscles, isLastDay, originRect, onClose, cycleId, onMus
             />
           )
         })()}
+
+        {/* Day-close reckoning beat — TODAY'S EXP + the tier chip paying
+            its credit. Chains into the star recap (or plain close). */}
+        {dayClose && (
+          <DayCloseCinematic
+            dayXP={dayClose.dayXP}
+            credit={dayClose.credit}
+            tierName={dayClose.tierName}
+            onDone={() => { setDayClose(null); proceedToRecap() }}
+          />
+        )}
 
         {/* Day-star recap — roll call + stars flying into the live WAR
             RECORD transmutation circle. Owns the post-stamp close. */}
