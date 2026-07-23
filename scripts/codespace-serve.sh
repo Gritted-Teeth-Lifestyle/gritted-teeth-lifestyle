@@ -37,7 +37,16 @@ if [ "$1" = "--daemon" ]; then
       && chmod +x /tmp/cloudflared
   fi
   if [ -x /tmp/cloudflared ]; then
-    (/tmp/cloudflared tunnel --url http://localhost:3000 >> /tmp/gtl-tunnel.log 2>&1) &
+    # Keep-alive loop: quick-tunnel requests can time out at boot
+    # (api.trycloudflare.com flakiness, seen 2026-07-23) and cloudflared
+    # exits — relaunch until it holds.
+    (
+      while true; do
+        /tmp/cloudflared tunnel --url http://localhost:3000 >> /tmp/gtl-tunnel.log 2>&1
+        echo "cloudflared exited, retrying in 15s" >> /tmp/gtl-tunnel.log
+        sleep 15
+      done
+    ) &
   fi
   # -H 0.0.0.0: the codespace tunnel forwarder connects over a
   # non-loopback interface — a localhost-only bind serves 200 inside but
