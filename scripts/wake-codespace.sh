@@ -24,6 +24,12 @@ URL="https://${CS}-3000.app.github.dev"
 
 echo "[1/3] booting codespace + ensuring dev server..."
 gh codespace ssh -c "$CS" -- "
+  # Cold-boot race: ssh can land before the workspace is mounted — wait
+  # for the repo dir or the serve launch silently no-ops (bit 2026-07-23).
+  for i in \$(seq 1 24); do
+    [ -d /workspaces/gritted-teeth-lifestyle ] && break
+    sleep 5
+  done
   pgrep -f 'codespace-ser[v]e' >/dev/null || {
     rm -f /tmp/gtl-serve.pid
     cd /workspaces/gritted-teeth-lifestyle && git pull --ff-only >/dev/null 2>&1
