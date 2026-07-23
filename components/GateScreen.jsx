@@ -124,7 +124,17 @@ export default function GateScreen({ onEnter, onCommit, onMusicStart, onSkip, on
   const [prefetchSettled, setPrefetchSettled] = useState(skipLoading)
   useEffect(() => {
     let cancelled = false
-    const promises = PREFETCH_ROUTES.map((href) => Promise.resolve(router.prefetch(href)))
+    // router.prefetch is a NO-OP in dev mode, so on the codespace the
+    // loading bar used to finish having warmed nothing — the first
+    // post-gate tap slammed into a cold on-demand compile (Jordan
+    // 2026-07-23: "the loading screen doesn't seem to actually be doing
+    // its job" — correct). A plain fetch() of each route forces the dev
+    // server to compile it DURING the bar; in prod it's a cheap cached
+    // HTML request alongside the real prefetch.
+    const promises = PREFETCH_ROUTES.flatMap((href) => [
+      Promise.resolve(router.prefetch(href)),
+      fetch(href, { credentials: 'same-origin' }).catch(() => {}),
+    ])
     Promise.allSettled(promises).then(() => {
       // Small buffer for Next.js's background module-graph processing
       // after the prefetch RPCs resolve.
