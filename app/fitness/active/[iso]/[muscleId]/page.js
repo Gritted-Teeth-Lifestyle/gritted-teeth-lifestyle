@@ -35,7 +35,7 @@ import {
   getTierCount,
   getRibbonCount,
   getTier,
-  tickTier,
+
   addRegionStars,
   computeDailyReckoning,
   replaceConsistencyCredit,

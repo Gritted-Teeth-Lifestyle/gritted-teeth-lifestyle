@@ -22,7 +22,7 @@ import {
   dayXPWithFallback,
   computeDailyReckoning,
   replaceConsistencyCredit,
-  tickTier,
+
   getTierCount,
   getTier,
 } from '../../../lib/exp'

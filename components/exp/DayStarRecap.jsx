@@ -278,6 +278,13 @@ export default function DayStarRecap({ entries, cycleId, iso, onDone }) {
                 transform: shown ? 'translateX(0) scale(1)' : 'translateX(-56px) scale(1.15)',
                 opacity: shown ? (starless ? 0.6 : 1) : 0,
                 transition: 'transform 260ms cubic-bezier(0.18, 1.2, 0.35, 1), opacity 200ms',
+                // Starless rows judder like a rejected input as they land
+                // — wordless "that wasn't it" (Jordan 2026-07-23,
+                // replacing the too-harsh NO STARS tag). Delay clears the
+                // 260ms entrance transition first.
+                animation: shown && starless
+                  ? 'gtl-recap-reject 420ms ease-out 320ms'
+                  : 'none',
               }}
             >
               <div
@@ -366,6 +373,13 @@ export default function DayStarRecap({ entries, cycleId, iso, onDone }) {
           @keyframes gtl-impact-ring {
             0%   { transform: scale(0.3); opacity: 0.9; }
             100% { transform: scale(1.8); opacity: 0; }
+          }
+          @keyframes gtl-recap-reject {
+            0%, 100% { transform: translateX(0); }
+            20% { transform: translateX(-7px) rotate(-0.8deg); }
+            40% { transform: translateX(6px) rotate(0.6deg); }
+            60% { transform: translateX(-4px); }
+            80% { transform: translateX(3px); }
           }
         `}</style>
       </div>

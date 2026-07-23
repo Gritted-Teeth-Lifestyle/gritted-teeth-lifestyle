@@ -30,7 +30,7 @@ import {
   replaceConsistencyCredit,
   groupDayStarsByExercise,
   sumDayXP,
-  tickTier,
+  tickTierForDay,
   getTierCount,
   getTier,
   updateProvenBestsFromDay,
@@ -1694,14 +1694,17 @@ function DayFocus({ iso, muscles, isLastDay, originRect, onClose, cycleId, onMus
       }
       if (reckoning.shouldTick) {
         const before = getTier(getTierCount())
-        tickTier()
-        const after = getTier(getTierCount())
-        if (after !== before) {
-          try {
-            localStorage.setItem(pk('tier-cross-pending'), after)
-            localStorage.setItem(pk('tier-cross-prev'), before)
-            localStorage.setItem(pk('last-seen-tier'), after)
-          } catch (_) {}
+        // Calendar-day guard: parallel cycles and unlog→re-stamp can hit
+        // this path twice for the same date — only the first tick counts.
+        if (tickTierForDay(iso) != null) {
+          const after = getTier(getTierCount())
+          if (after !== before) {
+            try {
+              localStorage.setItem(pk('tier-cross-pending'), after)
+              localStorage.setItem(pk('tier-cross-prev'), before)
+              localStorage.setItem(pk('last-seen-tier'), after)
+            } catch (_) {}
+          }
         }
       }
     } catch (_) {}
