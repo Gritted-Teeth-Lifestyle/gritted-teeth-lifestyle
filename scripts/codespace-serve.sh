@@ -28,7 +28,10 @@ if [ "$1" = "--daemon" ]; then
       sleep 30
     done
   ) &
-  exec npx next dev -p 3000 >> /tmp/gtl-dev.log 2>&1
+  # -H 0.0.0.0: the codespace tunnel forwarder connects over a
+  # non-loopback interface — a localhost-only bind serves 200 inside but
+  # 404s at the app.github.dev edge (github community #46468).
+  exec npx next dev -p 3000 -H 0.0.0.0 >> /tmp/gtl-dev.log 2>&1
 fi
 
 if [ -f /tmp/gtl-serve.pid ] && kill -0 "$(cat /tmp/gtl-serve.pid)" 2>/dev/null; then
