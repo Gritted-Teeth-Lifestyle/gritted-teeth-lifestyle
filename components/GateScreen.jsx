@@ -102,7 +102,7 @@ function FauxSystemCycle({ phrases }) {
   )
 }
 
-export default function GateScreen({ onEnter, onCommit, onMusicStart, onSkip, onFastToHeist, swipeHintLabels }) {
+export default function GateScreen({ onEnter, onCommit, onMusicStart, onSkip, onFastToHeist, swipeHintLabels, bare = false }) {
   const { play } = useSound()
   const router = useRouter()
 
@@ -467,25 +467,28 @@ export default function GateScreen({ onEnter, onCommit, onMusicStart, onSkip, on
         // Near-black base — atmospheric bg is red bands + bloom on top of black.
         // iOS PWA safe-area gaps fall back to html/body #280609 (globals.css) +
         // <main>'s #280609, so any clipping reads dark red, not pure black.
-        background: '#070708', border: 'none', cursor: 'pointer',
+        // `bare` (riding the wall pan): the WALL owns every backdrop
+        // layer — this sheet carries only the foreground, so lines are
+        // never doubled or cut at the sheet edge (Jordan 2026-07-23).
+        background: bare ? 'transparent' : '#070708', border: 'none', cursor: 'pointer',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
       }}
     >
       {/* Noise grain */}
-      <div className="absolute inset-0 gtl-noise pointer-events-none" />
+      {!bare && <div className="absolute inset-0 gtl-noise pointer-events-none" />}
 
 
       {/* Red atmosphere bloom — bright red center fading to transparent so
           black bg shows through. Brighter than original to give the
           negative-photo difference blend a wider color range to chew on. */}
-      <div
+      {!bare && <div
         className="absolute inset-0 pointer-events-none"
         style={{
           background: 'radial-gradient(ellipse at 50% 55%, rgba(212,24,31,0.45) 0%, transparent 65%)',
           opacity: active ? 1 : 0,
           transition: transOf('opacity 1400ms ease 300ms'),
         }}
-      />
+      />}
 
       {/* ── Diagonal background bands (slide from left) ──
           Each band uses top/bottom anchors instead of explicit height so it
@@ -508,7 +511,7 @@ export default function GateScreen({ onEnter, onCommit, onMusicStart, onSkip, on
         @keyframes gtl-corner-v-in { from { height: 0; } to { height: 168px; } }
       `}</style>
       {/* Band 1 — bright red, widest */}
-      <div
+      {!bare && <div
         className="absolute pointer-events-none"
         style={{
           top: '-25%', bottom: '-25%', left: '-5%', width: '52%',
@@ -516,13 +519,13 @@ export default function GateScreen({ onEnter, onCommit, onMusicStart, onSkip, on
           transform: 'skewX(-12deg) translateX(0)',
           animation: skipLoading ? 'none' : 'gtl-band-1-in 1100ms cubic-bezier(0.15, 0, 0.1, 1) 150ms both',
         }}
-      />
+      />}
       {/* Band 2 removed — it overlapped Band 1 inside ~10–47% of the viewport,
           and the composited area read as a darker stripe through the F in
           FITNESS / E in SWIPE. Without Band 2, Band 1 is a clean uniform
           color across its full width with no overlap-induced color shift. */}
       {/* Band 3 — bright red, right-side accent */}
-      <div
+      {!bare && <div
         className="absolute pointer-events-none"
         style={{
           top: '-25%', bottom: '-25%', right: '-8%', width: '20%',
@@ -530,9 +533,10 @@ export default function GateScreen({ onEnter, onCommit, onMusicStart, onSkip, on
           transform: 'skewX(-12deg) translateX(0)',
           animation: skipLoading ? 'none' : 'gtl-band-3-in 1100ms cubic-bezier(0.15, 0, 0.1, 1) 225ms both',
         }}
-      />
+      />}
 
       {/* ── Corner accent lines ── CSS-driven entrance, same reason as bands. */}
+      {!bare && <>
       <div className="absolute top-0 left-0 bg-gtl-red pointer-events-none"
         style={{ height: 5, width: 168, animation: skipLoading ? 'none' : 'gtl-corner-h-in 1000ms cubic-bezier(0.2,1,0.3,1) 700ms both' }} />
       <div className="absolute top-0 left-0 bg-gtl-red pointer-events-none"
@@ -541,6 +545,7 @@ export default function GateScreen({ onEnter, onCommit, onMusicStart, onSkip, on
         style={{ height: 5, width: 168, animation: skipLoading ? 'none' : 'gtl-corner-h-in 1000ms cubic-bezier(0.2,1,0.3,1) 700ms both' }} />
       <div className="absolute bottom-0 right-0 bg-gtl-red pointer-events-none"
         style={{ width: 5, height: 168, animation: skipLoading ? 'none' : 'gtl-corner-v-in 1000ms cubic-bezier(0.2,1,0.3,1) 800ms both' }} />
+      </>}
 
       {/* ── Swipe hints — plain red, no blend mode, no underlay.
           Outer wrapper handles the loadingComplete opacity gate so the inner

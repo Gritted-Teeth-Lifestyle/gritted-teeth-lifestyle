@@ -485,6 +485,10 @@ export default function Home() {
             onSkip={skipAll}
             onFastToHeist={handleFastToHeist}
             swipeHintLabels={{ top: 'SWIPE UP FOR FITNESS', bottom: 'SWIPE DOWN FOR NUTRITION' }}
+            // While riding the wall (either direction), the gate carries
+            // only its foreground — the WALL owns the lines, so nothing
+            // doubles or gets cut at the sheet edge.
+            bare={phase === 'pan' || gateArriving}
           />
         </div>
       )}
