@@ -464,6 +464,12 @@ export default function Home() {
         <div
           onAnimationEnd={() => setGateArriving(false)}
           style={{
+            // Full-screen bounds are load-bearing: the ride's transform
+            // makes this div the gate button's containing block (the
+            // button is position:absolute + minHeight:100%), so without
+            // real height the gate collapses to 0px and vanishes.
+            position: 'absolute',
+            inset: 0,
             animation: phase === 'pan'
               ? 'gtl-gate-depart 385ms cubic-bezier(0.5, 0, 0.85, 0.4) both'
               : gateArriving
