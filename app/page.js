@@ -438,11 +438,11 @@ export default function Home() {
       className="relative overflow-hidden"
       style={{
         minHeight: '100%',
-        // Transparent during the pan so the root-layout wall shows
-        // through; the gate's own opaque backdrop covers everything
-        // until it unmounts. (Was #280609 — that now lives on html/body
-        // only, per globals.css.)
-        background: phase === 'pan' ? 'transparent' : '#280609',
+        // Transparent during the pan AND the gate's arrival ride, so the
+        // root-layout wall shows through; the gate's own opaque backdrop
+        // covers everything once settled. (Was #280609 — that now lives
+        // on html/body only, per globals.css.)
+        background: (phase === 'pan' || gateArriving) ? 'transparent' : '#280609',
         isolation: 'isolate',
       }}
     >
@@ -454,6 +454,7 @@ export default function Home() {
       `}</style>
       {phase === 'gate' && (
         <div
+          onAnimationEnd={() => setGateArriving(false)}
           style={{
             animation: gateArriving
               ? 'gtl-gate-arrive 315ms cubic-bezier(0.25, 0.8, 0.25, 1) both'
