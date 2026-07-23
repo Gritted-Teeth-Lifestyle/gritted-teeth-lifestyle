@@ -451,14 +451,25 @@ export default function Home() {
           from { transform: translateX(-45vw); }
           to   { transform: translateX(0); }
         }
+        @keyframes gtl-gate-depart {
+          from { transform: translateX(0); }
+          to   { transform: translateX(-110vw); }
+        }
       `}</style>
-      {phase === 'gate' && (
+      {/* Gate stays mounted through 'pan' and RIDES the wall off-screen —
+          its text never disappears in place (Jordan 2026-07-23). Slightly
+          faster than the wall (110vw) so it clears the frame before the
+          route push; pointer-events off while departing. */}
+      {(phase === 'gate' || phase === 'pan') && (
         <div
           onAnimationEnd={() => setGateArriving(false)}
           style={{
-            animation: gateArriving
-              ? 'gtl-gate-arrive 315ms cubic-bezier(0.25, 0.8, 0.25, 1) both'
-              : 'none',
+            animation: phase === 'pan'
+              ? 'gtl-gate-depart 385ms cubic-bezier(0.5, 0, 0.85, 0.4) both'
+              : gateArriving
+                ? 'gtl-gate-arrive 315ms cubic-bezier(0.25, 0.8, 0.25, 1) both'
+                : 'none',
+            pointerEvents: phase === 'pan' ? 'none' : 'auto',
           }}
         >
           <GateScreen

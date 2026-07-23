@@ -351,6 +351,14 @@ export default function GateScreen({ onEnter, onCommit, onMusicStart, onSkip, on
     if (onMusicStart) onMusicStart()
     play('brand-confirm')
     if (onCommit) onCommit(kind)  // sync, so parent can stash target
+    // Fitness exits by RIDING the wall pan (the parent keeps the gate
+    // mounted and slides the whole sheet off-screen) — no slash wipe,
+    // nothing disappears in place (Jordan 2026-07-23). Nutrition keeps
+    // the classic slash exit.
+    if (kind === 'fitness') {
+      if (onEnter) onEnter(kind)
+      return
+    }
     setPhase('out')
     exitTimerRef.current = setTimeout(() => onEnter && onEnter(kind), EXIT_MS)
   }
