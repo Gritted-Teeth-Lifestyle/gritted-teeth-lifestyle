@@ -312,9 +312,23 @@ export default function Home() {
   // Stable ref to current transitionTarget for skipAll (avoids re-binding handlers).
   const targetRef = useRef('/fitness')
 
-  // Arriving (back) at the gate: snap the wall camera home. The gate's
-  // opaque backdrop covers the snap, so it's never visible.
-  useEffect(() => { setWallCamera(0, { instant: true }) }, [])
+  // Gate arrival. Two cases:
+  // - Returning via the profiles retreat pan (gtl-wall-return flag): the
+  //   camera is still in flight — leave it alone and ride the GateScreen
+  //   in from the left. Its backdrop is pixel-identical to wall section 0
+  //   and moves at matching speed, so the sliding sheet reads as the wall
+  //   itself arriving with the gate content already painted on it.
+  // - Anything else: snap the camera home under the gate's opaque cover.
+  const [gateArriving, setGateArriving] = useState(false)
+  useEffect(() => {
+    let fromPan = false
+    try {
+      fromPan = sessionStorage.getItem('gtl-wall-return') === '1'
+      sessionStorage.removeItem('gtl-wall-return')
+    } catch (_) {}
+    if (fromPan) setGateArriving(true)
+    else setWallCamera(0, { instant: true })
+  }, [])
 
   // Fitness: camera pan. The gate has already unmounted (its backdrop is
   // pixel-identical to the wall, so the reveal is invisible), the wall
@@ -432,15 +446,29 @@ export default function Home() {
         isolation: 'isolate',
       }}
     >
+      <style>{`
+        @keyframes gtl-gate-arrive {
+          from { transform: translateX(-45vw); }
+          to   { transform: translateX(0); }
+        }
+      `}</style>
       {phase === 'gate' && (
-        <GateScreen
-          onEnter={handleGateEnter}
-          onCommit={handleGateCommit}
-          onMusicStart={startBgMusic}
-          onSkip={skipAll}
-          onFastToHeist={handleFastToHeist}
-          swipeHintLabels={{ top: 'SWIPE UP FOR FITNESS', bottom: 'SWIPE DOWN FOR NUTRITION' }}
-        />
+        <div
+          style={{
+            animation: gateArriving
+              ? 'gtl-gate-arrive 315ms cubic-bezier(0.25, 0.8, 0.25, 1) both'
+              : 'none',
+          }}
+        >
+          <GateScreen
+            onEnter={handleGateEnter}
+            onCommit={handleGateCommit}
+            onMusicStart={startBgMusic}
+            onSkip={skipAll}
+            onFastToHeist={handleFastToHeist}
+            swipeHintLabels={{ top: 'SWIPE UP FOR FITNESS', bottom: 'SWIPE DOWN FOR NUTRITION' }}
+          />
+        </div>
       )}
       {/* flash-fitness removed — the fitness path pans the wall instead
           (Jordan 2026-07-23). Nutrition keeps its calling-card reveal. */}

@@ -252,10 +252,12 @@ export default function ProfilePage() {
     leavingRef.current = true
     setLeaving(true)
     setWallCamera(0)
-    // Push only after the pan fully settles — the gate's opaque backdrop
-    // is identical to wall section 0, so popping in over a RESTING wall
-    // is invisible; popping mid-motion would show a jump.
-    setTimeout(() => router.push('/'), WALL_PAN_MS + 40)
+    // Push mid-pan: the depart animation has cleared our content off the
+    // right edge by then, and the gate mounts with an arrival rider that
+    // slides in over the wall's identical pixels, carrying its content
+    // the rest of the way (no pop, nothing dissolves).
+    try { sessionStorage.setItem('gtl-wall-return', '1') } catch (_) {}
+    setTimeout(() => router.push('/'), Math.round(WALL_PAN_MS * 0.55))
   }
   const [input, setInput] = useState('')
   const [ready, setReady] = useState(false)
@@ -422,14 +424,19 @@ export default function ProfilePage() {
           the entry pan reads as one camera move (Jordan 2026-07-23).
           The old void bg + noise + gradient now come from the wall. */}
       <main className="relative min-h-screen flex flex-col overflow-hidden">
+        {/* No opacity in these — content is painted on the wall and rides
+            off the screen edge, never dissolving (Jordan 2026-07-23). It
+            travels slightly faster than the wall (110vw vs 100vw), which
+            reads as parallax depth and clears the frame before the route
+            swap so nothing visibly pops out of existence. */}
         <style>{`
           @keyframes gtl-wall-arrive {
-            from { transform: translateX(58vw); opacity: 0.4; }
-            to   { transform: translateX(0);    opacity: 1; }
+            from { transform: translateX(45vw); }
+            to   { transform: translateX(0); }
           }
           @keyframes gtl-wall-depart {
-            from { transform: translateX(0);    opacity: 1; }
-            to   { transform: translateX(58vw); opacity: 0.35; }
+            from { transform: translateX(0); }
+            to   { transform: translateX(110vw); }
           }
         `}</style>
 
@@ -466,7 +473,7 @@ export default function ProfilePage() {
           className="relative z-10 flex-1 flex flex-col"
           style={{
             animation: leaving
-              ? `gtl-wall-depart ${Math.round(WALL_PAN_MS * 0.6)}ms cubic-bezier(0.6, 0, 0.8, 0.4) both`
+              ? `gtl-wall-depart ${Math.round(WALL_PAN_MS * 0.55)}ms cubic-bezier(0.5, 0, 0.85, 0.4) both`
               : arriving
                 ? `gtl-wall-arrive ${Math.round(WALL_PAN_MS * 0.45)}ms cubic-bezier(0.25, 0.8, 0.25, 1) both`
                 : 'none',
