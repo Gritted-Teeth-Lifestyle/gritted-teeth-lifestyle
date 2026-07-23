@@ -529,12 +529,71 @@ export default function StatsPage() {
                 </span>
               </div>
 
-              {/* XP bar */}
-              <div className="relative h-3 bg-gtl-surface" style={{ clipPath: 'polygon(0 0, 100% 0, 98% 100%, 2% 100%)' }}>
+              {/* XP bar — chunky angled slab (retooled 2026-07-23):
+                  shadow slab behind, hatched empty track, hard-edged
+                  gold fill with an angled red tip riding the edge,
+                  segment ticks every 10%. */}
+              <div className="relative">
                 <div
-                  className="absolute inset-y-0 left-0 bg-gtl-gold transition-all duration-700"
-                  style={{ width: `${xpPct}%`, clipPath: 'polygon(0 0, 100% 0, 98% 100%, 2% 100%)' }}
+                  className="absolute inset-0 pointer-events-none"
+                  style={{
+                    clipPath: 'polygon(2% 0%, 100% 0%, 98% 100%, 0% 100%)',
+                    background: '#2a0507',
+                    transform: 'translate(4px, 4px)',
+                  }}
+                  aria-hidden="true"
                 />
+                <div
+                  className="relative h-5 overflow-hidden"
+                  style={{
+                    clipPath: 'polygon(2% 0%, 100% 0%, 98% 100%, 0% 100%)',
+                    background: '#111115',
+                    border: '1px solid #26262a',
+                  }}
+                >
+                  {/* Hatched empty track */}
+                  <div
+                    className="absolute inset-0 pointer-events-none"
+                    style={{ background: 'repeating-linear-gradient(-45deg, rgba(244,237,224,0.05) 0 2px, transparent 2px 9px)' }}
+                    aria-hidden="true"
+                  />
+                  {/* Gold fill, angled leading edge */}
+                  <div
+                    className="absolute inset-y-0 left-0 transition-all duration-700"
+                    style={{
+                      width: `${xpPct}%`,
+                      background: '#e4b022',
+                      clipPath: 'polygon(0 0, 100% 0, calc(100% - 7px) 100%, 0 100%)',
+                    }}
+                  />
+                  {/* Red tip riding the fill edge */}
+                  {xpPct > 0 && xpPct < 100 && (
+                    <div
+                      className="absolute inset-y-0 transition-all duration-700"
+                      style={{
+                        left: `calc(${xpPct}% - 4px)`,
+                        width: 7,
+                        background: '#d4181f',
+                        transform: 'skewX(-16deg)',
+                      }}
+                      aria-hidden="true"
+                    />
+                  )}
+                  {/* Segment ticks every 10% */}
+                  <div
+                    className="absolute inset-0 pointer-events-none"
+                    style={{ background: 'repeating-linear-gradient(to right, transparent 0 calc(10% - 1px), rgba(7,7,8,0.55) calc(10% - 1px) 10%)' }}
+                    aria-hidden="true"
+                  />
+                </div>
+              </div>
+              <div className="flex items-center justify-between mt-2">
+                <span className="font-mono text-[9px] tracking-[0.3em] uppercase text-gtl-smoke">
+                  LV {level}
+                </span>
+                <span className="font-mono text-[9px] tracking-[0.25em] uppercase" style={{ color: '#e4b022' }}>
+                  {Math.round(progress).toLocaleString()} / {Math.round(threshold).toLocaleString()} TO LV {Math.min(level + 1, 100)}
+                </span>
               </div>
             </div>
 
