@@ -100,6 +100,11 @@ export default function RankUpSlam({ label, value, prevValue, onDone }) {
           0%   { transform: rotate(-6deg) translateX(115vw); }
           100% { transform: rotate(-6deg) translateX(0); }
         }
+        @keyframes gtl-rankup-ribbon-burst {
+          0%   { transform: rotate(-6deg) scaleX(0); opacity: 0; }
+          30%  { opacity: 1; }
+          100% { transform: rotate(-6deg) scaleX(1); opacity: 1; }
+        }
         @keyframes gtl-rankup-value {
           0%   { transform: translateX(-50%) rotate(-2deg) scale(1.9); opacity: 0; }
           55%  { transform: translateX(-50%) rotate(-2deg) scale(0.95); opacity: 1; }
@@ -185,13 +190,20 @@ export default function RankUpSlam({ label, value, prevValue, onDone }) {
           </div>
         )}
 
-        {/* Accent ribbons — behind the value */}
-        {(showValue || showSticker) && RIBBONS.map((r, i) => (
+        {/* Accent ribbons — behind the value. Plain variant: sweep in
+            from the right. Sticker variant: they BURST outward from the
+            slap impact (gated on `slapped`), so they read as debris of
+            the hit instead of appearing from nowhere (Jordan
+            2026-07-23). */}
+        {(showValue || (showSticker && slapped)) && RIBBONS.map((r, i) => (
           <div key={i} style={{
             position: 'absolute', left: '-10%', right: '-10%', top: r.top,
             height: r.h, background: '#d4181f',
             clipPath: 'polygon(0.5% 0%, 100% 0%, 99.5% 100%, 0% 100%)',
-            animation: `gtl-rankup-ribbon 300ms cubic-bezier(0.2, 0.9, 0.25, 1) ${r.delay}ms both`,
+            transformOrigin: 'center',
+            animation: hasPrev
+              ? `gtl-rankup-ribbon-burst 280ms cubic-bezier(0.2, 0.9, 0.25, 1) ${r.delay}ms both`
+              : `gtl-rankup-ribbon 300ms cubic-bezier(0.2, 0.9, 0.25, 1) ${r.delay}ms both`,
           }} />
         ))}
 
