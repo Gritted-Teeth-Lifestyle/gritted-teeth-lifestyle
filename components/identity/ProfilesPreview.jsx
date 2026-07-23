@@ -97,8 +97,8 @@ export default function ProfilesPreview() {
                 style={{ clipPath: 'polygon(0% 0%, 97% 0%, 100% 100%, 0% 100%)', background: '#111115', border: '1px solid #26262a' }}
               />
               <div className="absolute top-0 bottom-0 left-0" style={{ width: 2, background: '#26262a' }} />
-              <div className="relative flex items-center px-5 md:px-7 font-display text-xl md:text-3xl text-gtl-smoke tracking-wide uppercase" style={{ padding: '1.5rem 1.75rem' }}>
-                ENTER YOUR NAME
+              <div className="relative flex items-center px-5 md:px-7 font-display text-xl md:text-3xl text-gtl-smoke tracking-wide uppercase" style={{ padding: '1.5rem 1.75rem', whiteSpace: 'nowrap' }}>
+                ENTER YOUR N{'​'}AME
               </div>
             </div>
             <div className="relative shrink-0">
