@@ -5,6 +5,7 @@ import CallingCard from '../components/CallingCard'
 import HeistTransition from '../components/HeistTransition'
 import GateScreen from '../components/GateScreen'
 import { setWallCamera, WALL_PAN_MS } from '../lib/wallCamera'
+import ProfilesPreview from '../components/identity/ProfilesPreview'
 import { useSound } from '../lib/useSound'
 import {
   BGM_TRACKS,
@@ -312,34 +313,32 @@ export default function Home() {
   // Stable ref to current transitionTarget for skipAll (avoids re-binding handlers).
   const targetRef = useRef('/fitness')
 
-  // Gate arrival. Two cases:
-  // - Returning via the profiles retreat pan (gtl-wall-return flag): the
-  //   camera is still in flight — leave it alone and ride the GateScreen
-  //   in from the left. Its backdrop is pixel-identical to wall section 0
-  //   and moves at matching speed, so the sliding sheet reads as the wall
-  //   itself arriving with the gate content already painted on it.
-  // - Anything else: snap the camera home under the gate's opaque cover.
-  const [gateArriving, setGateArriving] = useState(false)
+  // Gate arrival. Returning via the profiles retreat pan (gtl-wall-return
+  // flag): the pan already finished over the profiles page's GatePreview,
+  // and this real gate mounts over those identical resting pixels — no
+  // animation needed, just don't disturb the camera. Anything else: snap
+  // the camera home under the gate's opaque cover.
   useEffect(() => {
     let fromPan = false
     try {
       fromPan = sessionStorage.getItem('gtl-wall-return') === '1'
       sessionStorage.removeItem('gtl-wall-return')
     } catch (_) {}
-    if (fromPan) setGateArriving(true)
-    else setWallCamera(0, { instant: true })
+    if (!fromPan) setWallCamera(0, { instant: true })
   }, [])
 
-  // Fitness: camera pan. The gate has already unmounted (its backdrop is
-  // pixel-identical to the wall, so the reveal is invisible), the wall
-  // pans to section 1 over WALL_PAN_MS, and we push mid-flight — the pan
-  // survives the route change because the wall lives in the root layout.
+  // Fitness: camera pan, Strikers-style zero gap. The gate goes bare
+  // (wall owns the lines) and RIDES off inside a rider that also carries
+  // a static ProfilesPreview one screen to the right — so the camera
+  // travels from one populated place to another with no empty beat. The
+  // push fires after the pan settles; the real /fitness page mounts over
+  // the preview's identical resting pixels.
   const startWallPan = () => {
     try { sessionStorage.setItem('gtl-wall-arrive', '1') } catch (_) {}
     setWallCamera(1)
     flashTimerRef.current = setTimeout(() => {
       if (!skippedRef.current) router.push('/fitness')
-    }, Math.round(WALL_PAN_MS * 0.55))
+    }, WALL_PAN_MS + 80)
   }
 
   const activate = (kind) => {
@@ -442,42 +441,34 @@ export default function Home() {
         // root-layout wall shows through; the gate's own opaque backdrop
         // covers everything once settled. (Was #280609 — that now lives
         // on html/body only, per globals.css.)
-        background: (phase === 'pan' || gateArriving) ? 'transparent' : '#280609',
+        background: phase === 'pan' ? 'transparent' : '#280609',
         isolation: 'isolate',
       }}
     >
       <style>{`
-        @keyframes gtl-gate-arrive {
-          from { transform: translateX(-100vw); }
-          to   { transform: translateX(0); }
-        }
-        @keyframes gtl-gate-depart {
+        @keyframes gtl-rider-fwd {
           from { transform: translateX(0); }
-          to   { transform: translateX(-110vw); }
+          to   { transform: translateX(-100vw); }
         }
       `}</style>
-      {/* Gate stays mounted through 'pan' and RIDES the wall off-screen —
-          its text never disappears in place (Jordan 2026-07-23). Slightly
-          faster than the wall (110vw) so it clears the frame before the
-          route push; pointer-events off while departing. */}
+      {/* Strikers rider: gate at section 0 + ProfilesPreview at section 1,
+          glued to the wall's exact duration/easing — both places visible
+          during the whole pan, zero empty beat, nothing disappears. The
+          absolute full-height bounds are load-bearing: the ride's
+          transform makes this div the gate button's containing block. */}
       {(phase === 'gate' || phase === 'pan') && (
         <div
-          onAnimationEnd={() => setGateArriving(false)}
           style={{
-            // Full-screen bounds are load-bearing: the ride's transform
-            // makes this div the gate button's containing block (the
-            // button is position:absolute + minHeight:100%), so without
-            // real height the gate collapses to 0px and vanishes.
             position: 'absolute',
-            inset: 0,
+            top: 0, bottom: 0, left: 0,
+            width: '100vw',
             animation: phase === 'pan'
-              ? 'gtl-gate-depart 385ms cubic-bezier(0.5, 0, 0.85, 0.4) both'
-              : gateArriving
-                ? 'gtl-gate-arrive 420ms cubic-bezier(0.2, 0.7, 0.2, 1) both'
-                : 'none',
+              ? `gtl-rider-fwd ${WALL_PAN_MS}ms cubic-bezier(0.65, 0, 0.2, 1) both`
+              : 'none',
             pointerEvents: phase === 'pan' ? 'none' : 'auto',
           }}
         >
+          {phase === 'pan' && <ProfilesPreview />
           <GateScreen
             onEnter={handleGateEnter}
             onCommit={handleGateCommit}
@@ -488,7 +479,7 @@ export default function Home() {
             // While riding the wall (either direction), the gate carries
             // only its foreground — the WALL owns the lines, so nothing
             // doubles or gets cut at the sheet edge.
-            bare={phase === 'pan' || gateArriving}
+            bare={phase === 'pan'}
           />
         </div>
       )}

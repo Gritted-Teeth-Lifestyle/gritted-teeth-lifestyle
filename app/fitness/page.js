@@ -14,6 +14,7 @@ import VitalsStep from '../../components/onboarding/VitalsStep'
 import ExperienceStep from '../../components/onboarding/ExperienceStep'
 import { setClaimedExperience, profileSlotStats } from '../../lib/exp'
 import { setWallCamera, WALL_PAN_MS } from '../../lib/wallCamera'
+import GatePreview from '../../components/identity/GatePreview'
 
 function ProfileChip({ name, stats, onSelect, onSwipeSelect }) {
   const { play } = useSound()
@@ -238,9 +239,6 @@ export default function ProfilePage() {
   const { play } = useSound()
   const [profiles, setProfiles] = useState([])
   const [slotStats, setSlotStats] = useState({})
-  // True when we arrived via the gate's wall pan — content rides in from
-  // the right, finishing the camera move. Direct visits snap the camera.
-  const [arriving, setArriving] = useState(false)
   // True while retreating back to the gate — the reverse camera move:
   // content rides off right as the wall pans home; push lands at the end
   // of the pan so the gate (whose backdrop is pixel-identical to wall
@@ -252,12 +250,12 @@ export default function ProfilePage() {
     leavingRef.current = true
     setLeaving(true)
     setWallCamera(0)
-    // Push mid-pan: the depart animation has cleared our content off the
-    // right edge by then, and the gate mounts with an arrival rider that
-    // slides in over the wall's identical pixels, carrying its content
-    // the rest of the way (no pop, nothing dissolves).
+    // Strikers zero-gap: this page's rider carries a GatePreview one
+    // screen to the left, so the camera arrives at a populated gate.
+    // Push after the pan settles; the real gate mounts over the
+    // preview's identical resting pixels.
     try { sessionStorage.setItem('gtl-wall-return', '1') } catch (_) {}
-    setTimeout(() => router.push('/'), Math.round(WALL_PAN_MS * 0.55))
+    setTimeout(() => router.push('/'), WALL_PAN_MS + 80)
   }
   const [input, setInput] = useState('')
   const [ready, setReady] = useState(false)
@@ -278,8 +276,9 @@ export default function ProfilePage() {
       fromPan = sessionStorage.getItem('gtl-wall-arrive') === '1'
       sessionStorage.removeItem('gtl-wall-arrive')
     } catch (_) {}
-    if (fromPan) setArriving(true)
-    else setWallCamera(1, { instant: true })
+    // Arrived via the pan: camera's already at rest on section 1 (the
+    // home page's ProfilesPreview covered the trip) — touch nothing.
+    if (!fromPan) setWallCamera(1, { instant: true })
     try {
       const raw = localStorage.getItem('gtl-profiles')
       if (raw) {
@@ -424,21 +423,33 @@ export default function ProfilePage() {
           the entry pan reads as one camera move (Jordan 2026-07-23).
           The old void bg + noise + gradient now come from the wall. */}
       <main className="relative min-h-screen flex flex-col overflow-hidden">
-        {/* No opacity in these — content is painted on the wall and rides
-            off the screen edge, never dissolving (Jordan 2026-07-23). It
-            travels slightly faster than the wall (110vw vs 100vw), which
-            reads as parallax depth and clears the frame before the route
-            swap so nothing visibly pops out of existence. */}
+        {/* Strikers rider: on retreat, this page's whole visual rides
+            right IN LOCKSTEP with the wall while a GatePreview rides in
+            from the left — both places visible the entire pan, nothing
+            disappears, no empty beat (Jordan 2026-07-23). */}
         <style>{`
-          @keyframes gtl-wall-arrive {
-            from { transform: translateX(100vw); }
-            to   { transform: translateX(0); }
-          }
-          @keyframes gtl-wall-depart {
+          @keyframes gtl-rider-back {
             from { transform: translateX(0); }
-            to   { transform: translateX(110vw); }
+            to   { transform: translateX(100vw); }
           }
         `}</style>
+
+        {/* Rider — carries EVERYTHING this page paints (accent bar, kanji,
+            content) plus the GatePreview one screen left. On retreat it
+            translates in lockstep with the wall; at rest it's an inert
+            full-size wrapper. Arrival needs no animation: the home page's
+            ProfilesPreview covered the pan, and this real page mounts
+            over its identical resting pixels. */}
+        <div
+          className="relative flex-1 flex flex-col"
+          style={{
+            animation: leaving
+              ? `gtl-rider-back ${WALL_PAN_MS}ms cubic-bezier(0.65, 0, 0.2, 1) both`
+              : 'none',
+            pointerEvents: leaving ? 'none' : 'auto',
+          }}
+        >
+        {leaving && <GatePreview />}
 
         {/* Left red accent bar */}
         <div
@@ -467,18 +478,8 @@ export default function ProfilePage() {
           名
         </div>
 
-        {/* Content wrapper — rides in from the right when arriving via
-            the gate's wall pan, finishing the camera move. */}
-        <div
-          className="relative z-10 flex-1 flex flex-col"
-          style={{
-            animation: leaving
-              ? `gtl-wall-depart ${Math.round(WALL_PAN_MS * 0.55)}ms cubic-bezier(0.5, 0, 0.85, 0.4) both`
-              : arriving
-                ? `gtl-wall-arrive ${Math.round(WALL_PAN_MS * 0.6)}ms cubic-bezier(0.2, 0.7, 0.2, 1) both`
-                : 'none',
-          }}
-        >
+        {/* Content wrapper */}
+        <div className="relative z-10 flex-1 flex flex-col">
 
           {/* Nav */}
           <nav
@@ -661,6 +662,7 @@ export default function ProfilePage() {
             )}
           </section>
         </div>
+        </div>{/* /rider */}
       </main>
 
       <HeistTransition
