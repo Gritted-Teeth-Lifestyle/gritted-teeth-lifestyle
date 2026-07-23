@@ -241,6 +241,22 @@ export default function ProfilePage() {
   // True when we arrived via the gate's wall pan — content rides in from
   // the right, finishing the camera move. Direct visits snap the camera.
   const [arriving, setArriving] = useState(false)
+  // True while retreating back to the gate — the reverse camera move:
+  // content rides off right as the wall pans home; push lands at the end
+  // of the pan so the gate (whose backdrop is pixel-identical to wall
+  // section 0) pops in invisibly.
+  const [leaving, setLeaving] = useState(false)
+  const leavingRef = useRef(false)
+  const handleRetreat = () => {
+    if (leavingRef.current) return
+    leavingRef.current = true
+    setLeaving(true)
+    setWallCamera(0)
+    // Push only after the pan fully settles — the gate's opaque backdrop
+    // is identical to wall section 0, so popping in over a RESTING wall
+    // is invisible; popping mid-motion would show a jump.
+    setTimeout(() => router.push('/'), WALL_PAN_MS + 40)
+  }
   const [input, setInput] = useState('')
   const [ready, setReady] = useState(false)
   const [transitioning, setTransitioning] = useState(false)
@@ -411,6 +427,10 @@ export default function ProfilePage() {
             from { transform: translateX(58vw); opacity: 0.4; }
             to   { transform: translateX(0);    opacity: 1; }
           }
+          @keyframes gtl-wall-depart {
+            from { transform: translateX(0);    opacity: 1; }
+            to   { transform: translateX(58vw); opacity: 0.35; }
+          }
         `}</style>
 
         {/* Left red accent bar */}
@@ -445,9 +465,11 @@ export default function ProfilePage() {
         <div
           className="relative z-10 flex-1 flex flex-col"
           style={{
-            animation: arriving
-              ? `gtl-wall-arrive ${Math.round(WALL_PAN_MS * 0.45)}ms cubic-bezier(0.25, 0.8, 0.25, 1) both`
-              : 'none',
+            animation: leaving
+              ? `gtl-wall-depart ${Math.round(WALL_PAN_MS * 0.6)}ms cubic-bezier(0.6, 0, 0.8, 0.4) both`
+              : arriving
+                ? `gtl-wall-arrive ${Math.round(WALL_PAN_MS * 0.45)}ms cubic-bezier(0.25, 0.8, 0.25, 1) both`
+                : 'none',
           }}
         >
 
@@ -456,7 +478,7 @@ export default function ProfilePage() {
             className="relative shrink-0 flex items-center justify-between pl-0 pr-8 pb-3"
             style={{ paddingTop: 'max(1.5rem, env(safe-area-inset-top))' }}
           >
-            <RetreatButton href="/" />
+            <RetreatButton href="/" onNavigate={handleRetreat} />
             <div className="font-mono text-[10px] tracking-[0.3em] uppercase text-gtl-smoke">
               IDENTITY / SELECT
             </div>

@@ -6,14 +6,24 @@ import { useSound } from '../lib/useSound'
  * Canonical RetreatButton — same look on every page.
  * Default href is `/fitness/hub` (the most common back-target);
  * pages that need a different back-target pass `href` explicitly.
+ *
+ * `onNavigate` (optional): the page owns the navigation — the Link's
+ * default nav is prevented and the callback fires instead. Used by
+ * screens that exit via the wall camera pan (profiles → gate).
  */
-export default function RetreatButton({ href = '/fitness/hub' }) {
+export default function RetreatButton({ href = '/fitness/hub', onNavigate }) {
   const { play } = useSound()
 
   return (
     <Link
       href={href}
-      onClick={() => play('menu-close')}
+      onClick={(e) => {
+        play('menu-close')
+        if (onNavigate) {
+          e.preventDefault()
+          onNavigate()
+        }
+      }}
       aria-label="Retreat"
       // data-retreat lets page-level skip listeners (window pointerdown/
       // touchstart that route forward to the in-flight transition's destination)
