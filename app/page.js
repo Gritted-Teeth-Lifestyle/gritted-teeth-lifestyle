@@ -448,7 +448,7 @@ export default function Home() {
     >
       <style>{`
         @keyframes gtl-gate-arrive {
-          from { transform: translateX(-45vw); }
+          from { transform: translateX(-100vw); }
           to   { transform: translateX(0); }
         }
         @keyframes gtl-gate-depart {
@@ -473,7 +473,7 @@ export default function Home() {
             animation: phase === 'pan'
               ? 'gtl-gate-depart 385ms cubic-bezier(0.5, 0, 0.85, 0.4) both'
               : gateArriving
-                ? 'gtl-gate-arrive 315ms cubic-bezier(0.25, 0.8, 0.25, 1) both'
+                ? 'gtl-gate-arrive 420ms cubic-bezier(0.2, 0.7, 0.2, 1) both'
                 : 'none',
             pointerEvents: phase === 'pan' ? 'none' : 'auto',
           }}

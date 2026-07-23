@@ -431,7 +431,7 @@ export default function ProfilePage() {
             swap so nothing visibly pops out of existence. */}
         <style>{`
           @keyframes gtl-wall-arrive {
-            from { transform: translateX(45vw); }
+            from { transform: translateX(100vw); }
             to   { transform: translateX(0); }
           }
           @keyframes gtl-wall-depart {
@@ -475,7 +475,7 @@ export default function ProfilePage() {
             animation: leaving
               ? `gtl-wall-depart ${Math.round(WALL_PAN_MS * 0.55)}ms cubic-bezier(0.5, 0, 0.85, 0.4) both`
               : arriving
-                ? `gtl-wall-arrive ${Math.round(WALL_PAN_MS * 0.45)}ms cubic-bezier(0.25, 0.8, 0.25, 1) both`
+                ? `gtl-wall-arrive ${Math.round(WALL_PAN_MS * 0.6)}ms cubic-bezier(0.2, 0.7, 0.2, 1) both`
                 : 'none',
           }}
         >
