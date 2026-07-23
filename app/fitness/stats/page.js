@@ -587,12 +587,14 @@ export default function StatsPage() {
                   />
                 </div>
               </div>
+              {/* No numbers under the bar (Jordan 2026-07-23) — the fill
+                  speaks for itself; next level stays a mystery. */}
               <div className="flex items-center justify-between mt-2">
                 <span className="font-mono text-[9px] tracking-[0.3em] uppercase text-gtl-smoke">
                   LV {level}
                 </span>
-                <span className="font-mono text-[9px] tracking-[0.25em] uppercase" style={{ color: '#e4b022' }}>
-                  {Math.round(progress).toLocaleString()} / {Math.round(threshold).toLocaleString()} TO LV {Math.min(level + 1, 100)}
+                <span className="font-mono text-[9px] tracking-[0.25em] uppercase text-gtl-smoke">
+                  NEXT: LV {Math.min(level + 1, 100)}
                 </span>
               </div>
             </div>
