@@ -539,10 +539,12 @@ export default function StatsPage() {
             </div>
 
             {/* ── Key stats ───────────────────────────────────────── */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5 md:mb-10">
+            {/* DAYS COMPLETED cut 2026-07-23 (Jordan: redundant with
+                DAYS TRAINED + COMPLETION RATE; it also double-counts
+                parallel cycles). Storage untouched — display only. */}
+            <div className="grid grid-cols-3 gap-3 mb-5 md:mb-10">
               <StatBox label="DAYS TRAINED" value={daysTrained} />
               <StatBox label="CYCLES FORGED" value={stats.cycles} />
-              <StatBox label="DAYS COMPLETED" value={stats.daysCompleted} />
               <StatBox label="COMPLETION RATE" value={`${completionPct}%`} />
             </div>
 
