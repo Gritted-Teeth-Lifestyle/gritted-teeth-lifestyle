@@ -22,7 +22,25 @@ set -u
 CS="gtl-dev-phone-pjvx5q5grwwhj66"
 URL="https://${CS}-3000.app.github.dev"
 
-echo "[1/3] booting codespace + ensuring dev server..."
+# PROVEN 2026-07-23 (Jordan's phone, empirically): the public edge only
+# re-registers the port when GitHub's CONTROL PLANE boots the machine —
+# an ssh-initiated boot leaves the edge 404 forever. So: if it's down,
+# start it via the API and wait for Available BEFORE ssh-ing in. The
+# edge registration then lands within a few minutes (poll patiently —
+# 80s is not enough; that false negative burned a whole evening).
+echo "[0/3] control-plane boot..."
+state=$(gh api "user/codespaces/${CS}" --jq '.state' 2>/dev/null)
+if [ "$state" != "Available" ]; then
+  gh api -X POST "user/codespaces/${CS}/start" >/dev/null 2>&1
+  for i in $(seq 1 40); do
+    state=$(gh api "user/codespaces/${CS}" --jq '.state' 2>/dev/null)
+    [ "$state" = "Available" ] && break
+    sleep 10
+  done
+fi
+[ "$state" = "Available" ] || { echo "FAIL: codespace did not reach Available"; exit 1; }
+
+echo "[1/3] ensuring dev server..."
 gh codespace ssh -c "$CS" -- "
   # Cold-boot race: ssh can land before the workspace is mounted — wait
   # for the repo dir or the serve launch silently no-ops (bit 2026-07-23).
@@ -46,8 +64,8 @@ gh codespace ssh -c "$CS" -- "
 echo "[2/3] setting port 3000 public (resets on every restart)..."
 gh codespace ports visibility 3000:public -c "$CS" >/dev/null 2>&1
 
-echo "[3/3] verifying public URL serves the real app..."
-for attempt in 1 2 3 4; do
+echo "[3/3] verifying public URL serves the real app (edge can lag minutes)..."
+for attempt in $(seq 1 20); do
   if curl -s --max-time 30 "$URL" | grep -q "GRITTED"; then
     echo "LIVE: $URL"
     exit 0
@@ -57,8 +75,10 @@ done
 
 code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 "$URL")
 if [ "$code" = "404" ]; then
-  echo "EDGE LOST THE FORWARD (404). CLI cannot fix this."
-  echo "ONE HUMAN STEP: open github.com/codespaces -> gtl-dev-phone -> 'Open in browser', then rerun this script."
+  echo "EDGE STILL 404 AFTER 5 MIN OF A CONTROL-PLANE BOOT."
+  echo "FALLBACK: stop the codespace (gh codespace stop -c $CS), rerun this"
+  echo "script so the boot is control-plane again, and poll patiently."
+  echo "Tunnel backup URL: grep trycloudflare /tmp/gtl-tunnel.log in the codespace."
   exit 2
 fi
 echo "UNEXPECTED: public URL returned $code with no app content. Investigate before improvising."
