@@ -1,60 +1,25 @@
 'use client'
 /*
  * WallBackdrop — the persistent "wall" behind the entry flow (Persona-
- * menu foundation, Jordan 2026-07-23: "the background should be the
- * lines and colors and look identical to the current press start
- * screen").
+ * menu foundation).
  *
- * A 200vw canvas fixed UNDER everything, two sections side by side,
- * each an exact static copy of GateScreen's backdrop composition
- * (near-black base + noise grain + red bloom + skewed bands + corner
- * ticks — see components/GateScreen.jsx). Section 0 sits under the
- * gate, section 1 under WHO ARE YOU.
+ * ONE CONTINUOUS SURFACE, not a tiled pattern (Jordan 2026-07-23: the
+ * lines keep their world positions — panning past the screen edge shows
+ * what's naturally beyond them, never a repeat). The 200vw canvas holds
+ * a single composition, positioned in canvas-vw so the first 100vw is
+ * pixel-identical to GateScreen's own backdrop (seamless unmount
+ * handoff):
  *
- * The camera is --gtl-wall-x on <html> (see lib/wallCamera.js). It
- * lives in the ROOT LAYOUT so the pan transition survives the route
- * change from / to /fitness — pages riding on top go transparent to
- * reveal it (gate covers it with its own identical backdrop until it
- * unmounts, making the handoff invisible).
+ *   0–100vw   (gate view):     bloom centered, band 1 left, band 3 at
+ *                              the right edge, corner ticks top-left.
+ *   100–200vw (profiles view): band 3's tail sweeping off the left,
+ *                              bloom falloff, then open dark wall with
+ *                              closing corner ticks at the far end.
  *
- * Pages with opaque backgrounds (hub, active, ...) simply cover it —
- * zero cost besides two static layers.
+ * Camera: --gtl-wall-x on <html> (lib/wallCamera.js). Lives in the ROOT
+ * LAYOUT so the pan transition survives the / → /fitness route change.
+ * Pages with opaque backgrounds simply cover it.
  */
-
-function WallSection({ left }) {
-  return (
-    <div className="absolute top-0 bottom-0 overflow-hidden" style={{ left, width: '100vw' }}>
-      {/* Red atmosphere bloom */}
-      <div
-        className="absolute inset-0"
-        style={{ background: 'radial-gradient(ellipse at 50% 55%, rgba(212,24,31,0.45) 0%, transparent 65%)' }}
-      />
-      {/* Band 1 — bright red, widest */}
-      <div
-        className="absolute"
-        style={{
-          top: '-25%', bottom: '-25%', left: '-5%', width: '52%',
-          background: 'rgba(212,24,31,0.75)',
-          transform: 'skewX(-12deg)',
-        }}
-      />
-      {/* Band 3 — right-side accent */}
-      <div
-        className="absolute"
-        style={{
-          top: '-25%', bottom: '-25%', right: '-8%', width: '20%',
-          background: 'rgba(212,24,31,0.55)',
-          transform: 'skewX(-12deg)',
-        }}
-      />
-      {/* Corner accent ticks */}
-      <div className="absolute top-0 left-0 bg-gtl-red" style={{ height: 5, width: 168 }} />
-      <div className="absolute top-0 left-0 bg-gtl-red" style={{ width: 5, height: 168 }} />
-      <div className="absolute bottom-0 right-0 bg-gtl-red" style={{ height: 5, width: 168 }} />
-      <div className="absolute bottom-0 right-0 bg-gtl-red" style={{ width: 5, height: 168 }} />
-    </div>
-  )
-}
 
 export default function WallBackdrop() {
   return (
@@ -70,8 +35,49 @@ export default function WallBackdrop() {
         }}
       >
         <div className="absolute inset-0 gtl-noise" />
-        <WallSection left={0} />
-        <WallSection left="100vw" />
+
+        {/* Red atmosphere bloom — ONE light source over the gate view.
+            Box is exactly 100vw so the gradient string stays byte-
+            identical to GateScreen's (seamless handoff); it fully fades
+            before the section edge, so the camera naturally leaves it
+            behind. */}
+        <div
+          className="absolute top-0 bottom-0"
+          style={{
+            left: 0, width: '100vw',
+            background: 'radial-gradient(ellipse at 50% 55%, rgba(212,24,31,0.45) 0%, transparent 65%)',
+          }}
+        />
+
+        {/* Band 1 — matches GateScreen: left -5% width 52% of the gate view. */}
+        <div
+          className="absolute"
+          style={{
+            top: '-25%', bottom: '-25%', left: '-5vw', width: '52vw',
+            background: 'rgba(212,24,31,0.75)',
+            transform: 'skewX(-12deg)',
+          }}
+        />
+        {/* Band 3 — the gate view's right-edge accent (88vw → 108vw): its
+            tail is the first thing the camera sweeps past on the pan, and
+            it naturally bleeds 8vw into the profiles view's left edge. */}
+        <div
+          className="absolute"
+          style={{
+            top: '-25%', bottom: '-25%', left: '88vw', width: '20vw',
+            background: 'rgba(212,24,31,0.55)',
+            transform: 'skewX(-12deg)',
+          }}
+        />
+
+        {/* Corner ticks — world objects at the wall's extremes: the pair
+            the gate shows top-left, and a closing pair at the far end of
+            the wall (profiles view's right edge). The gate's own
+            bottom-right pair belongs to GateScreen and leaves with it. */}
+        <div className="absolute top-0 bg-gtl-red" style={{ left: 0, height: 5, width: 168 }} />
+        <div className="absolute top-0 bg-gtl-red" style={{ left: 0, width: 5, height: 168 }} />
+        <div className="absolute bottom-0 bg-gtl-red" style={{ right: 0, height: 5, width: 168 }} />
+        <div className="absolute bottom-0 bg-gtl-red" style={{ right: 0, width: 5, height: 168 }} />
       </div>
     </div>
   )
