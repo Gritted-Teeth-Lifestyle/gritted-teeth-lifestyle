@@ -468,7 +468,7 @@ export default function Home() {
             pointerEvents: phase === 'pan' ? 'none' : 'auto',
           }}
         >
-          {phase === 'pan' && <ProfilesPreview />
+          {phase === 'pan' && <ProfilesPreview />}
           <GateScreen
             onEnter={handleGateEnter}
             onCommit={handleGateCommit}
