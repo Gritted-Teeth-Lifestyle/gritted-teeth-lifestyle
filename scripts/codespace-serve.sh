@@ -28,6 +28,17 @@ if [ "$1" = "--daemon" ]; then
       sleep 30
     done
   ) &
+  # Cloudflare quick tunnel — public phone URL independent of GitHub's
+  # port-forwarding edge (which 404s for this codespace since the repo
+  # moved orgs, 2026-07-23). URL is RANDOM per boot: grep
+  # /tmp/gtl-tunnel.log for the current https://*.trycloudflare.com.
+  if [ ! -x /tmp/cloudflared ]; then
+    curl -sL -o /tmp/cloudflared https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 \
+      && chmod +x /tmp/cloudflared
+  fi
+  if [ -x /tmp/cloudflared ]; then
+    (/tmp/cloudflared tunnel --url http://localhost:3000 >> /tmp/gtl-tunnel.log 2>&1) &
+  fi
   # -H 0.0.0.0: the codespace tunnel forwarder connects over a
   # non-loopback interface — a localhost-only bind serves 200 inside but
   # 404s at the app.github.dev edge (github community #46468).
