@@ -1,6 +1,7 @@
 import './globals.css'
 import { IOSPWAKeyboardFix } from './ios-pwa-keyboard-fix'
 import PredictiveTapChainGuard from '../components/PredictiveTapChainGuard'
+import WallBackdrop from '../components/WallBackdrop'
 
 export const metadata = {
   title: 'Gritted Teeth Lifestyle',
@@ -24,6 +25,7 @@ export default function RootLayout({ children }) {
   return (
     <html lang="en">
       <body>
+        <WallBackdrop />
         {children}
         <IOSPWAKeyboardFix />
         <PredictiveTapChainGuard />

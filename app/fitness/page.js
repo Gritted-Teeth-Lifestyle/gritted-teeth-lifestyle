@@ -13,6 +13,7 @@ import { setUserDOB } from '../../lib/userPrefs'
 import VitalsStep from '../../components/onboarding/VitalsStep'
 import ExperienceStep from '../../components/onboarding/ExperienceStep'
 import { setClaimedExperience, profileSlotStats } from '../../lib/exp'
+import { setWallCamera, WALL_PAN_MS } from '../../lib/wallCamera'
 
 function ProfileChip({ name, stats, onSelect, onSwipeSelect }) {
   const { play } = useSound()
@@ -237,6 +238,9 @@ export default function ProfilePage() {
   const { play } = useSound()
   const [profiles, setProfiles] = useState([])
   const [slotStats, setSlotStats] = useState({})
+  // True when we arrived via the gate's wall pan — content rides in from
+  // the right, finishing the camera move. Direct visits snap the camera.
+  const [arriving, setArriving] = useState(false)
   const [input, setInput] = useState('')
   const [ready, setReady] = useState(false)
   const [transitioning, setTransitioning] = useState(false)
@@ -248,6 +252,16 @@ export default function ProfilePage() {
   const [submitPressed, setSubmitPressed] = useState(false)
 
   useEffect(() => {
+    // Wall camera: mid-pan arrival keeps the in-flight transition (an
+    // instant snap here would cut it short); direct visits snap to
+    // section 1 so the wall backdrop is in place.
+    let fromPan = false
+    try {
+      fromPan = sessionStorage.getItem('gtl-wall-arrive') === '1'
+      sessionStorage.removeItem('gtl-wall-arrive')
+    } catch (_) {}
+    if (fromPan) setArriving(true)
+    else setWallCamera(1, { instant: true })
     try {
       const raw = localStorage.getItem('gtl-profiles')
       if (raw) {
@@ -387,16 +401,17 @@ export default function ProfilePage() {
         }
       `}</style>
 
-      <main className="relative min-h-screen bg-gtl-void flex flex-col overflow-hidden">
-        <div className="absolute inset-0 gtl-noise pointer-events-none" />
-
-        {/* Atmospheric gradient */}
-        <div
-          className="absolute inset-0 pointer-events-none"
-          style={{
-            background: 'linear-gradient(135deg, rgba(122,14,20,0.22) 0%, transparent 40%, transparent 60%, rgba(74,10,14,0.32) 100%)',
-          }}
-        />
+      {/* Transparent main — this screen sits on section 1 of the root-
+          layout WallBackdrop (identical to the press-start backdrop), so
+          the entry pan reads as one camera move (Jordan 2026-07-23).
+          The old void bg + noise + gradient now come from the wall. */}
+      <main className="relative min-h-screen flex flex-col overflow-hidden">
+        <style>{`
+          @keyframes gtl-wall-arrive {
+            from { transform: translateX(58vw); opacity: 0.4; }
+            to   { transform: translateX(0);    opacity: 1; }
+          }
+        `}</style>
 
         {/* Left red accent bar */}
         <div
@@ -425,8 +440,16 @@ export default function ProfilePage() {
           名
         </div>
 
-        {/* Content wrapper */}
-        <div className="relative z-10 flex-1 flex flex-col">
+        {/* Content wrapper — rides in from the right when arriving via
+            the gate's wall pan, finishing the camera move. */}
+        <div
+          className="relative z-10 flex-1 flex flex-col"
+          style={{
+            animation: arriving
+              ? `gtl-wall-arrive ${Math.round(WALL_PAN_MS * 0.45)}ms cubic-bezier(0.25, 0.8, 0.25, 1) both`
+              : 'none',
+          }}
+        >
 
           {/* Nav */}
           <nav

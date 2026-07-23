@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation'
 import CallingCard from '../components/CallingCard'
 import HeistTransition from '../components/HeistTransition'
 import GateScreen from '../components/GateScreen'
+import { setWallCamera, WALL_PAN_MS } from '../lib/wallCamera'
 import { useSound } from '../lib/useSound'
 import {
   BGM_TRACKS,
@@ -294,8 +295,12 @@ export default function Home() {
     return () => window.removeEventListener('pageshow', onPageShow)
   }, [])
 
-  // phase: 'gate' (default) → 'flash-fitness' | 'flash-nutrition' → route
-  //   or:  'gate' → 'heist' (swipe during entrance: skip flash, play HeistTransition only)
+  // phase: 'gate' (default) → 'pan' (fitness: wall camera → /fitness)
+  //                         | 'flash-nutrition' → route (nutrition unchanged)
+  //   or:  'gate' → 'heist' (nutrition swipe during entrance)
+  // The fitness flash-card interlude + heist cut were replaced by the wall
+  // camera pan (Jordan 2026-07-23): gate exit slashes clear the logo, the
+  // wall pans one screen left, WHO ARE YOU rides in on the far section.
   const [phase, setPhase] = useState('gate')
   const [transitionTarget, setTransitionTarget] = useState('/fitness')
   const [transitioning, setTransitioning] = useState(false)
@@ -307,6 +312,22 @@ export default function Home() {
   // Stable ref to current transitionTarget for skipAll (avoids re-binding handlers).
   const targetRef = useRef('/fitness')
 
+  // Arriving (back) at the gate: snap the wall camera home. The gate's
+  // opaque backdrop covers the snap, so it's never visible.
+  useEffect(() => { setWallCamera(0, { instant: true }) }, [])
+
+  // Fitness: camera pan. The gate has already unmounted (its backdrop is
+  // pixel-identical to the wall, so the reveal is invisible), the wall
+  // pans to section 1 over WALL_PAN_MS, and we push mid-flight — the pan
+  // survives the route change because the wall lives in the root layout.
+  const startWallPan = () => {
+    try { sessionStorage.setItem('gtl-wall-arrive', '1') } catch (_) {}
+    setWallCamera(1)
+    flashTimerRef.current = setTimeout(() => {
+      if (!skippedRef.current) router.push('/fitness')
+    }, Math.round(WALL_PAN_MS * 0.55))
+  }
+
   const activate = (kind) => {
     if (phase !== 'gate') return
     // bg music is started synchronously by GateScreen.handleClick (tap path) or
@@ -314,9 +335,14 @@ export default function Home() {
     // for iOS PWA's autoplay rules (audio.play must run inside the user gesture).
     play('brand-confirm')
     const target = kind === 'fitness' ? '/fitness' : '/diet'
-    setPhase(kind === 'fitness' ? 'flash-fitness' : 'flash-nutrition')
     setTransitionTarget(target)
     targetRef.current = target
+    if (kind === 'fitness') {
+      setPhase('pan')
+      startWallPan()
+      return
+    }
+    setPhase('flash-nutrition')
     // After the calling-card reveal holds for FLASH_DURATION, kick off the
     // heist transition. Route push fires when the slash wipes complete.
     flashTimerRef.current = setTimeout(() => setTransitioning(true), FLASH_DURATION)
@@ -375,6 +401,13 @@ export default function Home() {
     const target = kind === 'fitness' ? '/fitness' : '/diet'
     targetRef.current = target
     setTransitionTarget(target)
+    if (kind === 'fitness') {
+      // Fitness fast path pans too — same camera, just without waiting
+      // for the entrance to finish.
+      setPhase('pan')
+      startWallPan()
+      return
+    }
     setPhase('heist')
     setTransitioning(true)
   }
@@ -389,7 +422,15 @@ export default function Home() {
     // page re-renders. svh is locked at parse time — same race-free outcome.
     <main
       className="relative overflow-hidden"
-      style={{ minHeight: '100%', background: '#280609', isolation: 'isolate' }}
+      style={{
+        minHeight: '100%',
+        // Transparent during the pan so the root-layout wall shows
+        // through; the gate's own opaque backdrop covers everything
+        // until it unmounts. (Was #280609 — that now lives on html/body
+        // only, per globals.css.)
+        background: phase === 'pan' ? 'transparent' : '#280609',
+        isolation: 'isolate',
+      }}
     >
       {phase === 'gate' && (
         <GateScreen
@@ -401,7 +442,8 @@ export default function Home() {
           swipeHintLabels={{ top: 'SWIPE UP FOR FITNESS', bottom: 'SWIPE DOWN FOR NUTRITION' }}
         />
       )}
-      {phase === 'flash-fitness'   && <CallingCardReveal kind="fitness"   />}
+      {/* flash-fitness removed — the fitness path pans the wall instead
+          (Jordan 2026-07-23). Nutrition keeps its calling-card reveal. */}
       {phase === 'flash-nutrition' && <CallingCardReveal kind="nutrition" />}
 
       <HeistTransition
