@@ -29,7 +29,9 @@ const WHEEL_H = ITEM_H * 5  // 5 visible rows, selection in the middle
 const PAD = ITEM_H * 2      // top/bottom padding so row 0 can center
 
 const MONTHS = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC']
-const YEAR_MAX = new Date().getFullYear()
+// Year wheel tops out at a 13-year-old, not a newborn — the first year
+// off '—' should be a plausible lifter (Jordan 2026-07-23).
+const YEAR_MAX = new Date().getFullYear() - 13
 const YEAR_MIN = 1920
 
 function daysInMonth(month1, year) {
