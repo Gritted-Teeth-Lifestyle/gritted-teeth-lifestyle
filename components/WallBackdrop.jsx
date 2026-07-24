@@ -48,6 +48,20 @@ export default function WallBackdrop() {
           <WallSurface />
         </div>
 
+        {/* Section 1 ambience — the SAME red bloom, centered on the
+            profiles view. Without it the wall's dark areas read warm
+            red-black at the gate but neutral grey-black at WHO ARE YOU
+            (measured (50,9,11) vs (22,22,24)) — the scene visibly cooled
+            between camera stops (Jordan 2026-07-24). Bands stay unique
+            per section; light is ambient and travels with each place. */}
+        <div
+          className="absolute top-0 bottom-0"
+          style={{
+            left: '100vw', width: '100vw',
+            background: 'radial-gradient(ellipse at 50% 55%, rgba(212,24,31,0.45) 0%, transparent 65%)',
+          }}
+        />
+
         {/* Corner ticks — world objects at the wall's extremes: the pair
             the gate shows top-left, and a closing pair at the far end of
             the wall (profiles view's right edge). The gate's own
