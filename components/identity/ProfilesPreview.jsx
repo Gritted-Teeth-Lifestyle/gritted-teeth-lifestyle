@@ -157,6 +157,14 @@ export default function ProfilesPreview() {
                   )
                 })}
               </div>
+
+              <div className="flex items-center gap-4 mt-6">
+                <div className="h-px flex-1 bg-gtl-edge" />
+                <span className="font-mono text-[8px] tracking-[0.3em] uppercase text-gtl-smoke">
+                  {profiles.length} {profiles.length === 1 ? 'WARRIOR' : 'WARRIORS'} ON RECORD
+                </span>
+                <div className="h-px w-8 bg-gtl-edge" />
+              </div>
             </div>
           )}
         </section>
