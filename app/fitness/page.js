@@ -465,6 +465,11 @@ export default function ProfilePage() {
           className="absolute -left-8 pointer-events-none select-none animate-flicker"
           aria-hidden="true"
           style={{
+            // Flicker off while riding: the animation promotes the kanji
+            // to its own iOS compositor layer, which paints above the
+            // grey surfaces mid-pan (bleed-through until the camera
+            // settles — Jordan 2026-07-24).
+            animation: leaving ? 'none' : undefined,
             top: 'calc(env(safe-area-inset-top, 0px) - 48px)',
             fontFamily: '"FOT-Matisse Pro EB", "Noto Serif JP", serif',
             fontSize: '40rem',
@@ -477,8 +482,9 @@ export default function ProfilePage() {
           名
         </div>
 
-        {/* Content wrapper */}
-        <div className="relative z-10 flex-1 flex flex-col">
+        {/* Content wrapper — translateZ(0) pins it to its own layer so
+            the kanji can never composite above it during rides. */}
+        <div className="relative z-10 flex-1 flex flex-col" style={{ transform: 'translateZ(0)' }}>
 
           {/* Nav */}
           <nav
