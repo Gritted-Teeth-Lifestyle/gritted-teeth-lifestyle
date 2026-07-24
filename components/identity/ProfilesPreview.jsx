@@ -105,7 +105,7 @@ export default function ProfilesPreview() {
             <button type="button" tabIndex={-1} disabled className="relative shrink-0 outline-none">
               <div className="absolute inset-0" style={{ clipPath: 'polygon(4% 0%, 100% 0%, 96% 100%, 0% 100%)', background: '#4a0a0e', transform: 'translate(5px, 5px)' }} />
               <div className="relative flex items-center gap-2" style={{ clipPath: 'polygon(4% 0%, 100% 0%, 96% 100%, 0% 100%)', background: '#1a1a1e', padding: '1.5rem 1.75rem' }}>
-                <span className="font-mono text-[10px] tracking-[0.3em] uppercase font-bold" style={{ color: '#4a4a4f' }}>ENTER</span>
+                <span className="font-mono text-[10px] leading-none tracking-[0.3em] uppercase font-bold" style={{ color: '#4a4a4f' }}>ENTER</span>
                 <span className="font-display text-xl leading-none" style={{ color: '#4a4a4f' }}>➤︎</span>
               </div>
             </button>
@@ -145,7 +145,7 @@ export default function ProfilesPreview() {
                         <span className="relative flex flex-col items-center">
                           <span className="inline-block leading-none tracking-tight">{name.toUpperCase()}</span>
                           {stats && (
-                            <span className="mt-2 font-mono text-[9px] tracking-[0.25em] uppercase font-bold whitespace-nowrap" style={{ color: '#8a8a92' }}>
+                            <span className="mt-2 font-mono text-[9px] leading-none tracking-[0.25em] uppercase font-bold whitespace-nowrap" style={{ color: '#8a8a92' }}>
                               LV {stats.level} · {stats.tier} · {stats.daysTrained} {stats.daysTrained === 1 ? 'DAY' : 'DAYS'}
                             </span>
                           )}

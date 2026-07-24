@@ -158,7 +158,7 @@ function ProfileChip({ name, stats, onSelect, onSwipeSelect, instantEntrance = f
           {/* Save-slot line: level · EXP tier · days trained. */}
           {stats && (
             <span
-              className="mt-2 font-mono text-[9px] tracking-[0.25em] uppercase font-bold whitespace-nowrap"
+              className="mt-2 font-mono text-[9px] leading-none tracking-[0.25em] uppercase font-bold whitespace-nowrap"
               style={{ color: (hovered || pressed) ? '#f4ede0' : '#8a8a92', transition: 'color 200ms ease-out' }}
             >
               LV {stats.level} · {stats.tier} · {stats.daysTrained} {stats.daysTrained === 1 ? 'DAY' : 'DAYS'}
@@ -583,7 +583,7 @@ export default function ProfilePage() {
                     }}
                   >
                     <span
-                      className="font-mono text-[10px] tracking-[0.3em] uppercase font-bold"
+                      className="font-mono text-[10px] leading-none tracking-[0.3em] uppercase font-bold"
                       style={{ color: trimmed ? '#f4ede0' : '#4a4a4f', transition: 'color 200ms' }}
                     >
                       {isNew ? 'FORGE' : 'ENTER'}
