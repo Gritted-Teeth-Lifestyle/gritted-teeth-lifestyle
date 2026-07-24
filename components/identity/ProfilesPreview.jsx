@@ -11,6 +11,7 @@
  */
 import { useEffect, useState } from 'react'
 import { profileSlotStats } from '../../lib/exp'
+import { LogoStencil, LogoTarget } from '../LogoHalf'
 
 export default function ProfilesPreview() {
   const [profiles, setProfiles] = useState([])
@@ -58,7 +59,7 @@ export default function ProfilesPreview() {
               bar ~40px taller than the real page's, so content sat lower
               and jumped up at the swap (Jordan 2026-07-23). */}
           <span
-            className="group fixed left-0 z-40 inline-flex items-center px-3 py-3 scale-95 origin-left"
+            className="group absolute left-0 z-40 inline-flex items-center px-3 py-3 scale-95 origin-left"
             style={{ top: 'env(safe-area-inset-top, 0px)' }}
           >
             <span className="flex items-center gap-0.5 leading-none font-display text-2xl">
@@ -137,6 +138,12 @@ export default function ProfilesPreview() {
                         className="relative flex items-center justify-center font-display tracking-[0.25em] uppercase px-24 min-h-[64px] w-full text-3xl"
                         style={{ clipPath: 'polygon(3% 0%, 100% 0%, 97% 100%, 0% 100%)', padding: '1.5rem 6rem', background: '#161618', color: '#e8e8f0', border: '1px solid #26262a' }}
                       >
+                        <div className="absolute" style={{ left: 'calc(50% - 175px)', top: '50%', width: 56, height: 56, marginTop: -28, opacity: 0.85 }}>
+                          <LogoStencil size={56} paused />
+                        </div>
+                        <div className="absolute" style={{ right: 'calc(50% - 175px)', top: '50%', width: 56, height: 56, marginTop: -28, opacity: 0.85 }}>
+                          <LogoTarget size={56} />
+                        </div>
                         <span className="relative flex flex-col items-center">
                           <span className="inline-block leading-none tracking-tight">{name.toUpperCase()}</span>
                           {stats && (

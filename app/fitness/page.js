@@ -16,7 +16,7 @@ import { setClaimedExperience, profileSlotStats } from '../../lib/exp'
 import { setWallCamera, WALL_PAN_MS } from '../../lib/wallCamera'
 import GatePreview from '../../components/identity/GatePreview'
 
-function ProfileChip({ name, stats, onSelect, onSwipeSelect }) {
+function ProfileChip({ name, stats, onSelect, onSwipeSelect, instantEntrance = false }) {
   const { play } = useSound()
   const startRef = useRef(null)
   const dxRef = useRef(0)
@@ -28,12 +28,17 @@ function ProfileChip({ name, stats, onSelect, onSwipeSelect }) {
   const [dragX, setDragX] = useState(0)
   const [ringKey, setRingKey] = useState(0)
   const [ringSide, setRingSide] = useState('right')
-  const [entranceDone, setEntranceDone] = useState(false)
+  // instantEntrance (arrival via the wall pan): the preview already
+  // showed this chip settled, so replaying the 1300ms logo roll-in reads
+  // as assets blinking into position (Jordan 2026-07-23). Start settled.
+  const [entranceDone, setEntranceDone] = useState(instantEntrance)
   const [hovered, setHovered] = useState(false)
   const [pressed, setPressed] = useState(false)
   useEffect(() => {
+    if (instantEntrance) return
     const t = setTimeout(() => setEntranceDone(true), 1300)
     return () => clearTimeout(t)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
   const SWIPE_THRESHOLD = 294
 
@@ -239,6 +244,8 @@ export default function ProfilePage() {
   const { play } = useSound()
   const [profiles, setProfiles] = useState([])
   const [slotStats, setSlotStats] = useState({})
+  // Arrived via the wall pan → chips render pre-settled (no roll-in).
+  const [instantChips, setInstantChips] = useState(false)
   // True while retreating back to the gate — the reverse camera move:
   // content rides off right as the wall pans home; push lands at the end
   // of the pan so the gate (whose backdrop is pixel-identical to wall
@@ -277,8 +284,10 @@ export default function ProfilePage() {
       sessionStorage.removeItem('gtl-wall-arrive')
     } catch (_) {}
     // Arrived via the pan: camera's already at rest on section 1 (the
-    // home page's ProfilesPreview covered the trip) — touch nothing.
-    if (!fromPan) setWallCamera(1, { instant: true })
+    // home page's ProfilesPreview covered the trip) — touch nothing, and
+    // let chips render settled instead of replaying entrances.
+    if (fromPan) setInstantChips(true)
+    else setWallCamera(1, { instant: true })
     try {
       const raw = localStorage.getItem('gtl-profiles')
       if (raw) {
@@ -637,6 +646,7 @@ export default function ProfilePage() {
                       stats={slotStats[name]}
                       onSelect={selectProfile}
                       onSwipeSelect={swipeSelectProfile}
+                      instantEntrance={instantChips}
                     />
                   ))}
                 </div>
