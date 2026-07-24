@@ -51,8 +51,16 @@ export default function ProfilesPreview() {
           className="relative shrink-0 flex items-center justify-between pl-0 pr-8 pb-3"
           style={{ paddingTop: 'max(1.5rem, env(safe-area-inset-top))' }}
         >
-          {/* Retreat chevrons replica */}
-          <span className="inline-flex items-center px-3 py-3 scale-95 origin-left">
+          {/* Retreat chevrons replica — OUT OF FLOW exactly like the real
+              RetreatButton (position:fixed; inside this transformed rider,
+              fixed resolves against the rider, which lands in the same
+              spot). Keeping it in the nav's flow made the preview's top
+              bar ~40px taller than the real page's, so content sat lower
+              and jumped up at the swap (Jordan 2026-07-23). */}
+          <span
+            className="group fixed left-0 z-40 inline-flex items-center px-3 py-3 scale-95 origin-left"
+            style={{ top: 'env(safe-area-inset-top, 0px)' }}
+          >
             <span className="flex items-center gap-0.5 leading-none font-display text-2xl">
               <span className="text-gtl-red opacity-40">◀︎</span>
               <span className="text-gtl-red opacity-70">◀︎</span>
