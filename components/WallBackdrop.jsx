@@ -21,6 +21,8 @@
  * Pages with opaque backgrounds simply cover it.
  */
 
+import WallSurface from './WallSurface'
+
 export default function WallBackdrop() {
   return (
     <div className="fixed inset-0 pointer-events-none" style={{ zIndex: 0 }} aria-hidden="true">
@@ -36,39 +38,15 @@ export default function WallBackdrop() {
       >
         <div className="absolute inset-0 gtl-noise" />
 
-        {/* Red atmosphere bloom — ONE light source over the gate view.
-            Box is exactly 100vw so the gradient string stays byte-
-            identical to GateScreen's (seamless handoff); it fully fades
-            before the section edge, so the camera naturally leaves it
-            behind. */}
-        <div
-          className="absolute top-0 bottom-0"
-          style={{
-            left: 0, width: '100vw',
-            background: 'radial-gradient(ellipse at 50% 55%, rgba(212,24,31,0.45) 0%, transparent 65%)',
-          }}
-        />
-
-        {/* Band 1 — matches GateScreen: left -5% width 52% of the gate view. */}
-        <div
-          className="absolute"
-          style={{
-            top: '-25%', bottom: '-25%', left: '-5vw', width: '52vw',
-            background: 'rgba(212,24,31,0.75)',
-            transform: 'skewX(-12deg)',
-          }}
-        />
-        {/* Band 3 — the gate view's right-edge accent (88vw → 108vw): its
-            tail is the first thing the camera sweeps past on the pan, and
-            it naturally bleeds 8vw into the profiles view's left edge. */}
-        <div
-          className="absolute"
-          style={{
-            top: '-25%', bottom: '-25%', left: '88vw', width: '20vw',
-            background: 'rgba(212,24,31,0.55)',
-            transform: 'skewX(-12deg)',
-          }}
-        />
+        {/* Section 0 — the SHARED WallSurface (same component GateScreen
+            renders at rest), inside a 100vw box so its % geometry means
+            the same pixels as the gate view. overflow stays visible so
+            band 3's -8% overhang bleeds 8vw into section 1 — the
+            continuation the camera sweeps past on the pan. Restyle the
+            wall in WallSurface.jsx. */}
+        <div className="absolute top-0 bottom-0" style={{ left: 0, width: '100vw' }}>
+          <WallSurface />
+        </div>
 
         {/* Corner ticks — world objects at the wall's extremes: the pair
             the gate shows top-left, and a closing pair at the far end of
