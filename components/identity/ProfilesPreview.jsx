@@ -97,13 +97,18 @@ export default function ProfilesPreview() {
                 ENTER YOUR N{'​'}AME
               </div>
             </div>
-            <div className="relative shrink-0">
+            {/* Real page renders a <button> here — a div replica sits ~1px
+                off because buttons carry their own UA font metrics
+                (measured at the slab's bottom edge, Jordan 2026-07-24).
+                Same element type = same metrics. Inert: disabled +
+                pointer-events none from the preview root. */}
+            <button type="button" tabIndex={-1} disabled className="relative shrink-0 outline-none">
               <div className="absolute inset-0" style={{ clipPath: 'polygon(4% 0%, 100% 0%, 96% 100%, 0% 100%)', background: '#4a0a0e', transform: 'translate(5px, 5px)' }} />
               <div className="relative flex items-center gap-2" style={{ clipPath: 'polygon(4% 0%, 100% 0%, 96% 100%, 0% 100%)', background: '#1a1a1e', padding: '1.5rem 1.75rem' }}>
                 <span className="font-mono text-[10px] tracking-[0.3em] uppercase font-bold" style={{ color: '#4a4a4f' }}>ENTER</span>
                 <span className="font-display text-xl leading-none" style={{ color: '#4a4a4f' }}>➤︎</span>
               </div>
-            </div>
+            </button>
           </div>
 
           {/* Known warriors replica */}
