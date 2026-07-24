@@ -473,7 +473,7 @@ export default function ProfilePage() {
             style={{ paddingTop: 'max(1.5rem, env(safe-area-inset-top))' }}
           >
             <RetreatButton href="/" onNavigate={handleRetreat} />
-            <div className="font-mono text-[10px] tracking-[0.3em] uppercase text-gtl-smoke">
+            <div className="font-mono text-[10px] leading-none tracking-[0.3em] uppercase text-gtl-smoke">
               IDENTITY / SELECT
             </div>
           </nav>
@@ -485,16 +485,16 @@ export default function ProfilePage() {
             <div className="mb-6">
               <div className="flex items-center gap-4 mb-4">
                 <div className="h-px w-16 bg-gtl-red" />
-                <span className="font-mono text-[10px] tracking-[0.3em] uppercase text-gtl-red">
+                <span className="font-mono text-[10px] leading-none tracking-[0.3em] uppercase text-gtl-red">
                   IDENTITY / 01
                 </span>
                 <div className="h-px w-16 bg-gtl-red" />
               </div>
-              <h1 className="font-display text-[4.5rem] md:text-[7rem] leading-[0.9] text-gtl-chalk -rotate-1 mb-2">
+              <h1 className="font-display text-[4.5rem] md:text-[7rem] leading-[65px] md:leading-[0.9] text-gtl-chalk -rotate-1 mb-2">
                 WHO<br />
                 <span className="text-gtl-red inline-block rotate-1">ARE YOU</span>
               </h1>
-              <p className="font-mono text-[11px] tracking-[0.25em] uppercase text-gtl-ash mt-3 max-w-sm leading-relaxed">
+              <p className="font-mono text-[11px] tracking-[0.25em] uppercase text-gtl-ash mt-3 max-w-sm leading-[18px]">
                 Your cycles, lifts, and EXP belong to you alone.<br />
                 Step in. Own the record.
               </p>
@@ -613,13 +613,13 @@ export default function ProfilePage() {
               <div>
                 <div className="flex items-center gap-4 mb-2">
                   <div className="h-px w-8 bg-gtl-red" />
-                  <span className="font-mono text-[9px] tracking-[0.4em] uppercase text-gtl-red">
+                  <span className="font-mono text-[9px] leading-none tracking-[0.4em] uppercase text-gtl-red">
                     KNOWN WARRIORS
                   </span>
                   <div className="h-px flex-1 bg-gtl-edge" />
                 </div>
 
-                <div className="flex items-center gap-3 mb-3 font-mono text-[8px] tracking-[0.25em] uppercase text-gtl-ash/70">
+                <div className="flex items-center gap-3 mb-3 font-mono text-[8px] leading-none tracking-[0.25em] uppercase text-gtl-ash/70">
                   <span>TAP TO LOAD</span>
                   <span className="text-gtl-red">·</span>
                   <span>SWIPE TO LIFT NOW →</span>
@@ -640,7 +640,7 @@ export default function ProfilePage() {
 
                 <div className="flex items-center gap-4 mt-6">
                   <div className="h-px flex-1 bg-gtl-edge" />
-                  <span className="font-mono text-[8px] tracking-[0.3em] uppercase text-gtl-smoke">
+                  <span className="font-mono text-[8px] leading-none tracking-[0.3em] uppercase text-gtl-smoke">
                     {profiles.length} {profiles.length === 1 ? 'WARRIOR' : 'WARRIORS'} ON RECORD
                   </span>
                   <div className="h-px w-8 bg-gtl-edge" />
