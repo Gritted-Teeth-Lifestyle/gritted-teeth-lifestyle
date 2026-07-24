@@ -431,7 +431,7 @@ export default function ProfilePage() {
           layout WallBackdrop (identical to the press-start backdrop), so
           the entry pan reads as one camera move (Jordan 2026-07-23).
           The old void bg + noise + gradient now come from the wall. */}
-      <main className="relative min-h-screen flex flex-col overflow-hidden">
+      <main className="relative flex flex-col overflow-hidden" style={{ minHeight: '100%' }}>
         {/* Strikers rider: on retreat, this page's whole visual rides
             right IN LOCKSTEP with the wall while a GatePreview rides in
             from the left — both places visible the entire pan, nothing
@@ -464,9 +464,8 @@ export default function ProfilePage() {
             caused mid-pan bleed-through and a flicker-state mismatch at the
             preview swap. The wall carries the atmosphere now. */}
 
-        {/* Content wrapper — translateZ(0) pins it to its own layer so
-            the kanji can never composite above it during rides. */}
-        <div className="relative z-10 flex-1 flex flex-col" style={{ transform: 'translateZ(0)' }}>
+        {/* Content wrapper */}
+        <div className="relative z-10 flex-1 flex flex-col">
 
           {/* Nav */}
           <nav

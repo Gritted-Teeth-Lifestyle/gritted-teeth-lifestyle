@@ -37,7 +37,7 @@ export default function ProfilesPreview() {
     >
       {/* Kanji watermark removed 2026-07-24 — see app/fitness/page.js. */}
 
-      <div className="relative z-10 flex flex-col h-full" style={{ transform: 'translateZ(0)' }}>
+      <div className="relative z-10 flex flex-col h-full">
         <nav
           className="relative shrink-0 flex items-center justify-between pl-0 pr-8 pb-3"
           style={{ paddingTop: 'max(1.5rem, env(safe-area-inset-top))' }}
