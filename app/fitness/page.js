@@ -460,27 +460,9 @@ export default function ProfilePage() {
         >
         {leaving && <GatePreview />}
 
-        {/* Kanji watermark */}
-        <div
-          className="absolute -left-8 pointer-events-none select-none animate-flicker"
-          aria-hidden="true"
-          style={{
-            // Flicker off while riding: the animation promotes the kanji
-            // to its own iOS compositor layer, which paints above the
-            // grey surfaces mid-pan (bleed-through until the camera
-            // settles — Jordan 2026-07-24).
-            animation: leaving ? 'none' : undefined,
-            top: 'calc(env(safe-area-inset-top, 0px) - 48px)',
-            fontFamily: '"FOT-Matisse Pro EB", "Noto Serif JP", serif',
-            fontSize: '40rem',
-            lineHeight: '0.8',
-            color: '#ffffff',
-            opacity: 0.04,
-            fontWeight: 900,
-          }}
-        >
-          名
-        </div>
+        {/* Kanji watermark removed 2026-07-24 (Jordan) — its flicker layer
+            caused mid-pan bleed-through and a flicker-state mismatch at the
+            preview swap. The wall carries the atmosphere now. */}
 
         {/* Content wrapper — translateZ(0) pins it to its own layer so
             the kanji can never composite above it during rides. */}

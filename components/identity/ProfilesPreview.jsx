@@ -35,21 +35,7 @@ export default function ProfilesPreview() {
       className="pointer-events-none select-none"
       style={{ position: 'absolute', top: 0, bottom: 0, left: '100vw', width: '100vw', overflow: 'hidden' }}
     >
-      {/* Kanji watermark — NO flicker here: its animation promotes it
-          to its own iOS compositor layer, which paints ABOVE the grey
-          surfaces while the rider is mid-transform (kanji bleeding
-          through the input/chips until the pan ends — Jordan
-          2026-07-24). Static + explicitly stacked, it stays beneath. */}
-      <div
-        className="absolute -left-8"
-        style={{
-          top: 'calc(env(safe-area-inset-top, 0px) - 48px)',
-          fontFamily: '"FOT-Matisse Pro EB", "Noto Serif JP", serif',
-          fontSize: '40rem', lineHeight: '0.8', color: '#ffffff', opacity: 0.04, fontWeight: 900,
-        }}
-      >
-        名
-      </div>
+      {/* Kanji watermark removed 2026-07-24 — see app/fitness/page.js. */}
 
       <div className="relative z-10 flex flex-col h-full" style={{ transform: 'translateZ(0)' }}>
         <nav
