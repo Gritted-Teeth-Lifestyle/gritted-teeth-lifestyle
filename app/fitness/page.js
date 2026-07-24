@@ -451,16 +451,6 @@ export default function ProfilePage() {
         >
         {leaving && <GatePreview />}
 
-        {/* Left red accent bar */}
-        <div
-          className="absolute top-0 bottom-0 left-0 pointer-events-none"
-          style={{
-            width: 4,
-            background: 'linear-gradient(to bottom, #d4181f 0%, rgba(212,24,31,0.3) 60%, transparent 100%)',
-          }}
-          aria-hidden="true"
-        />
-
         {/* Kanji watermark */}
         <div
           className="absolute -left-8 pointer-events-none select-none animate-flicker"
