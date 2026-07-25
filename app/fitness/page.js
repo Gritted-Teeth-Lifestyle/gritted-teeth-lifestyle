@@ -335,7 +335,10 @@ export default function ProfilePage() {
     // Zoom-through (Jordan 2026-07-25): the camera pushes INTO the wall —
     // this screen scales past the lens while the hub "room" (HubPreview)
     // grows from depth beneath it. Push after it settles; the real hub
-    // mounts over identical pixels. Replaces the LET'S SEE heist cut.
+    // mounts over identical pixels. The LET'S SEE mantra word rides a
+    // text-thin ribbon across the zoom (Jordan kept it from the old
+    // heist cut).
+    play('transition-slash')
     setZooming(true)
     setTimeout(() => {
       if (!skippedRef.current) {
@@ -460,6 +463,12 @@ export default function ProfilePage() {
             from the left — both places visible the entire pan, nothing
             disappears, no empty beat (Jordan 2026-07-23). */}
         <style>{`
+          @keyframes gtl-zoomtitle-ride {
+            0%   { transform: rotate(-3deg) translateX(-120vw); }
+            24%  { transform: rotate(-3deg) translateX(0); }
+            76%  { transform: rotate(-3deg) translateX(0); }
+            100% { transform: rotate(-3deg) translateX(120vw); }
+          }
           @keyframes gtl-zoom-out {
             0%   { transform: scale(1);   opacity: 1; }
             55%  {                        opacity: 1; }
@@ -482,6 +491,27 @@ export default function ProfilePage() {
             full-size wrapper. Arrival needs no animation: the home page's
             ProfilesPreview covered the pan, and this real page mounts
             over its identical resting pixels. */}
+        {/* LET'S SEE — the mantra word kept from the heist cut, riding a
+            ribbon exactly as tall as its own letters (Jordan 2026-07-25:
+            "as thin as the LET'S SEE font is"). Grouped band + text sweep
+            in from the left, hold through the dive, exit right. */}
+        {zooming && (
+          <div className="absolute inset-0 z-30 pointer-events-none flex items-center justify-center overflow-hidden" aria-hidden="true">
+            <div
+              className="relative"
+              style={{ animation: 'gtl-zoomtitle-ride 800ms cubic-bezier(0.25, 0.9, 0.3, 1) both' }}
+            >
+              <div
+                className="absolute bg-gtl-red"
+                style={{ left: '-60vw', right: '-60vw', top: '50%', height: '0.78em', transform: 'translateY(-50%)', fontSize: '18vw' }}
+              />
+              <div className="relative font-display text-gtl-paper leading-none gtl-headline-shadow text-center text-[18vw] whitespace-nowrap">
+                LET&apos;S SEE
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* The hub room grows from depth beneath this screen during the
             zoom-through. */}
         {zooming && (
