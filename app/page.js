@@ -335,6 +335,7 @@ export default function Home() {
   // the preview's identical resting pixels.
   const startWallPan = () => {
     try { sessionStorage.setItem('gtl-wall-arrive', '1') } catch (_) {}
+    play('transition-slash')
     setWallCamera(1)
     flashTimerRef.current = setTimeout(() => {
       if (!skippedRef.current) router.push('/fitness')
@@ -450,7 +451,33 @@ export default function Home() {
           from { transform: translateX(0); }
           to   { transform: translateX(-100vw); }
         }
+        @keyframes gtl-pantitle-ride {
+          0%   { transform: rotate(-3deg) translateX(-120vw); }
+          24%  { transform: rotate(-3deg) translateX(0); }
+          76%  { transform: rotate(-3deg) translateX(0); }
+          100% { transform: rotate(-3deg) translateX(120vw); }
+        }
       `}</style>
+      {/* GTL — rides a text-height ribbon across the first camera pan,
+          same treatment as LET'S SEE on the zoom-through (Jordan
+          2026-07-25). Grouped band + text: in from the left, hold, exit
+          right; never fades in place. */}
+      {phase === 'pan' && (
+        <div className="absolute inset-0 z-30 pointer-events-none flex items-center justify-center overflow-hidden" aria-hidden="true">
+          <div
+            className="relative"
+            style={{ animation: `gtl-pantitle-ride ${WALL_PAN_MS}ms cubic-bezier(0.25, 0.9, 0.3, 1) both` }}
+          >
+            <div
+              className="absolute bg-gtl-red"
+              style={{ left: '-60vw', right: '-60vw', top: '50%', height: '0.78em', transform: 'translateY(-50%)', fontSize: '18vw' }}
+            />
+            <div className="relative font-display text-gtl-paper leading-none gtl-headline-shadow text-center text-[18vw] whitespace-nowrap">
+              GTL
+            </div>
+          </div>
+        </div>
+      )}
       {/* Strikers rider: gate at section 0 + ProfilesPreview at section 1,
           glued to the wall's exact duration/easing — both places visible
           during the whole pan, zero empty beat, nothing disappears. The
