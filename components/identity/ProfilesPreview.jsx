@@ -13,7 +13,7 @@ import { useEffect, useState } from 'react'
 import { profileSlotStats } from '../../lib/exp'
 import { LogoStencil, LogoTarget } from '../LogoHalf'
 
-export default function ProfilesPreview() {
+export default function ProfilesPreview({ asOverlay = false }) {
   const [profiles, setProfiles] = useState([])
   const [slotStats, setSlotStats] = useState({})
   useEffect(() => {
@@ -33,8 +33,28 @@ export default function ProfilesPreview() {
     <div
       aria-hidden="true"
       className="pointer-events-none select-none"
-      style={{ position: 'absolute', top: 0, bottom: 0, left: '100vw', width: '100vw', overflow: 'hidden' }}
+      style={{
+        position: 'absolute', top: 0, bottom: 0,
+        left: asOverlay ? 0 : '100vw',
+        width: '100vw', overflow: 'hidden',
+      }}
     >
+      {/* asOverlay (hub reverse-zoom): this replica drops in OVER the hub,
+          so it must carry its own copy of wall section 1's backdrop —
+          otherwise the real page's wall bands pop in at the swap. */}
+      {asOverlay && (
+        <div className="absolute inset-0" style={{ background: '#070708' }}>
+          <div className="absolute inset-0 gtl-noise" />
+          <div
+            className="absolute inset-0"
+            style={{ background: 'radial-gradient(ellipse at 50% 55%, rgba(212,24,31,0.45) 0%, transparent 65%)' }}
+          />
+          <div
+            className="absolute"
+            style={{ top: '-25%', bottom: '-25%', left: '-12vw', width: '20vw', background: 'rgba(212,24,31,0.55)', transform: 'skewX(-12deg)' }}
+          />
+        </div>
+      )}
       {/* Kanji watermark removed 2026-07-24 — see app/fitness/page.js. */}
 
       <div className="relative z-10 flex flex-col h-full">

@@ -15,6 +15,7 @@ import ExperienceStep from '../../components/onboarding/ExperienceStep'
 import { setClaimedExperience, profileSlotStats } from '../../lib/exp'
 import { setWallCamera, WALL_PAN_MS } from '../../lib/wallCamera'
 import GatePreview from '../../components/identity/GatePreview'
+import HubPreview from '../../components/identity/HubPreview'
 
 function ProfileChip({ name, stats, onSelect, onSwipeSelect, instantEntrance = false }) {
   const { play } = useSound()
@@ -267,6 +268,8 @@ export default function ProfilePage() {
   const [input, setInput] = useState('')
   const [ready, setReady] = useState(false)
   const [transitioning, setTransitioning] = useState(false)
+  // Zoom-through to the hub (profile tap) — see selectProfile.
+  const [zooming, setZooming] = useState(false)
   const [pendingNewName, setPendingNewName] = useState(null)
   const [pendingExpName, setPendingExpName] = useState(null)
   const inputRef = useRef(null)
@@ -320,6 +323,7 @@ export default function ProfilePage() {
     routeForward: () => skipNow(),
   })
 
+  const ZOOM_MS = 800
   const selectProfile = (name) => {
     if (transitioningRef.current) { skipNow(); return }
     transitioningRef.current = true
@@ -328,7 +332,17 @@ export default function ProfilePage() {
     } catch (_) {}
     armChain()
     setInAnimation('profile', true)
-    setTransitioning(true)
+    // Zoom-through (Jordan 2026-07-25): the camera pushes INTO the wall —
+    // this screen scales past the lens while the hub "room" (HubPreview)
+    // grows from depth beneath it. Push after it settles; the real hub
+    // mounts over identical pixels. Replaces the LET'S SEE heist cut.
+    setZooming(true)
+    setTimeout(() => {
+      if (!skippedRef.current) {
+        skippedRef.current = true
+        router.push(HUB_TARGET)
+      }
+    }, ZOOM_MS + 60)
   }
 
   const swipeSelectProfile = (name) => {
@@ -345,6 +359,15 @@ export default function ProfilePage() {
     if (skippedRef.current) return
     router.push(HUB_TARGET)
   }
+
+  // Tap mid-zoom skips straight to the hub (predictive-chain rhythm).
+  useEffect(() => {
+    if (!zooming) return
+    const handler = () => skipNow()
+    window.addEventListener('pointerdown', handler, { capture: true })
+    return () => window.removeEventListener('pointerdown', handler, { capture: true })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [zooming])
 
   const handleSubmit = (e) => {
     e.preventDefault()
@@ -437,6 +460,16 @@ export default function ProfilePage() {
             from the left — both places visible the entire pan, nothing
             disappears, no empty beat (Jordan 2026-07-23). */}
         <style>{`
+          @keyframes gtl-zoom-out {
+            0%   { transform: scale(1);   opacity: 1; }
+            55%  {                        opacity: 1; }
+            100% { transform: scale(1.8); opacity: 0; }
+          }
+          @keyframes gtl-hub-rise {
+            0%   { transform: scale(0.85); opacity: 0; }
+            30%  {                         opacity: 1; }
+            100% { transform: scale(1);    opacity: 1; }
+          }
           @keyframes gtl-rider-back {
             from { transform: translateX(0); }
             to   { transform: translateX(100vw); }
@@ -449,13 +482,26 @@ export default function ProfilePage() {
             full-size wrapper. Arrival needs no animation: the home page's
             ProfilesPreview covered the pan, and this real page mounts
             over its identical resting pixels. */}
+        {/* The hub room grows from depth beneath this screen during the
+            zoom-through. */}
+        {zooming && (
+          <div
+            className="absolute inset-0"
+            style={{ animation: 'gtl-hub-rise 800ms cubic-bezier(0.3, 0.6, 0.2, 1) both', transformOrigin: '50% 45%' }}
+          >
+            <HubPreview />
+          </div>
+        )}
         <div
           className="relative flex-1 flex flex-col"
           style={{
-            animation: leaving
-              ? `gtl-rider-back ${WALL_PAN_MS}ms cubic-bezier(0.65, 0, 0.2, 1) both`
-              : 'none',
-            pointerEvents: leaving ? 'none' : 'auto',
+            animation: zooming
+              ? 'gtl-zoom-out 800ms cubic-bezier(0.55, 0, 0.6, 0.4) both'
+              : leaving
+                ? `gtl-rider-back ${WALL_PAN_MS}ms cubic-bezier(0.65, 0, 0.2, 1) both`
+                : 'none',
+            transformOrigin: '50% 45%',
+            pointerEvents: (leaving || zooming) ? 'none' : 'auto',
           }}
         >
         {leaving && <GatePreview />}

@@ -22,6 +22,7 @@ import { useProfileGuard } from '../../../lib/useProfileGuard'
 import { pk, getDraft, getDraftAttunement, clearDraft } from '../../../lib/storage'
 import HeistTransition from '../../../components/HeistTransition'
 import RetreatButton from '../../../components/RetreatButton'
+import ProfilesPreview from '../../../components/identity/ProfilesPreview'
 import { setInAnimation } from '../../../lib/predictiveTap'
 import { useChainPage } from '../../../lib/useChainPage'
 import { isPrestigeUnlocked, computeProfileTotalXP, getTierCount, getTier } from '../../../lib/exp'
@@ -357,6 +358,20 @@ function GhostOption({ number, label, caption, href, onClick }) {
 export default function FitnessPage() {
   useProfileGuard()
   const router = useRouter()
+  // Reverse zoom-through back to WHO ARE YOU (Jordan 2026-07-25): this
+  // room shrinks back into depth while the profiles screen drops in from
+  // past the lens (ProfilesPreview overlay). Push after it settles; the
+  // arrive flag makes profiles mount pre-settled (no chip entrances, no
+  // camera snap mid-anything).
+  const [unzooming, setUnzooming] = useState(false)
+  const unzoomFiredRef = useRef(false)
+  const handleRetreatZoom = () => {
+    if (unzoomFiredRef.current) return
+    unzoomFiredRef.current = true
+    try { sessionStorage.setItem('gtl-wall-arrive', '1') } catch (_) {}
+    setUnzooming(true)
+    setTimeout(() => router.push('/fitness'), 860)
+  }
   const { play } = useSound()
   const [transitioning, setTransitioning] = useState(false)
   const [transitionConfig, setTransitionConfig] = useState({ href: '', title: 'GRIT THOSE TEETH', intensity: 'normal' })
@@ -523,6 +538,7 @@ export default function FitnessPage() {
         className="absolute -left-8 pointer-events-none select-none animate-flicker"
         aria-hidden="true"
         style={{
+          animation: unzooming ? 'none' : undefined,
           top: 'calc(env(safe-area-inset-top, 0px) - 48px)',
           fontFamily: '"Noto Serif JP", "Yu Mincho", serif',
           fontSize: '40rem',
@@ -535,14 +551,34 @@ export default function FitnessPage() {
         闘
       </div>
 
+      {/* Reverse-zoom overlay — profiles screen dropping in from the lens. */}
+      {unzooming && (
+        <div
+          className="absolute inset-0 z-20"
+          style={{ animation: 'gtl-profiles-drop 800ms cubic-bezier(0.3, 0.6, 0.2, 1) both', transformOrigin: '50% 45%', pointerEvents: 'none' }}
+        >
+          <ProfilesPreview asOverlay />
+        </div>
+      )}
+      <style>{`
+        @keyframes gtl-profiles-drop {
+          0%   { transform: scale(1.8); opacity: 0; }
+          45%  {                        opacity: 1; }
+          100% { transform: scale(1);   opacity: 1; }
+        }
+        @keyframes gtl-hub-sink {
+          0%   { transform: scale(1);    opacity: 1; }
+          100% { transform: scale(0.85); opacity: 0.35; }
+        }
+      `}</style>
       {/* Content wrapper — atmospheric layers paint full-bleed (incl. safe area). */}
-      <div className="relative z-10 flex-1 flex flex-col">
+      <div className="relative z-10 flex-1 flex flex-col" style={{ animation: unzooming ? 'gtl-hub-sink 800ms cubic-bezier(0.55, 0, 0.6, 0.4) both' : 'none', transformOrigin: '50% 45%', pointerEvents: unzooming ? 'none' : 'auto' }}>
       {/* Top nav row — back link and palace breadcrumb */}
       <nav
         className="relative flex items-center justify-between pl-0 pr-8 pb-6"
         style={{ paddingTop: 'max(1.5rem, env(safe-area-inset-top))' }}
       >
-        <RetreatButton href="/fitness" />      </nav>
+        <RetreatButton href="/fitness" onNavigate={handleRetreatZoom} />      </nav>
 
       {/* Main content */}
       <section className="relative z-10 px-8 pt-4 pb-6 md:pt-12 md:pb-20 max-w-6xl mx-auto">
